@@ -1,7 +1,11 @@
 import { createContext, useContext, useState, useCallback } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
-import { USERS } from '../data/models.js'
-import { SAMPLE_PRODUCTIONS as SP, SAMPLE_TASKS as ST } from '../data/sampleData.js'
+import { USERS, ROLES } from '../data/models.js'
+import {
+  SAMPLE_PRODUCTIONS as SP,
+  SAMPLE_TASKS as ST,
+  SAMPLE_CONTRACTORS as SC,
+} from '../data/sampleData.js'
 
 const AppContext = createContext(null)
 
@@ -9,6 +13,7 @@ export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useLocalStorage('balance_current_user', null)
   const [productions, setProductions] = useLocalStorage('balance_productions', SP)
   const [tasks, setTasks] = useLocalStorage('balance_tasks', ST)
+  const [contractors, setContractors] = useLocalStorage('balance_contractors', SC)
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
   const login = useCallback((userId) => {
@@ -112,6 +117,64 @@ export function AppProvider({ children }) {
     ))
   }, [setProductions])
 
+  // ─── Contractors CRUD ─────────────────────────────────────────────────────
+  const addContractor = useCallback((contractor) => {
+    setContractors(prev => [contractor, ...prev])
+  }, [setContractors])
+
+  const updateContractor = useCallback((id, updates) => {
+    setContractors(prev => prev.map(c =>
+      c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
+    ))
+  }, [setContractors])
+
+  const deleteContractor = useCallback((id) => {
+    setContractors(prev => prev.filter(c => c.id !== id))
+  }, [setContractors])
+
+  const getContractor = useCallback((id) => {
+    return contractors.find(c => c.id === id) || null
+  }, [contractors])
+
+  // Returns work history for a contractor by scanning all productions.
+  // Derived at read-time — no duplication of data.
+  const getContractorHistory = useCallback((contractorId) => {
+    return productions
+      .filter(p => p.assignedMembers?.some(m => m.userId === contractorId))
+      .map(p => {
+        const member = p.assignedMembers.find(m => m.userId === contractorId)
+        return {
+          productionId: p.id,
+          productionName: p.name,
+          client: p.client,
+          roleOnProduction: member?.roleOnProduction || '',
+          startDate: p.startDate,
+          endDate: p.endDate,
+          status: p.status,
+        }
+      })
+      .sort((a, b) => new Date(b.startDate || 0) - new Date(a.startDate || 0))
+  }, [productions])
+
+  // Resolves any assignee ID to a display-ready object.
+  // Checks USERS first, then contractors — backward compatible with existing data.
+  const resolveAssignee = useCallback((userId) => {
+    const user = USERS.find(u => u.id === userId)
+    if (user) return { ...user, type: 'user' }
+    const contractor = contractors.find(c => c.id === userId)
+    if (contractor) return {
+      id: contractor.id,
+      name: contractor.name,
+      avatar: contractor.name.charAt(0).toUpperCase(),
+      color: '#64748b',
+      role: contractor.primaryRole,
+      availability: contractor.availability,
+      photoUrl: contractor.photoUrl,
+      type: 'contractor',
+    }
+    return null
+  }, [contractors])
+
   // ─── Production Bible ──────────────────────────────────────────────────────
   // Single update method — replaces the whole bible object on a production.
   // Each section passes its full updated array; the parent merges sections.
@@ -174,6 +237,15 @@ export function AppProvider({ children }) {
     // Instruction packages
     updateInstructionPackage,
     updateTaskInstructionPackage,
+
+    // Contractors
+    contractors,
+    addContractor,
+    updateContractor,
+    deleteContractor,
+    getContractor,
+    getContractorHistory,
+    resolveAssignee,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

@@ -8,6 +8,7 @@ import { ProductionDetailPage } from './pages/ProductionDetailPage.jsx'
 import { SchedulePage } from './pages/SchedulePage.jsx'
 import { AnalyticsPage } from './pages/AnalyticsPage.jsx'
 import { TasksPage } from './pages/TasksPage.jsx'
+import { ContractorsPage } from './features/contractors/ContractorsPage.jsx'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/contractors" element={<ContractorsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

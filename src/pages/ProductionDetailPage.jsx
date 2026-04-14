@@ -31,7 +31,7 @@ export function ProductionDetailPage() {
   const {
     currentUser, getProduction, updateProduction, deleteProduction,
     getTasksForProduction, addTask, addAddon, deleteAddon,
-    submitFeedback, updateInstructionPackage
+    submitFeedback, updateInstructionPackage, resolveAssignee,
   } = useApp()
 
   const production = getProduction(id)
@@ -135,20 +135,27 @@ export function ProductionDetailPage() {
               <p className="section-title mb-2.5">Team</p>
               <div className="flex flex-wrap gap-2">
                 {production.assignedMembers.map(({ userId, roleOnProduction }) => {
-                  const user = USERS.find(u => u.id === userId)
-                  if (!user) return null
+                  const person = resolveAssignee(userId)
+                  if (!person) return null
+                  const isContractor = person.type === 'contractor'
                   return (
                     <div
                       key={userId}
                       className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-orbital-muted border border-orbital-border"
                     >
                       <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                        style={{ backgroundColor: user.color }}
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden"
+                        style={!person.photoUrl ? { backgroundColor: person.color || '#64748b' } : {}}
                       >
-                        {user.avatar}
+                        {person.photoUrl
+                          ? <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
+                          : (person.avatar || person.name?.charAt(0).toUpperCase())
+                        }
                       </div>
-                      <span className="text-xs font-medium text-orbital-text">{user.name}</span>
+                      <span className="text-xs font-medium text-orbital-text">{person.name}</span>
+                      {isContractor && (
+                        <span className="text-xs text-orbital-subtle border border-orbital-border rounded px-1">contractor</span>
+                      )}
                       {roleOnProduction && (
                         <span className="text-xs text-orbital-subtle">{roleOnProduction}</span>
                       )}

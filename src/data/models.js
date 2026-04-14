@@ -33,6 +33,25 @@ export const TASK_PRIORITY = {
   CRITICAL: 'Critical',
 }
 
+export const AVAILABILITY_STATUS = {
+  AVAILABLE:   'Available',
+  BUSY:        'Busy',
+  UNAVAILABLE: 'Unavailable',
+}
+
+export const EXPERIENCE_LEVEL = {
+  JUNIOR: 'Junior',
+  MID:    'Mid',
+  SENIOR: 'Senior',
+  LEAD:   'Lead',
+}
+
+export const CONTRACTOR_FLAG = {
+  RECOMMENDED:    'Recommended',
+  NEUTRAL:        'Neutral',
+  DO_NOT_REHIRE:  'Do Not Rehire',
+}
+
 // ─── User Profiles ───────────────────────────────────────────────────────────
 export const USERS = [
   { id: 'mark',   name: 'Mark',   role: ROLES.ADMIN,      avatar: 'M', color: '#6366f1' },
@@ -140,6 +159,36 @@ export function createFeedback(overrides = {}) {
     voiceMemo: null,
     submittedBy: '',
     submittedAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+export function createContractor(overrides = {}) {
+  return {
+    id: crypto.randomUUID(),
+    name: '',
+    photoUrl: null,           // base64 in v1 — swap for Supabase storage URL in v2
+    phone: '',
+    email: '',
+    location: '',             // "City, State"
+    availability: AVAILABILITY_STATUS.AVAILABLE,
+    primaryRole: '',
+    secondaryRoles: [],
+    skills: [],               // freeform string tags
+    experienceLevel: EXPERIENCE_LEVEL.MID,
+    // Rate fields — only surfaced to ADMIN role in the UI layer
+    dayRate: '',
+    weeklyRate: '',
+    rateNotes: '',
+    notes: '',                // Admin + Supervisor visible
+    flag: CONTRACTOR_FLAG.NEUTRAL,
+    emergencyContact: {       // Admin only
+      name: '',
+      relationship: '',
+      phone: '',
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     ...overrides,
   }
 }

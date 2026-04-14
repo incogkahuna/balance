@@ -1,17 +1,18 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  LayoutDashboard, Film, Calendar, BarChart3,
+  LayoutDashboard, Film, Calendar, BarChart3, Users,
   LogOut, Settings, ChevronDown
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
 
 const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/productions', icon: Film, label: 'Productions' },
-  { to: '/schedule', icon: Calendar, label: 'Schedule' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics', adminOnly: true },
+  { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/productions', icon: Film,             label: 'Productions' },
+  { to: '/schedule',    icon: Calendar,         label: 'Schedule' },
+  { to: '/contractors', icon: Users,            label: 'Contractors', adminOrSup: true },
+  { to: '/analytics',   icon: BarChart3,        label: 'Analytics',   adminOnly: true },
 ]
 
 export function Sidebar() {
@@ -23,9 +24,11 @@ export function Sidebar() {
     navigate('/login')
   }
 
-  const visibleItems = navItems.filter(item =>
-    !item.adminOnly || currentUser?.role === ROLES.ADMIN
-  )
+  const visibleItems = navItems.filter(item => {
+    if (item.adminOnly) return currentUser?.role === ROLES.ADMIN
+    if (item.adminOrSup) return currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
+    return true
+  })
 
   return (
     <aside className="hidden lg:flex flex-col w-60 bg-orbital-surface border-r border-orbital-border h-screen sticky top-0 flex-shrink-0">

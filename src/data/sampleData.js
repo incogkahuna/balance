@@ -1,4 +1,7 @@
-import { PRODUCTION_STATUS, PRODUCTION_TYPE, LOCATION_TYPE, TASK_PRIORITY } from './models.js'
+import {
+  PRODUCTION_STATUS, PRODUCTION_TYPE, LOCATION_TYPE, TASK_PRIORITY,
+  AVAILABILITY_STATUS, EXPERIENCE_LEVEL, CONTRACTOR_FLAG,
+} from './models.js'
 
 // ─── Sample Productions ──────────────────────────────────────────────────────
 export const SAMPLE_PRODUCTIONS = [
@@ -262,5 +265,72 @@ export const SAMPLE_TASKS = [
     instructionPackage: { files: [], voiceMemos: [], notes: '' },
     createdAt: '2026-03-28T09:00:00Z',
     updatedAt: '2026-04-06T09:00:00Z',
+  },
+]
+
+// ─── Sample Contractors ───────────────────────────────────────────────────────
+export const SAMPLE_CONTRACTORS = [
+  {
+    id: 'contractor-001',
+    name: 'Jake Morrison',
+    photoUrl: null,
+    phone: '+1 (310) 555-0142',
+    email: 'jake.morrison@gmail.com',
+    location: 'Los Angeles, CA',
+    availability: AVAILABILITY_STATUS.AVAILABLE,
+    primaryRole: 'LED Wall Operator',
+    secondaryRoles: ['Stage Technician', 'Rigging Tech'],
+    skills: ['ROE', 'Brompton', 'Tessera', 'Disguise', 'Rigging'],
+    experienceLevel: EXPERIENCE_LEVEL.SENIOR,
+    dayRate: '850',
+    weeklyRate: '3800',
+    rateNotes: 'Kit fee $150/day for Brompton processor. No travel under 50mi.',
+    notes: 'Extremely reliable. Has worked every major VP job with us. First call for LED ops.',
+    flag: CONTRACTOR_FLAG.RECOMMENDED,
+    emergencyContact: { name: 'Lisa Morrison', relationship: 'Spouse', phone: '+1 (310) 555-0198' },
+    createdAt: '2025-09-01T09:00:00Z',
+    updatedAt: '2026-04-01T09:00:00Z',
+  },
+  {
+    id: 'contractor-002',
+    name: 'Sarah Chen',
+    photoUrl: null,
+    phone: '+1 (323) 555-0287',
+    email: 'sarah.chen.vp@icloud.com',
+    location: 'Burbank, CA',
+    availability: AVAILABILITY_STATUS.BUSY,
+    primaryRole: 'Virtual Production Supervisor',
+    secondaryRoles: ['Tech Director', 'DIT'],
+    skills: ['Unreal Engine', 'Disguise', 'Stype', 'Mo-Sys', 'Color Science'],
+    experienceLevel: EXPERIENCE_LEVEL.LEAD,
+    dayRate: '1200',
+    weeklyRate: '5500',
+    rateNotes: 'Minimum 5-day guarantee on features. Travel + hotel required outside LA.',
+    notes: 'Booked on a Netflix series through May. Reach out 6 weeks ahead for availability.',
+    flag: CONTRACTOR_FLAG.RECOMMENDED,
+    emergencyContact: { name: 'David Chen', relationship: 'Brother', phone: '+1 (323) 555-0301' },
+    createdAt: '2025-10-15T09:00:00Z',
+    updatedAt: '2026-03-20T09:00:00Z',
+  },
+  {
+    id: 'contractor-003',
+    name: 'Marcus Webb',
+    photoUrl: null,
+    phone: '+1 (424) 555-0063',
+    email: 'marcuswebb.dit@gmail.com',
+    location: 'Culver City, CA',
+    availability: AVAILABILITY_STATUS.AVAILABLE,
+    primaryRole: 'DIT',
+    secondaryRoles: ['Data Manager', 'Colorist'],
+    skills: ['DaVinci Resolve', 'Silverstack', 'Hedge', 'ARRIRAW', 'REDCODE'],
+    experienceLevel: EXPERIENCE_LEVEL.MID,
+    dayRate: '700',
+    weeklyRate: '3000',
+    rateNotes: 'Cart rental $200/day. Overtime at 1.5x after 12hrs.',
+    notes: 'Solid mid-level DIT. Good on set attitude. Recommend for commercial and short-form.',
+    flag: CONTRACTOR_FLAG.NEUTRAL,
+    emergencyContact: { name: 'Patricia Webb', relationship: 'Mother', phone: '+1 (424) 555-0099' },
+    createdAt: '2026-01-10T09:00:00Z',
+    updatedAt: '2026-01-10T09:00:00Z',
   },
 ]
