@@ -33,6 +33,15 @@ export const TASK_PRIORITY = {
   CRITICAL: 'Critical',
 }
 
+export const TASK_STATUS = {
+  NOT_STARTED:  'Not Started',
+  IN_PROGRESS:  'In Progress',
+  NEEDS_REVIEW: 'Needs Review',
+  COMPLETE:     'Complete',
+  VERIFIED:     'Verified',
+  BLOCKED:      'Blocked',
+}
+
 export const AVAILABILITY_STATUS = {
   AVAILABLE:   'Available',
   BUSY:        'Busy',
@@ -108,17 +117,17 @@ export function createTask(overrides = {}) {
     assignedBy: '',
     dueDate: '',
     priority: TASK_PRIORITY.MEDIUM,
+    // ── Status workflow ───────────────────────────────────────────────────────
+    status: TASK_STATUS.NOT_STARTED,
+    // statusHistory: [{ from, to, by, byName, at, note }]
+    statusHistory: [],
+    // blockedReason is required when status === BLOCKED (system or manual)
+    blockedReason: '',
+    // ── Content fields ────────────────────────────────────────────────────────
     expectationsNote: '',
     completionNote: '',
-    // Each entry: { id, url, uploadedAt, uploadedBy }
-    // url is base64 in v1 — swap for a Supabase storage URL in v2 by
-    // changing only the upload handler in TaskCard, not this shape.
+    // url is base64 in v1 — swap for Supabase storage URL in v2
     completionPhotos: [],
-    reportedComplete: false,
-    reportedCompleteAt: null,
-    verifiedComplete: false,
-    verifiedCompleteAt: null,
-    verifiedBy: null,
     instructionPackage: {
       files: [],
       voiceMemos: [],
