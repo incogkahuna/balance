@@ -63,6 +63,15 @@ export function createProduction(overrides = {}) {
       voiceMemos: [],      // [{ id, name, url, transcript, recordedBy, recordedAt }]
       notes: '',
     },
+    // Production Bible — Admin/Supervisor only structured reference document.
+    // Nested under production so it moves with the record. Each sub-array
+    // follows { id, ...fields } so individual items can be updated by ID.
+    bible: {
+      keyPlayers:     [],  // [{ id, name, role, company, phone, email, notes, tag }]
+      documents:      [],  // [{ id, name, dateReceived, fileType, url, notes }]
+      concerns:       [],  // [{ id, title, description, severity, status, resolutionNote, createdAt }]
+      frictionAndFlow: [], // [{ id, personName, personRole, company, factorType, notes }]
+    },
     createdBy: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

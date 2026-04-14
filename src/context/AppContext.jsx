@@ -112,6 +112,17 @@ export function AppProvider({ children }) {
     ))
   }, [setProductions])
 
+  // ─── Production Bible ──────────────────────────────────────────────────────
+  // Single update method — replaces the whole bible object on a production.
+  // Each section passes its full updated array; the parent merges sections.
+  const updateBible = useCallback((productionId, bible) => {
+    setProductions(prev => prev.map(p =>
+      p.id === productionId
+        ? { ...p, bible, updatedAt: new Date().toISOString() }
+        : p
+    ))
+  }, [setProductions])
+
   // ─── Instruction Packages ──────────────────────────────────────────────────
   const updateInstructionPackage = useCallback((productionId, pkg) => {
     setProductions(prev => prev.map(p =>
@@ -156,6 +167,9 @@ export function AppProvider({ children }) {
 
     // Feedback
     submitFeedback,
+
+    // Production Bible
+    updateBible,
 
     // Instruction packages
     updateInstructionPackage,

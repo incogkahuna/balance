@@ -18,10 +18,12 @@ import { TaskForm } from '../components/tasks/TaskForm.jsx'
 import { AddonForm } from '../components/addons/AddonForm.jsx'
 import { FeedbackForm } from '../components/feedback/FeedbackForm.jsx'
 import { InstructionPackage } from '../components/instructions/InstructionPackage.jsx'
+import { ProductionBible } from '../features/productionBible/ProductionBible.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
 import clsx from 'clsx'
 
-const TABS = ['Overview', 'Tasks', 'Package', 'Add-ons', 'Debrief']
+// Bible tab is conditionally appended for Admin/Supervisor — built below
+const BASE_TABS = ['Overview', 'Tasks', 'Package', 'Add-ons', 'Debrief']
 
 export function ProductionDetailPage() {
   const { id } = useParams()
@@ -58,6 +60,9 @@ export function ProductionDetailPage() {
   const canAddTask = isAdminOrSup
   const canAddAddon = true // everyone can log add-ons
   const canDebrief = isAdminOrSup
+
+  // Bible tab is only surfaced for Admin and Supervisor
+  const TABS = isAdminOrSup ? [...BASE_TABS, 'Bible'] : BASE_TABS
 
   const pendingTasks = tasks.filter(t => !t.verifiedComplete)
   const completedTasks = tasks.filter(t => t.verifiedComplete)
@@ -221,6 +226,10 @@ export function ProductionDetailPage() {
             canDebrief={canDebrief}
             onEdit={() => setShowFeedback(true)}
           />
+        )}
+
+        {tab === 'Bible' && isAdminOrSup && (
+          <ProductionBible production={production} />
         )}
       </div>
 
