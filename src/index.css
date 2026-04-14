@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-orbital-bg text-orbital-text font-sans antialiased;
+    min-height: 100dvh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-orbital-bg;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-orbital-muted rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-orbital-subtle;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-orbital-muted hover:bg-orbital-border text-orbital-text font-medium text-sm transition-colors active:scale-95;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg hover:bg-orbital-surface text-orbital-subtle hover:text-orbital-text font-medium text-sm transition-colors active:scale-95;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-sm transition-colors active:scale-95;
+  }
+
+  .input {
+    @apply w-full px-3 py-2.5 rounded-lg bg-orbital-surface border border-orbital-border text-orbital-text placeholder-orbital-subtle text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all;
+  }
+
+  .select {
+    @apply w-full px-3 py-2.5 rounded-lg bg-orbital-surface border border-orbital-border text-orbital-text text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none;
+  }
+
+  .label {
+    @apply block text-xs font-medium text-orbital-subtle uppercase tracking-wider mb-1.5;
+  }
+
+  .card {
+    @apply bg-orbital-surface border border-orbital-border rounded-xl;
+  }
+
+  .section-title {
+    @apply text-xs font-semibold text-orbital-subtle uppercase tracking-widest;
+  }
+}
