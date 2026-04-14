@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { Plus, Search, Film, MapPin, Calendar } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, PRODUCTION_STATUS } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
 import { AvatarGroup } from '../components/ui/Avatar.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
@@ -137,7 +137,7 @@ export function ProductionsPage() {
 function ProductionCard({ production: prod, onClick }) {
   const { tasks } = useApp()
   const prodTasks = tasks.filter(t => t.productionId === prod.id)
-  const completedTasks = prodTasks.filter(t => t.verifiedComplete).length
+  const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
   const memberIds = prod.assignedMembers.map(m => m.userId)
 
   const typeColor = {

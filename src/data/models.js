@@ -128,6 +128,8 @@ export function createTask(overrides = {}) {
     completionNote: '',
     // url is base64 in v1 — swap for Supabase storage URL in v2
     completionPhotos: [],
+    // comments: [{ id, text, photoUrl, authorId, authorName, createdAt }]
+    comments: [],
     instructionPackage: {
       files: [],
       voiceMemos: [],

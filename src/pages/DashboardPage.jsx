@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
 import { Film, CheckSquare, AlertTriangle, Clock } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, PRODUCTION_STATUS } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { StatusBadge, TaskStatusBadge, PriorityBadge } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
@@ -23,17 +23,19 @@ export function DashboardPage() {
   const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
   // My tasks — all active (not-yet-verified) tasks assigned to current user
-  const myTasks = tasks.filter(t => t.assigneeId === currentUser?.id && !t.verifiedComplete)
-  const myPendingTasks = myTasks.filter(t => !t.reportedComplete)
+  const myTasks = tasks.filter(t => t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED)
+  const myPendingTasks = myTasks.filter(t =>
+    t.status !== TASK_STATUS.COMPLETE && t.status !== TASK_STATUS.VERIFIED
+  )
 
   // Active productions (visible list — includes incoming for glanceable context)
   const activeProductions = productions.filter(p =>
     p.status === PRODUCTION_STATUS.ACTIVE || p.status === PRODUCTION_STATUS.INCOMING
   )
 
-  // Admin/sup: tasks needing verification
+  // Admin/sup: tasks marked Complete and awaiting verification
   const pendingVerification = isAdminOrSup
-    ? tasks.filter(t => t.reportedComplete && !t.verifiedComplete)
+    ? tasks.filter(t => t.status === TASK_STATUS.COMPLETE || t.status === TASK_STATUS.NEEDS_REVIEW)
     : []
 
   // Stat counts. Overdue is role-scoped: crew only sees their own, so the
@@ -44,7 +46,7 @@ export function DashboardPage() {
     ? tasks
     : tasks.filter(t => t.assigneeId === currentUser?.id)
   const totalOverdue = overdueScope.filter(t =>
-    t.dueDate && isPast(parseISO(t.dueDate)) && !t.verifiedComplete
+    t.dueDate && isPast(parseISO(t.dueDate)) && t.status !== TASK_STATUS.VERIFIED
   ).length
 
   return (
@@ -163,7 +165,7 @@ export function DashboardPage() {
               <div className="space-y-2">
                 {activeProductions.slice(0, 5).map(prod => {
                   const prodTasks = tasks.filter(t => t.productionId === prod.id)
-                  const completedTasks = prodTasks.filter(t => t.verifiedComplete).length
+                  const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
                   return (
                     <div
                       key={prod.id}

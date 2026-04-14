@@ -7,7 +7,7 @@ import {
   CheckSquare, FileText, MessageSquare, BarChart2
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, PRODUCTION_STATUS, USERS } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS, TASK_STATUS, USERS } from '../data/models.js'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
@@ -64,8 +64,8 @@ export function ProductionDetailPage() {
   // Bible tab is only surfaced for Admin and Supervisor
   const TABS = isAdminOrSup ? [...BASE_TABS, 'Bible'] : BASE_TABS
 
-  const pendingTasks = tasks.filter(t => !t.verifiedComplete)
-  const completedTasks = tasks.filter(t => t.verifiedComplete)
+  const pendingTasks = tasks.filter(t => t.status !== TASK_STATUS.VERIFIED)
+  const completedTasks = tasks.filter(t => t.status === TASK_STATUS.VERIFIED)
 
   return (
     <div>
@@ -302,9 +302,9 @@ export function ProductionDetailPage() {
 // ─── Tab: Overview ────────────────────────────────────────────────────────────
 function OverviewTab({ production, tasks }) {
   const total = tasks.length
-  const verified = tasks.filter(t => t.verifiedComplete).length
-  const reported = tasks.filter(t => t.reportedComplete && !t.verifiedComplete).length
-  const overdue = tasks.filter(t => t.dueDate && !t.verifiedComplete && new Date(t.dueDate) < new Date()).length
+  const verified = tasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
+  const reported = tasks.filter(t => t.status === TASK_STATUS.COMPLETE || t.status === TASK_STATUS.NEEDS_REVIEW).length
+  const overdue = tasks.filter(t => t.dueDate && t.status !== TASK_STATUS.VERIFIED && new Date(t.dueDate) < new Date()).length
 
   return (
     <div className="space-y-5">
@@ -394,8 +394,8 @@ function Stat({ label, value, color }) {
 
 // ─── Tab: Tasks ───────────────────────────────────────────────────────────────
 function TasksTab({ production, tasks, canAdd, onAddTask }) {
-  const pending = tasks.filter(t => !t.verifiedComplete)
-  const completed = tasks.filter(t => t.verifiedComplete)
+  const pending = tasks.filter(t => t.status !== TASK_STATUS.VERIFIED)
+  const completed = tasks.filter(t => t.status === TASK_STATUS.VERIFIED)
 
   return (
     <div className="space-y-6">

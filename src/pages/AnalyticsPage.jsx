@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts'
 import { useApp } from '../context/AppContext.jsx'
-import { USERS, ROLES, PRODUCTION_STATUS } from '../data/models.js'
+import { USERS, ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { TopBar } from '../components/layout/TopBar.jsx'
 import { Navigate } from 'react-router-dom'
 
@@ -40,8 +40,8 @@ export function AnalyticsPage() {
   const tasksByPerson = useMemo(() => {
     return USERS.map(user => {
       const assigned = tasks.filter(t => t.assigneeId === user.id)
-      const completed = assigned.filter(t => t.verifiedComplete).length
-      const pending = assigned.filter(t => !t.verifiedComplete).length
+      const completed = assigned.filter(t => t.status === TASK_STATUS.VERIFIED).length
+      const pending = assigned.filter(t => t.status !== TASK_STATUS.VERIFIED).length
       const rate = assigned.length > 0 ? Math.round((completed / assigned.length) * 100) : 0
       return { name: user.name, completed, pending, total: assigned.length, rate }
     }).filter(p => p.total > 0)
@@ -84,7 +84,7 @@ export function AnalyticsPage() {
   const totalProductions = productions.length
   const completedProductions = productions.filter(p => p.status === PRODUCTION_STATUS.COMPLETED).length
   const totalTasks = tasks.length
-  const verifiedTasks = tasks.filter(t => t.verifiedComplete).length
+  const verifiedTasks = tasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
   const avgRating = useMemo(() => {
     const rated = productions.filter(p => p.feedback?.rating)
     if (rated.length === 0) return null

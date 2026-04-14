@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { isPast, parseISO } from 'date-fns'
 import { CheckSquare, AlertTriangle, Clock, CheckCheck, ListTodo } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES } from '../data/models.js'
+import { ROLES, TASK_STATUS } from '../data/models.js'
 import { TaskCard } from '../components/tasks/TaskCard.jsx'
 import { EmptyState } from '../components/ui/EmptyState.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
@@ -43,19 +43,22 @@ export function TasksPage() {
     switch (filter) {
       case 'mine':
         list = list.filter(t =>
-          t.assigneeId === currentUser?.id && !t.verifiedComplete
+          t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED
         )
         break
       case 'overdue':
         list = list.filter(t =>
-          t.dueDate && !t.verifiedComplete && isPast(parseISO(t.dueDate))
+          t.dueDate && t.status !== TASK_STATUS.VERIFIED && isPast(parseISO(t.dueDate))
         )
         break
       case 'pending':
-        list = list.filter(t => t.reportedComplete && !t.verifiedComplete)
+        // "Awaiting Verification" = tasks marked Complete but not yet Verified
+        list = list.filter(t =>
+          t.status === TASK_STATUS.COMPLETE || t.status === TASK_STATUS.NEEDS_REVIEW
+        )
         break
       case 'verified':
-        list = list.filter(t => t.verifiedComplete)
+        list = list.filter(t => t.status === TASK_STATUS.VERIFIED)
         break
       case 'all':
       default:

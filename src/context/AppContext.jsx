@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
-import { USERS, ROLES } from '../data/models.js'
+import { USERS, ROLES, TASK_STATUS } from '../data/models.js'
 import {
   SAMPLE_PRODUCTIONS as SP,
   SAMPLE_TASKS as ST,
@@ -12,8 +12,28 @@ const AppContext = createContext(null)
 export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useLocalStorage('balance_current_user', null)
   const [productions, setProductions] = useLocalStorage('balance_productions', SP)
-  const [tasks, setTasks] = useLocalStorage('balance_tasks', ST)
+  const [_rawTasks, setTasks] = useLocalStorage('balance_tasks', ST)
   const [contractors, setContractors] = useLocalStorage('balance_contractors', SC)
+
+  // ─── Task migration ────────────────────────────────────────────────────────
+  // Normalises tasks that pre-date the status workflow feature (stored with
+  // the old reportedComplete/verifiedComplete fields) so every consumer always
+  // receives a task with the current shape. New tasks pass through unchanged.
+  const tasks = useMemo(() => _rawTasks.map(t => {
+    if (t.status && t.comments !== undefined) return t // already current
+    return {
+      ...t,
+      status: t.status || (
+        t.verifiedComplete ? TASK_STATUS.VERIFIED :
+        t.reportedComplete ? TASK_STATUS.COMPLETE :
+        TASK_STATUS.NOT_STARTED
+      ),
+      statusHistory: t.statusHistory || [],
+      blockedReason: t.blockedReason || '',
+      completionPhotos: t.completionPhotos || [],
+      comments: t.comments || [],
+    }
+  }), [_rawTasks])
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
   const login = useCallback((userId) => {
@@ -80,6 +100,14 @@ export function AppProvider({ children }) {
   const getTasksForUser = useCallback((userId) => {
     return tasks.filter(t => t.assigneeId === userId)
   }, [tasks])
+
+  const addComment = useCallback((taskId, comment) => {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId
+        ? { ...t, comments: [...(t.comments || []), comment], updatedAt: new Date().toISOString() }
+        : t
+    ))
+  }, [setTasks])
 
   // ─── Add-ons ───────────────────────────────────────────────────────────────
   const addAddon = useCallback((productionId, addon) => {
@@ -222,6 +250,7 @@ export function AppProvider({ children }) {
     deleteTask,
     getTasksForProduction,
     getTasksForUser,
+    addComment,
 
     // Add-ons
     addAddon,
