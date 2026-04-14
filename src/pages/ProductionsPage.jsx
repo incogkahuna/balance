@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { Plus, Search, Film, MapPin, Calendar } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
@@ -22,8 +22,16 @@ export function ProductionsPage() {
   const { currentUser, productions, addProduction } = useApp()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
   const [showCreate, setShowCreate] = useState(false)
+
+  // Status filter is URL-synced so dashboard stat cards and other deep links
+  // can land here pre-filtered (e.g. /productions?status=Active).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const statusFilter = searchParams.get('status') || 'all'
+  const setStatusFilter = (status) => {
+    if (status === 'all') setSearchParams({})
+    else setSearchParams({ status })
+  }
 
   const canCreate = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 

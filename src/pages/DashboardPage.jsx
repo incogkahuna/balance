@@ -1,8 +1,8 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
-import { Film, CheckSquare, AlertTriangle, Clock, Plus, ChevronRight } from 'lucide-react'
+import { Film, CheckSquare, AlertTriangle, Clock } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, PRODUCTION_STATUS, TASK_PRIORITY } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS } from '../data/models.js'
 import { StatusBadge, TaskStatusBadge, PriorityBadge } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
@@ -22,12 +22,11 @@ export function DashboardPage() {
 
   const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
-  // My tasks
+  // My tasks — all active (not-yet-verified) tasks assigned to current user
   const myTasks = tasks.filter(t => t.assigneeId === currentUser?.id && !t.verifiedComplete)
-  const myOverdueTasks = myTasks.filter(t => t.dueDate && isPast(parseISO(t.dueDate)) && !t.reportedComplete)
   const myPendingTasks = myTasks.filter(t => !t.reportedComplete)
 
-  // Active productions
+  // Active productions (visible list — includes incoming for glanceable context)
   const activeProductions = productions.filter(p =>
     p.status === PRODUCTION_STATUS.ACTIVE || p.status === PRODUCTION_STATUS.INCOMING
   )
@@ -37,10 +36,14 @@ export function DashboardPage() {
     ? tasks.filter(t => t.reportedComplete && !t.verifiedComplete)
     : []
 
-  // Stats
+  // Stat counts. Overdue is role-scoped: crew only sees their own, so the
+  // count on their card matches what they'll see after tapping through.
   const totalActive = productions.filter(p => p.status === PRODUCTION_STATUS.ACTIVE).length
   const totalIncoming = productions.filter(p => p.status === PRODUCTION_STATUS.INCOMING).length
-  const totalOverdue = tasks.filter(t =>
+  const overdueScope = isAdminOrSup
+    ? tasks
+    : tasks.filter(t => t.assigneeId === currentUser?.id)
+  const totalOverdue = overdueScope.filter(t =>
     t.dueDate && isPast(parseISO(t.dueDate)) && !t.verifiedComplete
   ).length
 
@@ -58,7 +61,7 @@ export function DashboardPage() {
           </p>
         </div>
 
-        {/* Stats row */}
+        {/* Stats row — each card is a shortcut into its respective filtered view */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
           <StatCard
             icon={Film}
@@ -66,6 +69,7 @@ export function DashboardPage() {
             value={totalActive}
             color="text-green-400"
             bg="bg-green-500/10"
+            to={`/productions?status=${encodeURIComponent(PRODUCTION_STATUS.ACTIVE)}`}
           />
           <StatCard
             icon={Clock}
@@ -73,13 +77,15 @@ export function DashboardPage() {
             value={totalIncoming}
             color="text-blue-400"
             bg="bg-blue-500/10"
+            to={`/productions?status=${encodeURIComponent(PRODUCTION_STATUS.INCOMING)}`}
           />
           <StatCard
             icon={CheckSquare}
             label="My Tasks"
-            value={myPendingTasks.length}
+            value={myTasks.length}
             color="text-purple-400"
             bg="bg-purple-500/10"
+            to="/tasks?filter=mine"
           />
           <StatCard
             icon={AlertTriangle}
@@ -88,6 +94,7 @@ export function DashboardPage() {
             color="text-red-400"
             bg="bg-red-500/10"
             alert={totalOverdue > 0}
+            to="/tasks?filter=overdue"
           />
         </div>
 
@@ -235,14 +242,31 @@ export function DashboardPage() {
   )
 }
 
-function StatCard({ icon: Icon, label, value, color, bg, alert }) {
-  return (
-    <div className={`card p-4 ${alert ? 'border-red-500/30' : ''}`}>
+// StatCard renders as an interactive Link when `to` is provided, otherwise
+// as a static div — keeps the component usable for display-only contexts.
+function StatCard({ icon: Icon, label, value, color, bg, alert, to }) {
+  const content = (
+    <>
       <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center mb-3`}>
         <Icon size={18} className={color} />
       </div>
       <p className="text-2xl font-bold text-orbital-text">{value}</p>
       <p className="text-xs text-orbital-subtle mt-0.5">{label}</p>
-    </div>
+    </>
   )
+
+  const baseClass = `card p-4 text-left ${alert ? 'border-red-500/30' : ''}`
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className={`${baseClass} block transition-all hover:border-orbital-muted hover:-translate-y-0.5 active:scale-[0.97] active:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
+      >
+        {content}
+      </Link>
+    )
+  }
+
+  return <div className={baseClass}>{content}</div>
 }

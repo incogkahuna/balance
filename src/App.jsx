@@ -7,6 +7,7 @@ import { ProductionsPage } from './pages/ProductionsPage.jsx'
 import { ProductionDetailPage } from './pages/ProductionDetailPage.jsx'
 import { SchedulePage } from './pages/SchedulePage.jsx'
 import { AnalyticsPage } from './pages/AnalyticsPage.jsx'
+import { TasksPage } from './pages/TasksPage.jsx'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/productions" element={<ProductionsPage />} />
             <Route path="/productions/:id" element={<ProductionDetailPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
           </Route>

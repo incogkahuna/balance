@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { Check, CheckCheck, ChevronDown, ChevronUp, Trash2, Edit, MessageSquare } from 'lucide-react'
+import { Check, CheckCheck, ChevronDown, ChevronUp, Trash2, Edit } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
 import { TaskStatusBadge, PriorityBadge } from '../ui/StatusBadge.jsx'
@@ -9,8 +10,11 @@ import { Modal } from '../ui/Modal.jsx'
 import { TaskForm } from './TaskForm.jsx'
 import { ConfirmDialog } from '../ui/ConfirmDialog.jsx'
 
-export function TaskCard({ task, productionId }) {
-  const { currentUser, updateTask, deleteTask } = useApp()
+// `showProduction`: when true, surfaces a clickable production-name link
+// above the task title. Used on the cross-production Tasks list view.
+export function TaskCard({ task, productionId, showProduction = false }) {
+  const { currentUser, updateTask, deleteTask, getProduction } = useApp()
+  const production = showProduction ? getProduction(task.productionId) : null
   const [expanded, setExpanded] = useState(false)
   const [completionNote, setCompletionNote] = useState(task.completionNote || '')
   const [showEdit, setShowEdit] = useState(false)
@@ -88,6 +92,15 @@ export function TaskCard({ task, productionId }) {
             </div>
 
             <div className="flex-1 min-w-0">
+              {showProduction && production && (
+                <Link
+                  to={`/productions/${production.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="block text-xs text-orbital-subtle hover:text-blue-400 transition-colors truncate mb-0.5"
+                >
+                  {production.name}
+                </Link>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-sm font-medium leading-snug ${task.verifiedComplete ? 'line-through text-orbital-subtle' : 'text-orbital-text'}`}>
                   {task.title}
