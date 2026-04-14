@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { Check, CheckCheck, ChevronDown, ChevronUp, Trash2, Edit } from 'lucide-react'
+import { Check, CheckCheck, ChevronDown, ChevronUp, Trash2, Edit, Camera, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
 import { TaskStatusBadge, PriorityBadge } from '../ui/StatusBadge.jsx'
@@ -15,22 +15,54 @@ import { ConfirmDialog } from '../ui/ConfirmDialog.jsx'
 export function TaskCard({ task, productionId, showProduction = false }) {
   const { currentUser, updateTask, deleteTask, getProduction } = useApp()
   const production = showProduction ? getProduction(task.productionId) : null
+
   const [expanded, setExpanded] = useState(false)
   const [completionNote, setCompletionNote] = useState(task.completionNote || '')
+  const [pendingPhoto, setPendingPhoto] = useState(null) // { id, url, uploadedAt, uploadedBy }
   const [showEdit, setShowEdit] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
+
+  // Hidden file input — `capture="environment"` opens rear camera on mobile,
+  // falls back to file picker on desktop.
+  const photoInputRef = useRef(null)
 
   const isAssignee = currentUser?.id === task.assigneeId
   const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
   const canEdit = isAdminOrSup
   const canDelete = isAdminOrSup
+  const isOverdue = task.dueDate && !task.verifiedComplete && new Date(task.dueDate) < new Date()
 
+  // ─── Photo selection ───────────────────────────────────────────────────────
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setPendingPhoto({
+        id: crypto.randomUUID(),
+        url: ev.target.result, // base64 — swap for Supabase upload in v2
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: currentUser?.id,
+      })
+    }
+    reader.readAsDataURL(file)
+    // Reset so the same file can be re-selected if user clears and re-picks
+    e.target.value = ''
+  }
+
+  // ─── Task actions ──────────────────────────────────────────────────────────
   const handleReportComplete = () => {
+    const existingPhotos = task.completionPhotos || []
     updateTask(task.id, {
       reportedComplete: true,
       reportedCompleteAt: new Date().toISOString(),
       completionNote,
+      completionPhotos: pendingPhoto
+        ? [...existingPhotos, pendingPhoto]
+        : existingPhotos,
     })
+    setPendingPhoto(null)
   }
 
   const handleUnreport = () => {
@@ -59,24 +91,19 @@ export function TaskCard({ task, productionId, showProduction = false }) {
     })
   }
 
-  const isOverdue = task.dueDate && !task.verifiedComplete && new Date(task.dueDate) < new Date()
+  const completionPhotos = task.completionPhotos || []
 
   return (
     <>
       <div className={`card transition-all ${
-        task.verifiedComplete
-          ? 'opacity-60'
-          : isOverdue
-          ? 'border-red-500/30'
-          : ''
+        task.verifiedComplete ? 'opacity-60' : isOverdue ? 'border-red-500/30' : ''
       }`}>
-        {/* Header */}
-        <div
-          className="p-4 cursor-pointer"
-          onClick={() => setExpanded(e => !e)}
-        >
+
+        {/* ── Card header ─────────────────────────────────────────────────── */}
+        <div className="p-4 cursor-pointer" onClick={() => setExpanded(e => !e)}>
           <div className="flex items-start gap-3">
-            {/* Completion checkbox */}
+
+            {/* Status icon */}
             <div className="flex-shrink-0 mt-0.5">
               {task.verifiedComplete ? (
                 <div className="w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -101,11 +128,9 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                   {production.name}
                 </Link>
               )}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-sm font-medium leading-snug ${task.verifiedComplete ? 'line-through text-orbital-subtle' : 'text-orbital-text'}`}>
-                  {task.title}
-                </span>
-              </div>
+              <span className={`text-sm font-medium leading-snug ${task.verifiedComplete ? 'line-through text-orbital-subtle' : 'text-orbital-text'}`}>
+                {task.title}
+              </span>
               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                 <TaskStatusBadge task={task} />
                 <PriorityBadge priority={task.priority} />
@@ -114,20 +139,28 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                     Due {format(parseISO(task.dueDate), 'MMM d')}
                   </span>
                 )}
+                {completionPhotos.length > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-orbital-subtle">
+                    <Camera size={11} /> {completionPhotos.length}
+                  </span>
+                )}
               </div>
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
               <Avatar userId={task.assigneeId} size="xs" />
-              {expanded ? <ChevronUp size={16} className="text-orbital-subtle" /> : <ChevronDown size={16} className="text-orbital-subtle" />}
+              {expanded
+                ? <ChevronUp size={16} className="text-orbital-subtle" />
+                : <ChevronDown size={16} className="text-orbital-subtle" />
+              }
             </div>
           </div>
         </div>
 
-        {/* Expanded */}
+        {/* ── Expanded body ────────────────────────────────────────────────── */}
         {expanded && (
           <div className="px-4 pb-4 border-t border-orbital-border pt-4 space-y-4">
-            {/* Description */}
+
             {task.description && (
               <div>
                 <p className="section-title mb-1.5">Description</p>
@@ -135,7 +168,6 @@ export function TaskCard({ task, productionId, showProduction = false }) {
               </div>
             )}
 
-            {/* Expectations note */}
             {task.expectationsNote && (
               <div className="p-3 rounded-lg bg-blue-500/8 border border-blue-500/20">
                 <p className="section-title mb-1 text-blue-400">From assigner</p>
@@ -147,7 +179,6 @@ export function TaskCard({ task, productionId, showProduction = false }) {
               </div>
             )}
 
-            {/* Completion note */}
             {task.completionNote && (
               <div className="p-3 rounded-lg bg-green-500/8 border border-green-500/20">
                 <p className="section-title mb-1 text-green-400">Completion note</p>
@@ -155,7 +186,23 @@ export function TaskCard({ task, productionId, showProduction = false }) {
               </div>
             )}
 
-            {/* Verified by */}
+            {/* Completion photos — visible to assignee, admin, and supervisor */}
+            {completionPhotos.length > 0 && (isAdminOrSup || isAssignee) && (
+              <div>
+                <p className="section-title mb-2">Completion Photos</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {completionPhotos.map(photo => (
+                    <img
+                      key={photo.id}
+                      src={photo.url}
+                      alt="Completion photo"
+                      className="w-full rounded-lg border border-orbital-border object-cover aspect-video bg-black/20"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {task.verifiedComplete && (
               <div className="flex items-center gap-2">
                 <CheckCheck size={14} className="text-green-400" />
@@ -166,38 +213,74 @@ export function TaskCard({ task, productionId, showProduction = false }) {
               </div>
             )}
 
-            {/* Actions */}
+            {/* ── Actions ─────────────────────────────────────────────────── */}
             <div className="flex flex-wrap gap-2">
-              {/* Assignee: report complete */}
+
+              {/* Assignee: completion flow with optional photo */}
               {isAssignee && !task.reportedComplete && (
-                <div className="w-full">
+                <div className="w-full space-y-2">
                   <textarea
-                    className="input min-h-[60px] resize-none text-xs mb-2"
+                    className="input min-h-[60px] resize-none text-xs"
                     placeholder="Completion note (optional) — what happened, any issues..."
                     value={completionNote}
                     onChange={e => setCompletionNote(e.target.value)}
                   />
-                  <button onClick={handleReportComplete} className="btn-primary w-full">
-                    <Check size={14} /> Mark as Complete
-                  </button>
+
+                  {/* Hidden file input — opens camera on mobile, picker on desktop */}
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handlePhotoSelect}
+                  />
+
+                  {/* Photo preview — only shown once a photo is selected */}
+                  {pendingPhoto && (
+                    <div className="relative">
+                      <img
+                        src={pendingPhoto.url}
+                        alt="Completion photo preview"
+                        className="w-full rounded-lg border border-orbital-border object-cover max-h-48 bg-black/20"
+                      />
+                      <button
+                        onClick={() => setPendingPhoto(null)}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center hover:bg-black/80 transition-colors"
+                        aria-label="Remove photo"
+                      >
+                        <X size={14} className="text-white" />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => photoInputRef.current?.click()}
+                      className="btn-secondary flex-1"
+                    >
+                      <Camera size={14} />
+                      {pendingPhoto ? 'Change photo' : 'Add photo'}
+                    </button>
+                    <button onClick={handleReportComplete} className="btn-primary flex-1">
+                      <Check size={14} /> Mark Complete
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {/* Assignee: unreport */}
               {isAssignee && task.reportedComplete && !task.verifiedComplete && (
                 <button onClick={handleUnreport} className="btn-secondary text-xs">
                   Undo completion
                 </button>
               )}
 
-              {/* Admin/Sup: verify */}
               {isAdminOrSup && task.reportedComplete && !task.verifiedComplete && (
                 <button onClick={handleVerify} className="btn-primary">
                   <CheckCheck size={14} /> Verify Complete
                 </button>
               )}
 
-              {/* Admin/Sup: unverify */}
               {isAdminOrSup && task.verifiedComplete && (
                 <button onClick={handleUnverify} className="btn-ghost text-xs">
                   Unverify
@@ -210,7 +293,10 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                 </button>
               )}
               {canDelete && (
-                <button onClick={() => setShowDelete(true)} className="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                <button
+                  onClick={() => setShowDelete(true)}
+                  className="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                >
                   <Trash2 size={14} /> Delete
                 </button>
               )}

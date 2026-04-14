@@ -82,6 +82,10 @@ export function createTask(overrides = {}) {
     priority: TASK_PRIORITY.MEDIUM,
     expectationsNote: '',
     completionNote: '',
+    // Each entry: { id, url, uploadedAt, uploadedBy }
+    // url is base64 in v1 — swap for a Supabase storage URL in v2 by
+    // changing only the upload handler in TaskCard, not this shape.
+    completionPhotos: [],
     reportedComplete: false,
     reportedCompleteAt: null,
     verifiedComplete: false,
