@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Navigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Search, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES, AVAILABILITY_STATUS, CONTRACTOR_FLAG } from '../../data/models.js'
