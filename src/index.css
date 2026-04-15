@@ -213,8 +213,10 @@
   }
 
   /* ── Scan line overlay — applied to sidebar ──────────────────────────────── */
+  /* NOTE: pointer-events must NOT be set on the container — that would        */
+  /* prevent NavLink children from receiving clicks in some browsers.          */
+  /* Only the ::after scan line itself should be non-interactive.              */
   .scan-overlay {
-    @apply pointer-events-none;
     position: relative;
     overflow: hidden;
   }
@@ -226,6 +228,7 @@
     background: linear-gradient(90deg, transparent 0%, rgba(14,165,233,0.15) 50%, transparent 100%);
     animation: scan-line 12s linear infinite;
     z-index: 10;
+    pointer-events: none; /* scan line must not intercept clicks */
   }
 
   /* ── Chrome divider ──────────────────────────────────────────────────────── */

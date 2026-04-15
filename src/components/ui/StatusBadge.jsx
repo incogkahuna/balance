@@ -19,6 +19,7 @@ const PRIORITY_CFG = {
 
 // ── Production status — lit indicator with glow dot ───────────────────────────
 export function StatusBadge({ status, className }) {
+  if (!status) return null
   const cfg = STATUS_CFG[status] || STATUS_CFG[PRODUCTION_STATUS.COMPLETED]
   return (
     <span
@@ -48,6 +49,7 @@ export function StatusBadge({ status, className }) {
 
 // ── Priority — rectangular tag ────────────────────────────────────────────────
 export function PriorityBadge({ priority, className }) {
+  if (!priority) return null
   const cfg = PRIORITY_CFG[priority] || PRIORITY_CFG[TASK_PRIORITY.MEDIUM]
   return (
     <span
