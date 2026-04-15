@@ -131,11 +131,23 @@ export function ProductionsPage() {
             )}
           </div>
           {canCreate && (
-            <button onClick={() => setShowCreate(true)} className="btn-primary">
-              <Plus size={16} />
-              <span className="hidden sm:inline">New Production</span>
-              <span className="sm:hidden">New</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/productions/new')}
+                className="btn-primary"
+              >
+                <Plus size={16} />
+                <span className="hidden sm:inline">New Production</span>
+                <span className="sm:hidden">New</span>
+              </button>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="px-3 py-2 rounded-lg border border-orbital-border text-xs text-orbital-subtle hover:text-orbital-text hover:border-orbital-border/80 transition-colors"
+                title="Quick add (minimal form)"
+              >
+                Quick Add
+              </button>
+            </div>
           )}
         </div>
 

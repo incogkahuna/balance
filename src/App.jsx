@@ -9,6 +9,7 @@ import { SchedulePage } from './pages/SchedulePage.jsx'
 import { AnalyticsPage } from './pages/AnalyticsPage.jsx'
 import { TasksPage } from './pages/TasksPage.jsx'
 import { ContractorsPage } from './features/contractors/ContractorsPage.jsx'
+import { IntakePage } from './pages/IntakePage.jsx'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/productions" element={<ProductionsPage />} />
+            <Route path="/productions/new" element={<IntakePage />} />
             <Route path="/productions/:id" element={<ProductionDetailPage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/schedule" element={<SchedulePage />} />
