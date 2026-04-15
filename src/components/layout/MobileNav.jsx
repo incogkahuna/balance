@@ -39,7 +39,7 @@ export function MobileNav() {
             style={({ isActive }) => isActive ? {
               color: '#38bdf8',
             } : {
-              color: '#3f5a75',
+              color: '#5a7a92',
             }}
           >
             {({ isActive }) => (

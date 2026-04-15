@@ -14,7 +14,7 @@ import { EmptyState } from '../components/ui/EmptyState.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
 import clsx from 'clsx'
 
-// ─── Card color palette ───────────────────────────────────────────────────────
+// ── Card color palette ────────────────────────────────────────────────────────
 const CARD_COLORS = [
   { label: 'Default',  value: null      },
   { label: 'Blue',     value: '#3b82f6' },
@@ -35,36 +35,44 @@ const STATUS_ORDER = [
   PRODUCTION_STATUS.COMPLETED,
 ]
 
+// Status → accent color for card left border
+const STATUS_COLOR = {
+  [PRODUCTION_STATUS.ACTIVE]:    '#4ade80',
+  [PRODUCTION_STATUS.INCOMING]:  '#60a5fa',
+  [PRODUCTION_STATUS.WRAP]:      '#fbbf24',
+  [PRODUCTION_STATUS.COMPLETED]: '#475569',
+}
+
+// Production type → accent color
+const TYPE_COLOR = {
+  'LED Volume':   '#c084fc',
+  'Mobile Build': '#22d3ee',
+  'Other':        '#7090a8',
+}
+
 export function ProductionsPage() {
   const { currentUser, productions, addProduction } = useApp()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
 
-  // Persistent card order — survives refresh, independent of production data
   const [cardOrder, setCardOrder] = useLocalStorage('balance_card_order', [])
-
-  // Drag state lives in the page so it's shared across all card siblings
-  const [dragId, setDragId] = useState(null)
+  const [dragId, setDragId]       = useState(null)
   const [dragOverId, setDragOverId] = useState(null)
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const statusFilter = searchParams.get('status') || 'all'
-  const setStatusFilter = (status) => {
-    if (status === 'all') setSearchParams({})
-    else setSearchParams({ status })
-  }
+  const statusFilter    = searchParams.get('status') || 'all'
+  const setStatusFilter = (s) => s === 'all' ? setSearchParams({}) : setSearchParams({ status: s })
 
   const canCreate = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
   const filtered = useMemo(() => productions.filter(p => {
-    const q = search.toLowerCase()
+    const q           = search.toLowerCase()
     const matchSearch = !q || p.name.toLowerCase().includes(q) || p.client.toLowerCase().includes(q)
     const matchStatus = statusFilter === 'all' || p.status === statusFilter
     return matchSearch && matchStatus
   }), [productions, search, statusFilter])
 
-  // Apply custom order on top of filtered set
   const sortedFiltered = useMemo(() => {
     if (cardOrder.length === 0) {
       return [...filtered].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status))
@@ -72,9 +80,7 @@ export function ProductionsPage() {
     return [...filtered].sort((a, b) => {
       const ai = cardOrder.indexOf(a.id)
       const bi = cardOrder.indexOf(b.id)
-      if (ai === -1 && bi === -1) {
-        return STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
-      }
+      if (ai === -1 && bi === -1) return STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
       if (ai === -1) return 1
       if (bi === -1) return -1
       return ai - bi
@@ -83,20 +89,15 @@ export function ProductionsPage() {
 
   const isCustomOrdered = cardOrder.length > 0
 
-  // ─── Drag handlers ─────────────────────────────────────────────────────────
   const handleDragStart = useCallback((id) => setDragId(id), [])
   const handleDragOver  = useCallback((id) => setDragOverId(id), [])
   const handleDragEnd   = useCallback(() => { setDragId(null); setDragOverId(null) }, [])
 
   const handleDrop = useCallback((targetId) => {
-    if (!dragId || dragId === targetId) {
-      setDragId(null)
-      setDragOverId(null)
-      return
-    }
-    const ids = sortedFiltered.map(p => p.id)
-    const fromIdx = ids.indexOf(dragId)
-    const toIdx   = ids.indexOf(targetId)
+    if (!dragId || dragId === targetId) { setDragId(null); setDragOverId(null); return }
+    const ids      = sortedFiltered.map(p => p.id)
+    const fromIdx  = ids.indexOf(dragId)
+    const toIdx    = ids.indexOf(targetId)
     if (fromIdx === -1 || toIdx === -1) return
     const newOrder = [...ids]
     newOrder.splice(fromIdx, 1)
@@ -112,37 +113,47 @@ export function ProductionsPage() {
     navigate(`/productions/${prod.id}`)
   }
 
+  // Filter tabs: "all" + each status in order
+  const filterTabs = ['all', ...STATUS_ORDER]
+
   return (
     <div>
       <TopBar />
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-orbital-text">Productions</h1>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-0.5 h-4 flex-shrink-0" style={{ background: 'rgba(14,165,233,0.65)' }} />
+              <h1 className="font-telemetry text-[11px] tracking-[0.22em]" style={{ color: '#d4e2f0' }}>
+                PRODUCTIONS
+              </h1>
+            </div>
             {isCustomOrdered && (
               <button
                 onClick={() => setCardOrder([])}
-                className="flex items-center gap-1 text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
+                className="flex items-center gap-1 transition-colors font-telemetry text-[8px] tracking-[0.1em]"
+                style={{ color: '#4d6a82' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#7090a8' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#4d6a82' }}
                 title="Reset to default order"
               >
-                <RotateCcw size={12} /> Reset order
+                <RotateCcw size={10} /> RESET ORDER
               </button>
             )}
           </div>
+
           {canCreate && (
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate('/productions/new')}
-                className="btn-primary"
-              >
-                <Plus size={16} />
+              <button onClick={() => navigate('/productions/new')} className="btn-primary">
+                <Plus size={15} />
                 <span className="hidden sm:inline">New Production</span>
                 <span className="sm:hidden">New</span>
               </button>
               <button
                 onClick={() => setShowCreate(true)}
-                className="px-3 py-2 rounded-lg border border-orbital-border text-xs text-orbital-subtle hover:text-orbital-text hover:border-orbital-border/80 transition-colors"
+                className="btn-secondary text-xs"
                 title="Quick add (minimal form)"
               >
                 Quick Add
@@ -151,47 +162,56 @@ export function ProductionsPage() {
           )}
         </div>
 
-        {/* Filters */}
-        <div className="flex gap-3 mb-6 flex-col sm:flex-row">
+        {/* ── Search + filter controls ── */}
+        <div className="flex gap-3 mb-5 flex-col sm:flex-row">
+          {/* Search */}
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-orbital-subtle" />
-            <input
-              className="input pl-9"
-              placeholder="Search productions..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-orbital-subtle" />
+            <input className="input pl-9" placeholder="Search productions..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {['all', ...Object.values(PRODUCTION_STATUS)].map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-                  statusFilter === s
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-orbital-surface border border-orbital-border text-orbital-subtle hover:text-orbital-text'
-                }`}
-              >
-                {s === 'all' ? 'All' : s}
-              </button>
-            ))}
+
+          {/* Status selector — instrument panel tab strip */}
+          <div className="flex"
+            style={{ border: '1px solid #1e3248', background: 'rgba(4,9,15,0.8)' }}
+          >
+            {filterTabs.map(s => {
+              const isActive = statusFilter === s
+              const col      = s === 'all' ? '#7090a8' : (STATUS_COLOR[s] || '#7090a8')
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className="font-telemetry text-[9px] tracking-[0.12em] px-3 py-2 transition-all whitespace-nowrap"
+                  style={isActive ? {
+                    color: col,
+                    background: `${col}12`,
+                    borderBottom: `2px solid ${col}`,
+                    borderTop: '2px solid transparent',
+                    marginBottom: -1,
+                  } : {
+                    color: '#4d6a82',
+                    borderBottom: '2px solid transparent',
+                    borderTop: '2px solid transparent',
+                  }}
+                >
+                  {s === 'all' ? 'ALL' : s.toUpperCase()}
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* Drag hint — only shown when cards have been manually reordered */}
-        {isCustomOrdered && !search && (
-          <p className="text-xs text-orbital-subtle mb-4 flex items-center gap-1.5">
-            <GripVertical size={12} /> Drag cards to reorder · hold grip handle
-          </p>
-        )}
-        {!isCustomOrdered && sortedFiltered.length > 0 && !search && (
-          <p className="text-xs text-orbital-subtle mb-4 flex items-center gap-1.5 opacity-50">
-            <GripVertical size={12} /> Drag to reorder &nbsp;·&nbsp; <Palette size={12} /> Hover card to customise
+        {/* Drag hint */}
+        {!search && sortedFiltered.length > 0 && (
+          <p className="font-telemetry text-[8px] tracking-[0.1em] mb-4 flex items-center gap-1.5 opacity-50" style={{ color: '#5a7a92' }}>
+            <GripVertical size={11} />
+            {isCustomOrdered
+              ? 'CUSTOM ORDER ACTIVE · DRAG TO ADJUST'
+              : 'DRAG TO REORDER · HOVER TO CUSTOMISE'}
           </p>
         )}
 
-        {/* Productions grid */}
+        {/* ── Grid ── */}
         {sortedFiltered.length === 0 ? (
           <EmptyState
             icon={Film}
@@ -204,7 +224,7 @@ export function ProductionsPage() {
             )}
           />
         ) : (
-          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {sortedFiltered.map(prod => (
               <ProductionCard
                 key={prod.id}
@@ -229,7 +249,7 @@ export function ProductionsPage() {
   )
 }
 
-// ─── Color Picker ─────────────────────────────────────────────────────────────
+// ── Color picker ──────────────────────────────────────────────────────────────
 function ColorPicker({ currentColor, onSelect, onClose }) {
   useEffect(() => {
     const handler = () => onClose()
@@ -239,24 +259,31 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
 
   return (
     <div
-      className="absolute top-full left-0 mt-1 z-50 bg-orbital-surface border border-orbital-border rounded-xl p-3 shadow-2xl"
+      className="absolute top-full left-0 mt-1 z-50 p-3 shadow-2xl"
+      style={{
+        background: '#080f18',
+        border: '1px solid #1e3248',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      }}
       onClick={e => e.stopPropagation()}
     >
-      <p className="text-xs text-orbital-subtle mb-2 font-medium">Card colour</p>
+      <p className="font-telemetry text-[8px] tracking-[0.15em] mb-2" style={{ color: '#5a7a92' }}>
+        CARD COLOUR
+      </p>
       <div className="grid grid-cols-5 gap-1.5">
         {CARD_COLORS.map(({ label, value }) => (
           <button
             key={label}
             title={label}
             onClick={() => { onSelect(value); onClose() }}
-            className={clsx(
-              'w-7 h-7 rounded-lg flex items-center justify-center transition-transform hover:scale-110 active:scale-95',
-              !value && 'bg-orbital-muted border border-orbital-border'
-            )}
-            style={value ? { backgroundColor: value + '33', border: `1.5px solid ${value}` } : {}}
+            className="w-7 h-7 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+            style={value
+              ? { backgroundColor: `${value}25`, border: `1px solid ${value}80` }
+              : { background: '#0f1e2e', border: '1px solid #1e3248' }
+            }
           >
             {currentColor === value && (
-              <Check size={12} style={{ color: value || '#8b92a4' }} />
+              <Check size={11} style={{ color: value || '#7090a8' }} />
             )}
           </button>
         ))}
@@ -265,7 +292,7 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
   )
 }
 
-// ─── Production Card ──────────────────────────────────────────────────────────
+// ── Production card — instrument panel layout ─────────────────────────────────
 function ProductionCard({
   production: prod,
   onClick,
@@ -279,25 +306,17 @@ function ProductionCard({
   const { tasks, getContractor, currentUser, updateProduction } = useApp()
   const [pickerOpen, setPickerOpen] = useState(false)
 
-  const prodTasks     = tasks.filter(t => t.productionId === prod.id)
-  const completedTasks= prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
-  const memberIds     = prod.assignedMembers.map(m => m.userId)
-  const stageManager  = prod.stageManagerId ? getContractor(prod.stageManagerId) : null
-  const health        = computeRoadmapHealth(prod.roadmap)
-  const canCustomize  = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
-  const accent        = prod.cardColor || null
+  const prodTasks      = tasks.filter(t => t.productionId === prod.id)
+  const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
+  const memberIds      = prod.assignedMembers.map(m => m.userId)
+  const stageManager   = prod.stageManagerId ? getContractor(prod.stageManagerId) : null
+  const health         = computeRoadmapHealth(prod.roadmap)
+  const canCustomize   = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
-  const typeColor = {
-    'LED Volume':   'text-purple-400',
-    'Mobile Build': 'text-cyan-400',
-    'Other':        'text-orbital-subtle',
-  }[prod.productionType] || 'text-orbital-subtle'
-
-  // Card dynamic styles driven by accent colour
-  const cardStyle = accent ? {
-    borderColor: `${accent}50`,
-    background: `linear-gradient(145deg, ${accent}12 0%, transparent 55%)`,
-  } : {}
+  const accent      = prod.cardColor || null
+  const statusColor = accent || STATUS_COLOR[prod.status] || '#475569'
+  const typeColor   = TYPE_COLOR[prod.productionType] || '#7090a8'
+  const pct         = prodTasks.length > 0 ? (completedTasks / prodTasks.length) * 100 : 0
 
   return (
     <div
@@ -313,54 +332,48 @@ function ProductionCard({
       className={clsx(
         'relative group transition-all duration-150',
         isDragging  && 'opacity-40 scale-[0.97]',
-        isDragOver  && !isDragging && 'scale-[1.02]'
+        isDragOver  && !isDragging && 'scale-[1.01]'
       )}
     >
-      {/* Drop target ring */}
+      {/* Drop indicator */}
       {isDragOver && !isDragging && (
-        <div className="absolute inset-0 rounded-xl ring-2 ring-blue-500 ring-offset-2 ring-offset-orbital-bg pointer-events-none z-10" />
+        <div className="absolute inset-0 pointer-events-none z-10"
+          style={{ outline: '2px solid rgba(14,165,233,0.6)', outlineOffset: 2 }} />
       )}
 
-      {/* Accent bar across the top */}
-      {accent && (
+      {/* Hover controls */}
+      <div className="absolute top-2 left-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <div
-          className="absolute top-0 left-0 right-0 h-[3px] rounded-t-xl z-10 pointer-events-none"
-          style={{ backgroundColor: accent }}
-        />
-      )}
-
-      {/* Controls overlay — visible on hover */}
-      <div className="absolute top-2.5 left-2.5 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {/* Drag grip */}
-        <div
-          className="p-1 rounded-md bg-orbital-surface/90 backdrop-blur border border-orbital-border text-orbital-subtle hover:text-orbital-text cursor-grab active:cursor-grabbing"
+          className="p-1 cursor-grab active:cursor-grabbing"
+          style={{
+            background: 'rgba(8,15,24,0.9)',
+            border: '1px solid #1e3248',
+            color: '#7090a8',
+          }}
           title="Drag to reorder"
         >
-          <GripVertical size={13} />
+          <GripVertical size={12} />
         </div>
-
-        {/* Colour picker trigger */}
         {canCustomize && (
           <div className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setPickerOpen(o => !o) }}
-              className={clsx(
-                'p-1 rounded-md bg-orbital-surface/90 backdrop-blur border border-orbital-border transition-colors',
-                pickerOpen
-                  ? 'text-orbital-text border-orbital-muted'
-                  : 'text-orbital-subtle hover:text-orbital-text'
-              )}
+              className="p-1 transition-colors"
+              style={{
+                background: 'rgba(8,15,24,0.9)',
+                border: `1px solid ${pickerOpen ? '#274660' : '#1e3248'}`,
+                color: pickerOpen ? '#d4e2f0' : '#7090a8',
+              }}
               title="Customise card colour"
             >
-              <Palette size={13} />
+              <Palette size={12} />
               {accent && (
                 <span
-                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-orbital-surface"
-                  style={{ backgroundColor: accent }}
+                  className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full"
+                  style={{ backgroundColor: accent, border: '1px solid #060e1a' }}
                 />
               )}
             </button>
-
             {pickerOpen && (
               <ColorPicker
                 currentColor={accent}
@@ -372,82 +385,117 @@ function ProductionCard({
         )}
       </div>
 
-      {/* Main card — button keeps full click-to-navigate behaviour */}
+      {/* Card */}
       <button
         onClick={onClick}
-        className="card p-5 text-left w-full hover:border-orbital-muted transition-all active:scale-[0.98] group/inner overflow-visible"
-        style={cardStyle}
+        className="card text-left w-full transition-all active:scale-[0.98] overflow-hidden"
+        style={{
+          borderLeft: `2px solid ${statusColor}`,
+          ...(accent ? {
+            borderColor: `${accent}45`,
+            background: `linear-gradient(150deg, ${accent}07 0%, transparent 45%)`,
+          } : {}),
+        }}
       >
-        {/* Header row */}
-        <div className="flex items-start justify-between gap-2 mb-3 mt-1">
-          <div className="flex-1 min-w-0">
-            <h3
-              className="font-semibold truncate group-hover/inner:text-white transition-colors"
-              style={{ color: accent || undefined }}
-            >
-              {prod.name}
-            </h3>
-            <p className="text-xs text-orbital-subtle mt-0.5 truncate">{prod.client}</p>
-          </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+
+        {/* ── System header: type + status + health ── */}
+        <div
+          className="px-4 pt-3 pb-2.5 flex items-center justify-between gap-2"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.045)' }}
+        >
+          <span
+            className="font-telemetry text-[8px] tracking-[0.15em] flex items-center gap-1.5"
+            style={{ color: typeColor }}
+          >
+            <Film size={9} />
+            {(prod.productionType || 'OTHER').toUpperCase().replace(' ', '-')}
+          </span>
+
+          <div className="flex items-center gap-1.5">
             {health !== 'On Track' && HEALTH_CONFIG[health] && (
-              <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${HEALTH_CONFIG[health].pill}`}>
-                {HEALTH_CONFIG[health].dot} {health}
+              <span
+                className="font-telemetry text-[8px] tracking-[0.1em]"
+                style={{
+                  color: '#f97316',
+                  border: '1px solid rgba(249,115,22,0.35)',
+                  padding: '1px 5px',
+                }}
+              >
+                {health.toUpperCase()}
               </span>
             )}
             <StatusBadge status={prod.status} />
           </div>
         </div>
 
-        {/* Meta rows */}
-        <div className="space-y-1.5 mb-4">
-          <div className="flex items-center gap-1.5 text-xs">
-            <Film size={12} className={typeColor} />
-            <span className={typeColor}>{prod.productionType}</span>
-          </div>
+        {/* ── Identity ── */}
+        <div className="px-4 py-3">
+          <h3
+            className="font-semibold text-sm leading-tight transition-colors"
+            style={{ color: accent || '#d4e2f0' }}
+          >
+            {prod.name}
+          </h3>
+          <p className="font-telemetry text-[8px] tracking-[0.1em] mt-1" style={{ color: '#5a7a92' }}>
+            {(prod.client || '').toUpperCase()}
+          </p>
+        </div>
+
+        {/* ── Telemetry data rows ── */}
+        <div
+          className="px-4 pb-3 space-y-1.5"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.045)' }}
+        >
           {stageManager && (
-            <div className="flex items-center gap-1.5 text-xs text-orbital-subtle">
-              <span style={{ color: accent || '#60a5fa' }} className="font-medium">SM:</span>
-              <span>{stageManager.name}</span>
+            <div className="flex items-center gap-2 pt-2">
+              <span className="font-telemetry text-[8px] tracking-[0.1em] w-7 flex-shrink-0" style={{ color: '#4d6a82' }}>SM</span>
+              <span className="text-[11px]" style={{ color: '#94afc8' }}>{stageManager.name}</span>
             </div>
           )}
-          <div className="flex items-center gap-1.5 text-xs text-orbital-subtle">
-            <MapPin size={12} />
-            <span className="truncate">
+          <div className={clsx('flex items-center gap-2', !stageManager && 'pt-2')}>
+            <MapPin size={9} className="flex-shrink-0" style={{ color: '#4d6a82' }} />
+            <span className="text-[11px] truncate" style={{ color: '#7090a8' }}>
               {prod.locationType === 'In-House (Orbital Studios)'
                 ? 'Orbital Studios'
                 : prod.locationAddress || 'Mobile'}
             </span>
           </div>
           {prod.startDate && (
-            <div className="flex items-center gap-1.5 text-xs text-orbital-subtle">
-              <Calendar size={12} />
-              <span>
-                {format(parseISO(prod.startDate), 'MMM d')}
-                {prod.endDate && ` – ${format(parseISO(prod.endDate), 'MMM d')}`}
+            <div className="flex items-center gap-2">
+              <Calendar size={9} className="flex-shrink-0" style={{ color: '#4d6a82' }} />
+              <span className="font-telemetry text-[9px] tracking-[0.07em]" style={{ color: '#7090a8' }}>
+                {format(parseISO(prod.startDate), 'MMM d').toUpperCase()}
+                {prod.endDate && ` → ${format(parseISO(prod.endDate), 'MMM d').toUpperCase()}`}
               </span>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between">
+        {/* ── Footer: avatars + task gauge ── */}
+        <div
+          className="px-4 py-2.5 flex items-center justify-between"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.045)' }}
+        >
           <AvatarGroup userIds={memberIds} size="sm" />
           {prodTasks.length > 0 && (
-            <div className="text-right">
-              <p className="text-xs text-orbital-subtle">{completedTasks}/{prodTasks.length} tasks</p>
-              <div className="w-20 h-1 bg-orbital-muted rounded-full mt-1 overflow-hidden">
+            <div className="flex items-center gap-2">
+              <div className="w-16 h-0.5 bg-orbital-muted overflow-hidden">
                 <div
-                  className="h-1 rounded-full transition-all"
+                  className="h-full transition-all duration-500"
                   style={{
-                    width: `${(completedTasks / prodTasks.length) * 100}%`,
-                    backgroundColor: accent || '#3b82f6',
+                    width: `${pct}%`,
+                    background: `linear-gradient(90deg, ${statusColor}, ${statusColor}99)`,
+                    boxShadow: `0 0 4px ${statusColor}60`,
                   }}
                 />
               </div>
+              <span className="font-telemetry text-[8px]" style={{ color: '#4d6a82' }}>
+                {completedTasks}/{prodTasks.length}
+              </span>
             </div>
           )}
         </div>
+
       </button>
     </div>
   )

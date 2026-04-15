@@ -37,55 +37,65 @@ export function UpcomingMilestones() {
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold text-orbital-text flex items-center gap-2">
-          <Calendar size={16} className="text-orbital-subtle" />
-          Upcoming This Week
-        </h2>
-        <span className="text-xs text-orbital-subtle">{upcoming.length} milestone{upcoming.length !== 1 ? 's' : ''}</span>
+      {/* Instrument panel section header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-0.5 h-3.5 flex-shrink-0" style={{ background: 'rgba(14,165,233,0.65)' }} />
+          <span className="font-telemetry text-[9px] tracking-[0.2em]" style={{ color: '#7090a8' }}>
+            UPCOMING MILESTONES
+          </span>
+          <div className="h-px w-10"
+            style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.07), transparent)' }} />
+        </div>
+        <span className="font-telemetry text-[8px] tracking-[0.1em]" style={{ color: '#4d6a82' }}>
+          {upcoming.length} {upcoming.length !== 1 ? 'ITEMS' : 'ITEM'} · 7 DAY HORIZON
+        </span>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {upcoming.slice(0, 7).map(m => {
           const d       = parseISO(m.date)
           const typeCfg = MILESTONE_TYPE_CONFIG[m.type] || MILESTONE_TYPE_CONFIG['Pre-Production']
           const owner   = m.ownerId ? resolveAssignee(m.ownerId) : null
 
           const dateLabel = isToday(d)
-            ? 'Today'
+            ? 'TODAY'
             : isTomorrow(d)
-            ? 'Tomorrow'
-            : format(d, 'EEE MMM d')
+            ? 'TOMORROW'
+            : format(d, 'EEE MMM d').toUpperCase()
 
           return (
             <div
               key={`${m.productionId}-${m.id}`}
               onClick={() => navigate(`/productions/${m.productionId}?tab=Roadmap`)}
-              className="card p-3.5 cursor-pointer hover:border-orbital-muted transition-colors active:scale-[0.99]"
+              className="card p-3 cursor-pointer transition-all active:scale-[0.99]"
+              style={{ borderLeft: `2px solid ${typeCfg.color}` }}
             >
               <div className="flex items-center gap-3">
-                {/* Color indicator */}
-                <div
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: typeCfg.color }}
-                />
+                {/* Type dot */}
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: typeCfg.color, boxShadow: `0 0 4px ${typeCfg.color}` }} />
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-orbital-text truncate">{m.title}</p>
-                  <p className="text-xs text-orbital-subtle truncate">{m.productionName}</p>
+                  <p className="font-telemetry text-[8px] tracking-[0.08em] mt-0.5" style={{ color: '#5a7a92' }}>
+                    {m.productionName?.toUpperCase()}
+                  </p>
                 </div>
 
-                {/* Right side */}
+                {/* Date + owner */}
                 <div className="text-right flex-shrink-0">
                   <p className={clsx(
-                    'text-xs font-medium',
+                    'font-telemetry text-[9px] tracking-[0.08em]',
                     isToday(d) ? 'text-amber-400' : 'text-orbital-subtle'
                   )}>
                     {dateLabel}
                   </p>
                   {owner && (
-                    <p className="text-xs text-orbital-subtle">{owner.name}</p>
+                    <p className="font-telemetry text-[8px] tracking-[0.06em] mt-0.5" style={{ color: '#4d6a82' }}>
+                      {owner.name?.toUpperCase()}
+                    </p>
                   )}
                 </div>
               </div>
