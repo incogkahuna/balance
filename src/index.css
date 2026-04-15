@@ -2,66 +2,291 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Google Font import (fallback if HTML link misses) ─────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BASE
+   ══════════════════════════════════════════════════════════════════════════════ */
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
 
-  html {
-    -webkit-tap-highlight-color: transparent;
-  }
+  html { -webkit-tap-highlight-color: transparent; }
 
+  /* Therapeutic deep-space background ───────────────────────────────────────
+     Three slow-drifting radial glow sources, like looking at a nebula through
+     a viewport. Barely visible — felt more than seen.                        */
   body {
     @apply bg-orbital-bg text-orbital-text font-sans antialiased;
     min-height: 100dvh;
+    position: relative;
+    overflow-x: hidden;
   }
 
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 140% 70% at 50% -5%,  rgba(14, 165, 233, 0.055) 0%, transparent 60%),
+      radial-gradient(ellipse 70%  70% at  5%  85%,  rgba(6,  182, 212, 0.04)  0%, transparent 55%),
+      radial-gradient(ellipse 90%  60% at 95%  60%,  rgba(30,  64, 175, 0.05)  0%, transparent 55%),
+      radial-gradient(ellipse 50%  40% at 50% 110%,  rgba(14, 165, 233, 0.03)  0%, transparent 50%);
+    animation: ambient 30s ease-in-out infinite;
   }
-  ::-webkit-scrollbar-track {
-    @apply bg-orbital-bg;
-  }
+
+  /* Ensure content sits above the background glow */
+  #root { position: relative; z-index: 1; }
+
+  /* ── Scrollbar — thin chrome ─────────────────────────────────────────────── */
+  ::-webkit-scrollbar       { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    @apply bg-orbital-muted rounded-full;
+    background: rgba(26, 48, 80, 0.8);
+    border-radius: 0;
   }
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-orbital-subtle;
-  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(14, 165, 233, 0.4); }
+
+  /* ── Selection ───────────────────────────────────────────────────────────── */
+  ::selection { background: rgba(14, 165, 233, 0.25); color: #cdd8e8; }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   COMPONENTS
+   ══════════════════════════════════════════════════════════════════════════════ */
 @layer components {
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95;
-  }
-  .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-orbital-muted hover:bg-orbital-border text-orbital-text font-medium text-sm transition-colors active:scale-95;
-  }
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg hover:bg-orbital-surface text-orbital-subtle hover:text-orbital-text font-medium text-sm transition-colors active:scale-95;
-  }
-  .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium text-sm transition-colors active:scale-95;
+
+  /* ── Card / Panel ────────────────────────────────────────────────────────── */
+  /* Chrome instrument-panel look: dark base, subtle top highlight, hard edge  */
+  .card {
+    @apply relative bg-orbital-surface border border-orbital-border;
+    background: linear-gradient(180deg,
+      rgba(255,255,255,0.025) 0%,
+      transparent 60%),
+      #060e1a;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.055),
+      0 2px 16px rgba(0, 0, 0, 0.55);
   }
 
+  /* Elevated card — for modals / sheets */
+  .card-elevated {
+    @apply relative bg-orbital-panel border border-orbital-chrome;
+    background: linear-gradient(180deg,
+      rgba(255,255,255,0.04) 0%,
+      transparent 50%),
+      #091624;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 8px 40px rgba(0, 0, 0, 0.7);
+  }
+
+  /* Corner accent decoration — adds L-shaped chrome corners to any element   */
+  /* Usage: <div class="chrome-corners"> …                                     */
+  .chrome-corners {
+    @apply relative;
+  }
+  .chrome-corners::before,
+  .chrome-corners::after {
+    content: '';
+    position: absolute;
+    width: 10px; height: 10px;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .chrome-corners::before {
+    top: 0; left: 0;
+    border-top:  1px solid rgba(14, 165, 233, 0.5);
+    border-left: 1px solid rgba(14, 165, 233, 0.5);
+  }
+  .chrome-corners::after {
+    bottom: 0; right: 0;
+    border-bottom: 1px solid rgba(14, 165, 233, 0.3);
+    border-right:  1px solid rgba(14, 165, 233, 0.3);
+  }
+
+  /* ── Buttons ─────────────────────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-sm transition-all
+           disabled:opacity-40 disabled:cursor-not-allowed;
+    background: linear-gradient(180deg, #1d8ce0 0%, #1470b8 100%);
+    border: 1px solid rgba(14, 165, 233, 0.6);
+    color: #e8f4ff;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      0 0 0 1px rgba(14,165,233,0.15),
+      0 2px 8px rgba(0,0,0,0.4);
+    letter-spacing: 0.02em;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #2596e8 0%, #1d7ed0 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.15),
+      0 0 0 1px rgba(14,165,233,0.3),
+      0 0 16px rgba(14,165,233,0.2),
+      0 2px 8px rgba(0,0,0,0.4);
+  }
+  .btn-primary:active:not(:disabled) { transform: scale(0.98); }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-sm
+           text-orbital-text transition-all;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%), #0c1825;
+    border: 1px solid #1a3050;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .btn-secondary:hover { border-color: #243d58; background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%), #0f1e2e; }
+  .btn-secondary:active { transform: scale(0.98); }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 font-medium text-sm
+           text-orbital-subtle hover:text-orbital-text transition-all;
+    border: 1px solid transparent;
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.03); border-color: #112235; }
+  .btn-ghost:active { transform: scale(0.98); }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-sm transition-all;
+    background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
+    border: 1px solid rgba(239,68,68,0.5);
+    color: #fff5f5;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .btn-danger:hover { background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); }
+  .btn-danger:active { transform: scale(0.98); }
+
+  /* ── Inputs ──────────────────────────────────────────────────────────────── */
   .input {
-    @apply w-full px-3 py-2.5 rounded-lg bg-orbital-surface border border-orbital-border text-orbital-text placeholder-orbital-subtle text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all;
+    @apply w-full px-3 py-2.5 text-orbital-text placeholder-orbital-subtle text-sm
+           transition-all;
+    background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%), #040b14;
+    border: 1px solid #112235;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), inset 0 1px 0 rgba(0,0,0,0.2);
+    outline: none;
+  }
+  .input:focus {
+    border-color: rgba(14, 165, 233, 0.55);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,0.35),
+      0 0 0 2px rgba(14,165,233,0.1),
+      0 0 12px rgba(14,165,233,0.08);
   }
 
   .select {
-    @apply w-full px-3 py-2.5 rounded-lg bg-orbital-surface border border-orbital-border text-orbital-text text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none;
+    @apply w-full px-3 py-2.5 text-orbital-text text-sm transition-all appearance-none;
+    background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%), #040b14;
+    border: 1px solid #112235;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35);
+    outline: none;
+  }
+  .select:focus {
+    border-color: rgba(14, 165, 233, 0.55);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), 0 0 0 2px rgba(14,165,233,0.1);
   }
 
+  /* ── Labels ──────────────────────────────────────────────────────────────── */
   .label {
-    @apply block text-xs font-medium text-orbital-subtle uppercase tracking-wider mb-1.5;
+    @apply block text-xs font-medium uppercase tracking-widest mb-1.5;
+    font-family: 'Space Mono', monospace;
+    color: #3f5a75;
+    letter-spacing: 0.12em;
   }
 
-  .card {
-    @apply bg-orbital-surface border border-orbital-border rounded-xl;
-  }
-
+  /* ── Section title ───────────────────────────────────────────────────────── */
   .section-title {
-    @apply text-xs font-semibold text-orbital-subtle uppercase tracking-widest;
+    @apply text-xs font-semibold uppercase tracking-widest;
+    font-family: 'Space Mono', monospace;
+    color: #3f5a75;
+    letter-spacing: 0.15em;
   }
+
+  /* ── HUD label — monospace telemetry style ───────────────────────────────── */
+  .hud-label {
+    font-family: 'Space Mono', monospace;
+    @apply text-[10px] uppercase tracking-widest text-orbital-subtle;
+    letter-spacing: 0.18em;
+  }
+
+  /* ── Status indicator dot ────────────────────────────────────────────────── */
+  .status-dot {
+    @apply inline-block w-1.5 h-1.5;
+    animation: indicator-pulse 2.5s ease-in-out infinite;
+  }
+
+  /* ── Scan line overlay — applied to sidebar ──────────────────────────────── */
+  .scan-overlay {
+    @apply pointer-events-none;
+    position: relative;
+    overflow: hidden;
+  }
+  .scan-overlay::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(14,165,233,0.15) 50%, transparent 100%);
+    animation: scan-line 12s linear infinite;
+    z-index: 10;
+  }
+
+  /* ── Chrome divider ──────────────────────────────────────────────────────── */
+  .chrome-divider {
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255,255,255,0.06) 20%,
+      rgba(255,255,255,0.06) 80%,
+      transparent 100%);
+  }
+
+  /* ── Modal ───────────────────────────────────────────────────────────────── */
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4;
+    background: rgba(2, 5, 10, 0.85);
+    backdrop-filter: blur(6px);
+  }
+  .modal-panel {
+    @apply card-elevated w-full sm:max-w-lg max-h-[90dvh] overflow-y-auto animate-hud-in;
+  }
+
+  /* ── Progress bar ────────────────────────────────────────────────────────── */
+  .progress-track {
+    @apply w-full h-0.5 bg-orbital-border overflow-hidden;
+  }
+  .progress-fill {
+    @apply h-full transition-all duration-500;
+    background: linear-gradient(90deg, #0ea5e9 0%, #38bdf8 100%);
+    box-shadow: 0 0 6px rgba(14,165,233,0.5);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   UTILITIES — extra helpers not covered by Tailwind
+   ══════════════════════════════════════════════════════════════════════════════ */
+@layer utilities {
+
+  /* Metallic top highlight — add to any panel for the chrome sheen */
+  .chrome-top {
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+
+  /* Active/selected state for panels */
+  .panel-active {
+    border-color: rgba(14, 165, 233, 0.4) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.07),
+      0 0 0 1px rgba(14,165,233,0.15),
+      0 0 16px rgba(14,165,233,0.08);
+  }
+
+  /* Glow text colors for live indicators */
+  .text-glow-green { text-shadow: 0 0 8px rgba(34, 197, 94, 0.6);  }
+  .text-glow-blue  { text-shadow: 0 0 8px rgba(14, 165, 233, 0.6); }
+  .text-glow-red   { text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);  }
+
+  /* Font mono shorthand */
+  .font-telemetry { font-family: 'Space Mono', monospace; }
 }
