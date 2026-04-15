@@ -42,6 +42,51 @@ export const TASK_STATUS = {
   BLOCKED:      'Blocked',
 }
 
+// ─── Roadmap ──────────────────────────────────────────────────────────────────
+export const MILESTONE_TYPE = {
+  PRE_PRODUCTION: 'Pre-Production',
+  LOGISTICS:      'Logistics',
+  SHOOT_DAY:      'Shoot Day',
+  TECHNICAL:      'Technical',
+  CLIENT:         'Client',
+  FINANCIAL:      'Financial',
+  WRAP:           'Wrap',
+}
+
+export const MILESTONE_STATUS = {
+  UPCOMING:    'Upcoming',
+  IN_PROGRESS: 'In Progress',
+  COMPLETE:    'Complete',
+  AT_RISK:     'At Risk',
+}
+
+export const CONCERN_CATEGORY = {
+  TRANSPORT: 'Transport & Shipping',
+  POWER:     'Power & Infrastructure',
+  VENUE:     'Venue & Space',
+  EQUIPMENT: 'Equipment',
+  CREW:      'Crew & Scheduling',
+  TECHNICAL: 'Technical',
+  CLIENT:    'Client Requirements',
+  PERMITS:   'Permits & Compliance',
+  WEATHER:   'Weather & Environment',
+  OTHER:     'Other',
+}
+
+export const CONCERN_IMPACT = {
+  LOW:      'Low',
+  MEDIUM:   'Medium',
+  HIGH:     'High',
+  CRITICAL: 'Critical',
+}
+
+export const CONCERN_STATUS = {
+  OPEN:        'Open',
+  IN_PROGRESS: 'In Progress',
+  RESOLVED:    'Resolved',
+  ACCEPTED:    'Accepted Risk',
+}
+
 export const AVAILABILITY_STATUS = {
   AVAILABLE:   'Available',
   BUSY:        'Busy',
@@ -82,8 +127,10 @@ export function createProduction(overrides = {}) {
     status: PRODUCTION_STATUS.INCOMING,
     startDate: '',
     endDate: '',
-    assignedMembers: [],   // [{ userId, roleOnProduction }]
-    tasks: [],             // task IDs
+    stageManagerId: null,      // contractorId of stage manager (first-class field)
+    assignedMembers: [],       // [{ userId, roleOnProduction }] — Orbital staff
+    assignedContractors: [],   // [{ contractorId, role, assignedAt, assignedBy }]
+    tasks: [],                 // task IDs
     addons: [],            // addon records
     feedback: null,        // feedback record
     instructionPackage: {
@@ -100,8 +147,49 @@ export function createProduction(overrides = {}) {
       concerns:       [],  // [{ id, title, description, severity, status, resolutionNote, createdAt }]
       frictionAndFlow: [], // [{ id, personName, personRole, company, factorType, notes }]
     },
+    // Roadmap — milestones + logistical concerns
+    roadmap: {
+      milestones:          [],
+      logisticalConcerns:  [],
+    },
     createdBy: '',
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+export function createMilestone(overrides = {}) {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    date: '',                           // datetime-local string e.g. "2024-06-12T09:00"
+    type: MILESTONE_TYPE.PRE_PRODUCTION,
+    description: '',
+    ownerId: '',                        // userId or contractorId
+    status: MILESTONE_STATUS.UPCOMING,
+    dependencies: [],                   // array of milestone IDs
+    createdAt: new Date().toISOString(),
+    createdBy: '',
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+export function createLogisticalConcern(overrides = {}) {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    category: CONCERN_CATEGORY.OTHER,
+    description: '',
+    impactLevel: CONCERN_IMPACT.MEDIUM,
+    actionRequired: '',
+    ownerId: '',
+    dueDate: '',
+    status: CONCERN_STATUS.OPEN,
+    resolutionNotes: '',
+    createdAt: new Date().toISOString(),
+    createdBy: '',
     updatedAt: new Date().toISOString(),
     ...overrides,
   }

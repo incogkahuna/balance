@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS, USERS } from '../data/models.js'
+import { computeRoadmapHealth, ROADMAP_HEALTH } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
@@ -19,11 +20,14 @@ import { AddonForm } from '../components/addons/AddonForm.jsx'
 import { FeedbackForm } from '../components/feedback/FeedbackForm.jsx'
 import { InstructionPackage } from '../components/instructions/InstructionPackage.jsx'
 import { ProductionBible } from '../features/productionBible/ProductionBible.jsx'
+import { TeamAssignment } from '../features/productions/team/TeamAssignment.jsx'
+import { RoadmapTab } from '../features/productions/roadmap/RoadmapTab.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
 import clsx from 'clsx'
 
 // Bible tab is conditionally appended for Admin/Supervisor — built below
-const BASE_TABS = ['Overview', 'Tasks', 'Package', 'Add-ons', 'Debrief']
+// Roadmap is visible to all roles (Crew sees read-only)
+const BASE_TABS = ['Overview', 'Roadmap', 'Team', 'Tasks', 'Package', 'Add-ons', 'Debrief']
 
 export function ProductionDetailPage() {
   const { id } = useParams()
@@ -66,6 +70,7 @@ export function ProductionDetailPage() {
 
   const pendingTasks = tasks.filter(t => t.status !== TASK_STATUS.VERIFIED)
   const completedTasks = tasks.filter(t => t.status === TASK_STATUS.VERIFIED)
+  const roadmapHealth = computeRoadmapHealth(production.roadmap)
 
   return (
     <div>
@@ -129,15 +134,45 @@ export function ProductionDetailPage() {
             )}
           </div>
 
-          {/* Team */}
-          {production.assignedMembers.length > 0 && (
+          {/* Team summary — Stage Manager prominent, then staff chips */}
+          {(production.stageManagerId || production.assignedMembers.length > 0 || (production.assignedContractors || []).length > 0) && (
             <div className="mt-4 pt-4 border-t border-orbital-border">
-              <p className="section-title mb-2.5">Team</p>
+              <div className="flex items-center justify-between mb-2.5">
+                <p className="section-title">Team</p>
+                <button
+                  onClick={() => setTab('Team')}
+                  className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  Manage →
+                </button>
+              </div>
+
+              {/* Stage Manager — shown first if assigned */}
+              {production.stageManagerId && (() => {
+                const sm = resolveAssignee(production.stageManagerId)
+                if (!sm) return null
+                return (
+                  <div className="flex items-center gap-2 mb-2 px-2.5 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/25">
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden flex-shrink-0"
+                      style={!sm.photoUrl ? { backgroundColor: sm.color || '#64748b' } : {}}
+                    >
+                      {sm.photoUrl
+                        ? <img src={sm.photoUrl} alt={sm.name} className="w-full h-full object-cover" />
+                        : (sm.avatar || sm.name?.charAt(0).toUpperCase())
+                      }
+                    </div>
+                    <span className="text-xs font-medium text-orbital-text">{sm.name}</span>
+                    <span className="text-xs text-blue-400 font-medium">Stage Manager</span>
+                  </div>
+                )
+              })()}
+
+              {/* Remaining staff chips */}
               <div className="flex flex-wrap gap-2">
                 {production.assignedMembers.map(({ userId, roleOnProduction }) => {
                   const person = resolveAssignee(userId)
                   if (!person) return null
-                  const isContractor = person.type === 'contractor'
                   return (
                     <div
                       key={userId}
@@ -153,12 +188,31 @@ export function ProductionDetailPage() {
                         }
                       </div>
                       <span className="text-xs font-medium text-orbital-text">{person.name}</span>
-                      {isContractor && (
-                        <span className="text-xs text-orbital-subtle border border-orbital-border rounded px-1">contractor</span>
-                      )}
                       {roleOnProduction && (
                         <span className="text-xs text-orbital-subtle">{roleOnProduction}</span>
                       )}
+                    </div>
+                  )
+                })}
+                {(production.assignedContractors || []).map(({ contractorId, role }) => {
+                  const person = resolveAssignee(contractorId)
+                  if (!person) return null
+                  return (
+                    <div
+                      key={contractorId}
+                      className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-orbital-muted border border-orbital-border"
+                    >
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden"
+                        style={!person.photoUrl ? { backgroundColor: person.color || '#64748b' } : {}}
+                      >
+                        {person.photoUrl
+                          ? <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
+                          : (person.avatar || person.name?.charAt(0).toUpperCase())
+                        }
+                      </div>
+                      <span className="text-xs font-medium text-orbital-text">{person.name}</span>
+                      {role && <span className="text-xs text-orbital-subtle">{role}</span>}
                     </div>
                   )
                 })}
@@ -181,6 +235,11 @@ export function ProductionDetailPage() {
               )}
             >
               {t}
+              {t === 'Roadmap' && roadmapHealth !== ROADMAP_HEALTH.ON_TRACK && (
+                <span className={`ml-1.5 w-1.5 h-1.5 rounded-full inline-block ${
+                  roadmapHealth === ROADMAP_HEALTH.AT_RISK ? 'bg-red-400' : 'bg-amber-400'
+                }`} />
+              )}
               {t === 'Tasks' && pendingTasks.length > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-orbital-muted text-orbital-subtle text-xs">
                   {pendingTasks.length}
@@ -198,6 +257,14 @@ export function ProductionDetailPage() {
         {/* Tab Content */}
         {tab === 'Overview' && (
           <OverviewTab production={production} tasks={tasks} />
+        )}
+
+        {tab === 'Roadmap' && (
+          <RoadmapTab production={production} />
+        )}
+
+        {tab === 'Team' && (
+          <TeamAssignment production={production} />
         )}
 
         {tab === 'Tasks' && (

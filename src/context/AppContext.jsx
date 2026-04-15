@@ -164,21 +164,66 @@ export function AppProvider({ children }) {
     return contractors.find(c => c.id === id) || null
   }, [contractors])
 
+  // ─── Contractor assignment to productions ─────────────────────────────────
+  const setStageManager = useCallback((productionId, contractorId) => {
+    setProductions(prev => prev.map(p =>
+      p.id === productionId
+        ? { ...p, stageManagerId: contractorId, updatedAt: new Date().toISOString() }
+        : p
+    ))
+  }, [setProductions])
+
+  const assignContractor = useCallback((productionId, assignment) => {
+    setProductions(prev => prev.map(p => {
+      if (p.id !== productionId) return p
+      const already = (p.assignedContractors || []).some(a => a.contractorId === assignment.contractorId)
+      if (already) return p
+      return {
+        ...p,
+        assignedContractors: [...(p.assignedContractors || []), assignment],
+        updatedAt: new Date().toISOString(),
+      }
+    }))
+  }, [setProductions])
+
+  const removeContractor = useCallback((productionId, contractorId) => {
+    setProductions(prev => prev.map(p => {
+      if (p.id !== productionId) return p
+      return {
+        ...p,
+        assignedContractors: (p.assignedContractors || []).filter(a => a.contractorId !== contractorId),
+        // If the removed contractor was the stage manager, clear that slot too
+        stageManagerId: p.stageManagerId === contractorId ? null : p.stageManagerId,
+        updatedAt: new Date().toISOString(),
+      }
+    }))
+  }, [setProductions])
+
   // Returns work history for a contractor by scanning all productions.
+  // Checks assignedContractors, stageManagerId, and legacy assignedMembers.
   // Derived at read-time — no duplication of data.
   const getContractorHistory = useCallback((contractorId) => {
     return productions
-      .filter(p => p.assignedMembers?.some(m => m.userId === contractorId))
+      .filter(p =>
+        p.stageManagerId === contractorId ||
+        p.assignedContractors?.some(a => a.contractorId === contractorId) ||
+        p.assignedMembers?.some(m => m.userId === contractorId)
+      )
       .map(p => {
-        const member = p.assignedMembers.find(m => m.userId === contractorId)
+        const isStageManager = p.stageManagerId === contractorId
+        const contractorAssignment = p.assignedContractors?.find(a => a.contractorId === contractorId)
+        const member = p.assignedMembers?.find(m => m.userId === contractorId)
         return {
           productionId: p.id,
           productionName: p.name,
           client: p.client,
-          roleOnProduction: member?.roleOnProduction || '',
+          roleOnProduction: isStageManager
+            ? 'Stage Manager'
+            : (contractorAssignment?.role || member?.roleOnProduction || ''),
           startDate: p.startDate,
           endDate: p.endDate,
           status: p.status,
+          isStageManager,
         }
       })
       .sort((a, b) => new Date(b.startDate || 0) - new Date(a.startDate || 0))
@@ -202,6 +247,60 @@ export function AppProvider({ children }) {
     }
     return null
   }, [contractors])
+
+  // ─── Roadmap CRUD ─────────────────────────────────────────────────────────
+  // All writes go through the production record's roadmap sub-object.
+  // Architected for Supabase migration — no localStorage logic in components.
+
+  const _updateRoadmap = useCallback((productionId, updater) => {
+    setProductions(prev => prev.map(p => {
+      if (p.id !== productionId) return p
+      const roadmap = p.roadmap || { milestones: [], logisticalConcerns: [] }
+      return { ...p, roadmap: updater(roadmap), updatedAt: new Date().toISOString() }
+    }))
+  }, [setProductions])
+
+  const addMilestone = useCallback((productionId, milestone) => {
+    _updateRoadmap(productionId, r => ({
+      ...r, milestones: [...(r.milestones || []), milestone],
+    }))
+  }, [_updateRoadmap])
+
+  const updateMilestone = useCallback((productionId, milestoneId, updates) => {
+    _updateRoadmap(productionId, r => ({
+      ...r,
+      milestones: (r.milestones || []).map(m =>
+        m.id === milestoneId ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m
+      ),
+    }))
+  }, [_updateRoadmap])
+
+  const deleteMilestone = useCallback((productionId, milestoneId) => {
+    _updateRoadmap(productionId, r => ({
+      ...r, milestones: (r.milestones || []).filter(m => m.id !== milestoneId),
+    }))
+  }, [_updateRoadmap])
+
+  const addConcern = useCallback((productionId, concern) => {
+    _updateRoadmap(productionId, r => ({
+      ...r, logisticalConcerns: [...(r.logisticalConcerns || []), concern],
+    }))
+  }, [_updateRoadmap])
+
+  const updateConcern = useCallback((productionId, concernId, updates) => {
+    _updateRoadmap(productionId, r => ({
+      ...r,
+      logisticalConcerns: (r.logisticalConcerns || []).map(c =>
+        c.id === concernId ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
+      ),
+    }))
+  }, [_updateRoadmap])
+
+  const deleteConcern = useCallback((productionId, concernId) => {
+    _updateRoadmap(productionId, r => ({
+      ...r, logisticalConcerns: (r.logisticalConcerns || []).filter(c => c.id !== concernId),
+    }))
+  }, [_updateRoadmap])
 
   // ─── Production Bible ──────────────────────────────────────────────────────
   // Single update method — replaces the whole bible object on a production.
@@ -275,6 +374,19 @@ export function AppProvider({ children }) {
     getContractor,
     getContractorHistory,
     resolveAssignee,
+
+    // Contractor assignment
+    setStageManager,
+    assignContractor,
+    removeContractor,
+
+    // Roadmap
+    addMilestone,
+    updateMilestone,
+    deleteMilestone,
+    addConcern,
+    updateConcern,
+    deleteConcern,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

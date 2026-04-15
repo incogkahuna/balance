@@ -6,6 +6,8 @@ import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { StatusBadge, TaskStatusBadge, PriorityBadge } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
+import { UpcomingMilestones } from '../features/productions/roadmap/UpcomingMilestones.jsx'
+import { TickerBanner } from '../components/ui/TickerBanner.jsx'
 
 function DueDateLabel({ date }) {
   if (!date) return null
@@ -61,6 +63,11 @@ export function DashboardPage() {
           <p className="text-orbital-subtle mt-1">
             {format(new Date(), 'EEEE, MMMM d, yyyy')}
           </p>
+        </div>
+
+        {/* Live task ticker — only renders when there are active tasks */}
+        <div className="-mx-4 lg:-mx-8 mb-8">
+          <TickerBanner />
         </div>
 
         {/* Stats row — each card is a shortcut into its respective filtered view */}
@@ -199,6 +206,11 @@ export function DashboardPage() {
                 })}
               </div>
             )}
+          </section>
+
+          {/* Upcoming milestones across all active productions */}
+          <section className="lg:col-span-2">
+            <UpcomingMilestones />
           </section>
 
           {/* Pending Verification (admin/sup) */}

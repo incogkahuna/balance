@@ -9,6 +9,7 @@ import {
 import { ChevronLeft, ChevronRight, Users, MapPin } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { USERS, PRODUCTION_STATUS } from '../data/models.js'
+import { MILESTONE_TYPE_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
 import clsx from 'clsx'
@@ -26,7 +27,7 @@ export function SchedulePage() {
   const [reference, setReference] = useState(new Date())
   const navigate = useNavigate()
 
-  const { productions } = useApp()
+  const { productions, contractors } = useApp()
 
   // Date range
   const range = useMemo(() => {
@@ -67,13 +68,74 @@ export function SchedulePage() {
     [productions, range]
   )
 
-  // Team rows: one row per user, bars = productions they're on
-  const teamRows = USERS.map(user => ({
-    user,
-    productions: visibleProductions.filter(p =>
-      p.assignedMembers.some(m => m.userId === user.id)
+  // Team rows: Orbital staff + contractors from assignedContractors + stageManagerId
+  const teamRows = useMemo(() => {
+    const rowMap = {}
+
+    // Orbital staff
+    USERS.forEach(user => {
+      const prods = visibleProductions.filter(p =>
+        p.assignedMembers.some(m => m.userId === user.id)
+      )
+      if (prods.length > 0) {
+        rowMap[`user-${user.id}`] = {
+          key:        `user-${user.id}`,
+          label:      user.name,
+          sublabel:   user.role,
+          color:      user.color,
+          avatar:     user.avatar,
+          photoUrl:   null,
+          productions: prods,
+          type: 'user',
+        }
+      }
+    })
+
+    // Contractors (stage managers + assigned contractors)
+    visibleProductions.forEach(p => {
+      const addContractorRow = (contractorId, sublabel) => {
+        const contractor = contractors.find(c => c.id === contractorId)
+        if (!contractor) return
+        const key = `contractor-${contractor.id}`
+        if (!rowMap[key]) {
+          rowMap[key] = {
+            key,
+            label:      contractor.name,
+            sublabel:   sublabel || contractor.primaryRole,
+            color:      '#64748b',
+            avatar:     contractor.name.charAt(0).toUpperCase(),
+            photoUrl:   contractor.photoUrl,
+            productions: [],
+            type: 'contractor',
+          }
+        }
+        if (!rowMap[key].productions.find(pp => pp.id === p.id)) {
+          rowMap[key].productions.push(p)
+        }
+      }
+
+      if (p.stageManagerId) {
+        addContractorRow(p.stageManagerId, 'Stage Manager')
+      }
+      ;(p.assignedContractors || []).forEach(a => {
+        addContractorRow(a.contractorId, a.role)
+      })
+    })
+
+    return Object.values(rowMap)
+  }, [visibleProductions, contractors])
+
+  // Milestones from all visible productions (for Gantt markers)
+  const allMilestones = useMemo(() =>
+    visibleProductions.flatMap(p =>
+      (p.roadmap?.milestones || []).map(m => ({
+        ...m,
+        productionId: p.id,
+        productionName: p.name,
+      }))
     ),
-  })).filter(row => row.productions.length > 0)
+    [visibleProductions]
+  )
 
   // Stage rows
   const stageMap = {}
@@ -166,6 +228,7 @@ export function SchedulePage() {
             mode={mode}
             today={today}
             range={range}
+            milestones={allMilestones}
             onClickProduction={(prodId) => navigate(`/productions/${prodId}`)}
           />
         </div>
@@ -184,7 +247,7 @@ export function SchedulePage() {
   )
 }
 
-function GanttChart({ days, rows, mode, today, range, onClickProduction }) {
+function GanttChart({ days, rows, mode, today, range, milestones = [], onClickProduction }) {
   const LABEL_WIDTH = 140
   const DAY_WIDTH = Math.max(28, Math.min(48, Math.floor((800 - LABEL_WIDTH) / days.length)))
 
@@ -232,14 +295,73 @@ function GanttChart({ days, rows, mode, today, range, onClickProduction }) {
           })}
         </div>
 
+        {/* Milestone markers row — shown when there are milestones in range */}
+        {milestones.length > 0 && (() => {
+          const inRange = milestones.filter(m => {
+            if (!m.date) return false
+            const d = parseISO(m.date)
+            return d >= range.start && d <= range.end
+          })
+          if (inRange.length === 0) return null
+          return (
+            <div className="flex relative border-b border-orbital-border bg-orbital-surface/50">
+              <div
+                style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
+                className="px-4 flex items-center flex-shrink-0 py-2"
+              >
+                <span className="text-xs text-orbital-subtle font-medium">Milestones</span>
+              </div>
+              <div className="flex flex-1 relative" style={{ height: 36 }}>
+                {days.map(day => {
+                  const isTodayDay = isSameDay(day, today)
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      style={{ width: DAY_WIDTH, minWidth: DAY_WIDTH }}
+                      className={clsx('flex-shrink-0 border-l border-orbital-border h-full', isTodayDay && 'bg-blue-600/8')}
+                    />
+                  )
+                })}
+                {inRange.map(m => {
+                  const d = parseISO(m.date)
+                  const offsetDays = differenceInDays(d, range.start)
+                  const left = offsetDays * DAY_WIDTH + DAY_WIDTH / 2
+                  const cfg = MILESTONE_TYPE_CONFIG[m.type] || MILESTONE_TYPE_CONFIG['Pre-Production']
+                  return (
+                    <div
+                      key={`${m.productionId}-${m.id}`}
+                      title={`${m.title}\n${m.productionName}\n${format(d, 'MMM d')}`}
+                      onClick={() => onClickProduction(m.productionId)}
+                      style={{
+                        position: 'absolute',
+                        left: left - 7,
+                        top: '50%',
+                        transform: 'translateY(-50%) rotate(45deg)',
+                        width: 14,
+                        height: 14,
+                        backgroundColor: cfg.color,
+                        zIndex: 10,
+                        cursor: 'pointer',
+                        borderRadius: 2,
+                      }}
+                      className="hover:scale-125 transition-transform shadow-sm"
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Rows */}
         {rows.map((row, rowIdx) => {
-          const label = mode === 'team' ? row.user?.name : row.name
-          const sublabel = mode === 'team' ? row.user?.role : null
+          const label    = mode === 'team' ? row.label    : row.name
+          const sublabel = mode === 'team' ? row.sublabel : null
+          const rowKey   = mode === 'team' ? row.key      : row.name
 
           return (
             <div
-              key={label}
+              key={rowKey}
               className={clsx(
                 'flex relative',
                 rowIdx % 2 === 0 ? '' : 'bg-white/[0.015]'
@@ -250,13 +372,17 @@ function GanttChart({ days, rows, mode, today, range, onClickProduction }) {
                 style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
                 className="px-4 py-4 flex-shrink-0 border-b border-orbital-border flex items-center gap-2"
               >
-                {mode === 'team' && row.user && (
-                  <div
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                    style={{ backgroundColor: row.user.color }}
-                  >
-                    {row.user.avatar}
-                  </div>
+                {mode === 'team' && (
+                  row.photoUrl ? (
+                    <img src={row.photoUrl} alt={row.label} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                      style={{ backgroundColor: row.color || '#64748b' }}
+                    >
+                      {row.avatar}
+                    </div>
+                  )
                 )}
                 {mode === 'stage' && (
                   <div className="w-7 h-7 rounded-full bg-orbital-muted flex items-center justify-center flex-shrink-0">

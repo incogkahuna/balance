@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { format, parseISO } from 'date-fns'
-import { ClipboardCopy, Printer, RefreshCw, FileText, Check } from 'lucide-react'
+import { format, parseISO, isFuture } from 'date-fns'
+import { ClipboardCopy, Printer, RefreshCw, FileText, Check, UserCheck } from 'lucide-react'
+import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
+import { MILESTONE_TYPE_CONFIG, CONCERN_IMPACT_CONFIG } from '../productions/roadmap/roadmapUtils.js'
 import clsx from 'clsx'
 
 // Builds a plain-text version of the summary for clipboard copy
-function buildPlainText(production, bible, includeFF) {
+function buildPlainText(production, bible, includeFF, stageManager, upcomingMilestones, criticalOpenConcerns) {
   const b = bible
   const lines = []
 
@@ -28,6 +30,37 @@ function buildPlainText(production, bible, includeFF) {
     lines.push(`Dates:    ${dateStr}`)
   }
   lines.push('')
+
+  // Stage Manager
+  if (stageManager) {
+    lines.push('STAGE MANAGER')
+    lines.push(`${stageManager.name} — ${stageManager.primaryRole}`)
+    if (stageManager.phone) lines.push(`Phone: ${stageManager.phone}`)
+    lines.push('')
+  }
+
+  // Upcoming milestones
+  if (upcomingMilestones?.length > 0) {
+    lines.push('UPCOMING MILESTONES')
+    lines.push('─────────────────────────────────────')
+    upcomingMilestones.forEach(m => {
+      const dateStr = m.date ? format(parseISO(m.date), 'MMM d, yyyy') : '—'
+      lines.push(`${dateStr}  ${m.title} [${m.type}] — ${m.status}`)
+      if (m.description) lines.push(`  ${m.description}`)
+    })
+    lines.push('')
+  }
+
+  // Critical logistical concerns
+  if (criticalOpenConcerns?.length > 0) {
+    lines.push('OPEN CRITICAL/HIGH LOGISTICAL CONCERNS')
+    lines.push('─────────────────────────────────────')
+    criticalOpenConcerns.forEach(c => {
+      lines.push(`[${c.impactLevel.toUpperCase()}] ${c.title}`)
+      if (c.actionRequired) lines.push(`  Action: ${c.actionRequired}`)
+    })
+    lines.push('')
+  }
 
   // Key Players
   if (b.keyPlayers?.length > 0) {
@@ -89,14 +122,25 @@ function buildPlainText(production, bible, includeFF) {
 export function HandoffSummary({ production, bible, currentUserRole }) {
   const [generated, setGenerated] = useState(false)
   const [copied, setCopied] = useState(false)
+  const { getContractor, resolveAssignee } = useApp()
 
   const isAdminOrSup = currentUserRole === ROLES.ADMIN || currentUserRole === ROLES.SUPERVISOR
+  const stageManager = production.stageManagerId ? getContractor(production.stageManagerId) : null
+
+  // Roadmap data
+  const roadmap = production.roadmap || { milestones: [], logisticalConcerns: [] }
+  const upcomingMilestones = (roadmap.milestones || [])
+    .filter(m => m.date && isFuture(parseISO(m.date)) && m.status !== 'Complete')
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 5)
+  const criticalOpenConcerns = (roadmap.logisticalConcerns || [])
+    .filter(c => (c.impactLevel === 'Critical' || c.impactLevel === 'High') && c.status !== 'Resolved' && c.status !== 'Accepted Risk')
   const b = bible || {}
   const openConcerns = (b.concerns || []).filter(c => c.status === 'Open')
     .sort((a, z) => ({ High: 0, Medium: 1, Low: 2 }[a.severity] - { High: 0, Medium: 1, Low: 2 }[z.severity]))
 
   const handleCopy = async () => {
-    const text = buildPlainText(production, b, isAdminOrSup)
+    const text = buildPlainText(production, b, isAdminOrSup, stageManager, upcomingMilestones, criticalOpenConcerns)
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -177,6 +221,76 @@ export function HandoffSummary({ production, bible, currentUserRole }) {
             )}
           </div>
         </div>
+
+        {/* Stage Manager */}
+        {stageManager && (
+          <SummarySection title="Stage Manager">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/8 border border-blue-500/20 print:border-blue-200 print:bg-blue-50">
+              <UserCheck size={16} className="text-blue-400 flex-shrink-0 print:text-blue-600" />
+              <div>
+                <p className="text-sm font-semibold text-orbital-text print:text-black">{stageManager.name}</p>
+                <p className="text-xs text-orbital-subtle print:text-gray-600">{stageManager.primaryRole}</p>
+              </div>
+              {stageManager.phone && (
+                <p className="text-xs text-orbital-subtle ml-auto print:text-gray-600">📞 {stageManager.phone}</p>
+              )}
+            </div>
+          </SummarySection>
+        )}
+
+        {/* Upcoming Milestones (from Roadmap) */}
+        {upcomingMilestones.length > 0 && (
+          <SummarySection title="Upcoming Milestones">
+            <div className="space-y-2">
+              {upcomingMilestones.map(m => {
+                const cfg = MILESTONE_TYPE_CONFIG[m.type]
+                const owner = m.ownerId ? resolveAssignee(m.ownerId) : null
+                return (
+                  <div key={m.id} className="flex items-start gap-3 p-3 rounded-lg bg-orbital-muted border border-orbital-border print:border-gray-200">
+                    <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: cfg?.color || '#64748b' }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-orbital-text print:text-black">{m.title}</p>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <span className={clsx('text-xs px-1.5 py-0.5 rounded', cfg?.bg, cfg?.text)}>
+                          {m.type}
+                        </span>
+                        {owner && <span className="text-xs text-orbital-subtle print:text-gray-600">{owner.name}</span>}
+                      </div>
+                    </div>
+                    <span className="text-xs text-orbital-subtle print:text-gray-600 flex-shrink-0">
+                      {format(parseISO(m.date), 'MMM d')}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </SummarySection>
+        )}
+
+        {/* Open Critical / High Logistical Concerns */}
+        {criticalOpenConcerns.length > 0 && (
+          <SummarySection
+            title={`Logistical Concerns (${criticalOpenConcerns.length})`}
+            badge={<span className="text-xs px-2 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/30">Needs Action</span>}
+          >
+            <div className="space-y-2">
+              {criticalOpenConcerns.map(c => {
+                const cfg = CONCERN_IMPACT_CONFIG[c.impactLevel]
+                return (
+                  <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg bg-orbital-muted border border-orbital-border print:border-gray-200">
+                    <span className={clsx('text-xs font-medium px-2 py-0.5 rounded mt-0.5 flex-shrink-0 border', cfg?.bg, cfg?.text, cfg?.border)}>
+                      {c.impactLevel}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-orbital-text print:text-black">{c.title}</p>
+                      {c.actionRequired && <p className="text-xs text-orbital-subtle print:text-gray-600 mt-0.5">Action: {c.actionRequired}</p>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </SummarySection>
+        )}
 
         {/* Key Players */}
         {b.keyPlayers?.length > 0 && (

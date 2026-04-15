@@ -4,7 +4,6 @@ import {
   PRODUCTION_STATUS, PRODUCTION_TYPE, LOCATION_TYPE, ROLES,
   createProduction, USERS
 } from '../../data/models.js'
-import { ContractorQuickAdd } from '../../features/contractors/ContractorQuickAdd.jsx'
 
 export function ProductionForm({ initial, onSubmit, onCancel }) {
   const { currentUser } = useApp()
@@ -176,16 +175,6 @@ export function ProductionForm({ initial, onSubmit, onCancel }) {
             )
           })}
         </div>
-      </div>
-
-      {/* Team — Contractors */}
-      <div>
-        <label className="label">Contractors</label>
-        <ContractorQuickAdd
-          assignedMembers={form.assignedMembers}
-          onToggle={toggleMember}
-          onSetRole={setMemberRole}
-        />
       </div>
 
       <div>
