@@ -116,7 +116,35 @@ export function InputStage({ onNext }) {
     return () => document.removeEventListener('paste', handler)
   }, [addFiles])
 
-  const canProceed = inputs.length > 0
+  // Any pending unsaved content counts toward "can proceed"
+  const hasPending  = textValue.trim().length > 0 || voiceText.trim().length > 0
+  const canProceed  = inputs.length > 0 || hasPending
+
+  // Auto-flush pending text/voice into inputs then call onNext
+  const handleAnalyse = () => {
+    const extra = []
+    if (voiceText.trim()) {
+      extra.push({
+        id:       crypto.randomUUID(),
+        type:     'text',
+        content:  voiceText.trim(),
+        fileName: `Voice note ${inputs.filter(i => i.type === 'text').length + extra.length + 1}`,
+        preview:  null,
+        addedAt:  new Date().toISOString(),
+      })
+    }
+    if (textValue.trim()) {
+      extra.push({
+        id:       crypto.randomUUID(),
+        type:     'text',
+        content:  textValue.trim(),
+        fileName: `Text note ${inputs.filter(i => i.type === 'text').length + extra.length + 1}`,
+        preview:  null,
+        addedAt:  new Date().toISOString(),
+      })
+    }
+    onNext([...inputs, ...extra])
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -291,7 +319,7 @@ export function InputStage({ onNext }) {
       {/* Actions */}
       <div className="flex flex-col gap-3 pt-2">
         <button
-          onClick={() => onNext(inputs)}
+          onClick={handleAnalyse}
           disabled={!canProceed}
           className={clsx(
             'w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm transition-all',

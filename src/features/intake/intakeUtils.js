@@ -7,17 +7,46 @@ import {
 import { addDays, subDays, format, isValid } from 'date-fns'
 
 // ─── Text pattern matchers ────────────────────────────────────────────────────
-const EMAIL_RE    = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
-const PHONE_RE    = /(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g
-const DATE_RE     = /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?|\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\b/gi
+const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
+const PHONE_RE = /(?:\+?1[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g
 
+// Dates: "March 15", "March 15th", "March 15th, 2025", "15/03/2025", "15-03-25"
+const DATE_RE = /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?|\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?\b/gi
+
+// ─── Structured keyword patterns (e.g. "Client: Nike") ───────────────────────
 const TITLE_KEYS    = ['production:', 'project:', 'job:', 'shoot:', 'title:']
 const CLIENT_KEYS   = ['client:', 'company:', 'brand:', 'for:']
 const LOCATION_KEYS = ['location:', 'venue:', 'address:', 'studio:', 'site:']
 
-const LED_KEYWORDS    = ['led', 'volume', 'xr', 'virtual production', 'led wall', 'led stage', 'extended reality']
-const MOBILE_KEYWORDS = ['mobile', 'on location', 'on-location', 'remote', 'travel', 'away', 'offsite', 'off-site']
-const CONCERN_KEYWORDS = ['concern', 'issue', 'problem', 'risk', 'challenge', 'worried', 'not sure', 'unclear', 'tbd', 'pending', 'need to confirm', 'unresolved']
+// ─── Natural language patterns (voice-friendly) ───────────────────────────────
+// Each entry: [regex, confidence]
+const NL_TITLE_PATTERNS = [
+  [/(?:production|project|shoot|job|campaign)\s+(?:is\s+)?(?:called|named|titled)\s+["']?([A-Z][^"'\n,.]{2,40})["']?/i, 'high'],
+  [/(?:it'?s?\s+(?:a|the)\s+|working\s+on\s+(?:a|the)\s+|doing\s+(?:a|the)\s+)([A-Z][^"'\n,.]{2,40})(?:\s+(?:shoot|production|project|campaign|commercial|film|video))/i, 'medium'],
+  [/^["']?([A-Z][A-Za-z0-9 &'\-]{3,40})["']?\s+(?:shoot|production|project|campaign|commercial|film)/im, 'medium'],
+]
+
+const NL_CLIENT_PATTERNS = [
+  [/(?:client|brand|company)\s+(?:is\s+|=\s*)?["']?([A-Z][A-Za-z0-9 &'\-]{1,40})["']?(?:\.|,|\s|$)/i, 'high'],
+  [/(?:for|with)\s+["']?([A-Z][A-Za-z0-9 &'\-]{1,40})["']?(?:\s+(?:commercial|campaign|production|shoot|project|brand|company|corp|inc|ltd|llc)|\s*[,.]|\s*$)/i, 'medium'],
+  [/(?:it'?s?\s+for|working\s+for|shooting\s+for|job\s+(?:is\s+)?for)\s+["']?([A-Z][A-Za-z0-9 &'\-]{1,40})["']?/i, 'medium'],
+]
+
+const NL_LOCATION_PATTERNS = [
+  [/(?:location|venue|studio|site|place)\s+(?:is\s+)?["']?([A-Za-z0-9 ,'\-]{3,60})["']?/i, 'high'],
+  [/(?:at|in)\s+["']?([A-Z][A-Za-z0-9 '\-]{2,50})(?:\s+(?:studio|venue|space|centre|center|arena|hall|theatre|theater))["']?/i, 'medium'],
+  [/(?:shooting|filming|building|based)\s+(?:at|in)\s+["']?([A-Za-z0-9 ',\-]{3,60})["']?/i, 'medium'],
+]
+
+// Start date: "starting March 15", "on March 15", "from March 15", "shoot is March 15"
+const NL_STARTDATE_RE = /(?:start(?:s|ing)?|from|on|shoot(?:\s+is)?|date(?:\s+is)?|kick(?:s|ing)?\s*off)\s+(?:on\s+)?(\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?|\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/gi
+
+// End date: "through March 16", "until March 16", "ending March 16", "wrapping March 16"
+const NL_ENDDATE_RE = /(?:through|until|to|end(?:s|ing)?|wrap(?:s|ping)?|finish(?:es|ing)?)\s+(?:on\s+)?(\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?|\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)/gi
+
+const LED_KEYWORDS     = ['led', 'volume', 'xr ', ' xr', 'virtual production', 'led wall', 'led stage', 'extended reality', 'led volume', 'led shoot']
+const MOBILE_KEYWORDS  = ['mobile build', 'mobile production', 'on location', 'on-location', 'remote shoot', 'location shoot', 'offsite', 'off-site', 'away shoot', 'on site', 'on-site']
+const CONCERN_KEYWORDS = ['concern', 'issue', 'problem', 'risk', 'challenge', 'worried', 'not sure', 'unclear', 'tbd', 'pending', 'need to confirm', 'unresolved', "haven't confirmed", "not confirmed"]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function extractByKeyword(text, keys) {
@@ -28,6 +57,16 @@ function extractByKeyword(text, keys) {
         const value = line.split(/:\s*/).slice(1).join(':').trim()
         if (value.length > 1) return value
       }
+    }
+  }
+  return null
+}
+
+function tryNLPatterns(text, patterns) {
+  for (const [re, confidence] of patterns) {
+    const m = text.match(re)
+    if (m?.[1]?.trim().length > 1) {
+      return { value: m[1].trim(), confidence }
     }
   }
   return null
@@ -47,7 +86,7 @@ function extractPhones(text) {
   return [...(text.matchAll(PHONE_RE))].map(m => m[0].trim())
 }
 
-function extractDates(text) {
+function extractAllDates(text) {
   return [...(text.matchAll(DATE_RE))].map(m => m[0])
 }
 
@@ -58,19 +97,35 @@ export function parseTextContent(text, sourceId) {
   const concerns   = []
   const lower      = text.toLowerCase()
 
-  // Title
-  const titleMatch = extractByKeyword(text, TITLE_KEYS)
-  if (titleMatch) candidates.title = { value: titleMatch, confidence: 'high', source: sourceId }
+  // ── Title ──
+  // Try structured label first, then natural language
+  const titleStructured = extractByKeyword(text, TITLE_KEYS)
+  if (titleStructured) {
+    candidates.title = { value: titleStructured, confidence: 'high', source: sourceId }
+  } else {
+    const titleNL = tryNLPatterns(text, NL_TITLE_PATTERNS)
+    if (titleNL) candidates.title = { ...titleNL, source: sourceId }
+  }
 
-  // Client
-  const clientMatch = extractByKeyword(text, CLIENT_KEYS)
-  if (clientMatch) candidates.client = { value: clientMatch, confidence: 'high', source: sourceId }
+  // ── Client ──
+  const clientStructured = extractByKeyword(text, CLIENT_KEYS)
+  if (clientStructured) {
+    candidates.client = { value: clientStructured, confidence: 'high', source: sourceId }
+  } else {
+    const clientNL = tryNLPatterns(text, NL_CLIENT_PATTERNS)
+    if (clientNL) candidates.client = { ...clientNL, source: sourceId }
+  }
 
-  // Location
-  const locationMatch = extractByKeyword(text, LOCATION_KEYS)
-  if (locationMatch) candidates.locationName = { value: locationMatch, confidence: 'high', source: sourceId }
+  // ── Location ──
+  const locationStructured = extractByKeyword(text, LOCATION_KEYS)
+  if (locationStructured) {
+    candidates.locationName = { value: locationStructured, confidence: 'high', source: sourceId }
+  } else {
+    const locationNL = tryNLPatterns(text, NL_LOCATION_PATTERNS)
+    if (locationNL) candidates.locationName = { ...locationNL, source: sourceId }
+  }
 
-  // Production type / location type from keywords
+  // ── Production type / location type ──
   const isLED    = LED_KEYWORDS.some(k => lower.includes(k))
   const isMobile = MOBILE_KEYWORDS.some(k => lower.includes(k))
   if (isLED) {
@@ -81,25 +136,42 @@ export function parseTextContent(text, sourceId) {
     candidates.locationType   = { value: LOCATION_TYPE.MOBILE,         confidence: 'medium', source: sourceId }
   }
 
-  // Dates
-  const dates = extractDates(text)
-  if (dates.length >= 2) {
-    const s = tryParseDate(dates[0])
-    const e = tryParseDate(dates[1])
-    if (s) candidates.startDate = { value: s, confidence: 'medium', source: sourceId }
-    if (e) candidates.endDate   = { value: e, confidence: 'medium', source: sourceId }
-  } else if (dates.length === 1) {
-    const s = tryParseDate(dates[0])
-    if (s) candidates.startDate = { value: s, confidence: 'medium', source: sourceId }
+  // ── Dates ──
+  // Try context-aware NL patterns first (start/end), fall back to bare date scan
+  const startMatches = [...(text.matchAll(NL_STARTDATE_RE))].map(m => m[1])
+  const endMatches   = [...(text.matchAll(NL_ENDDATE_RE))].map(m => m[1])
+
+  if (startMatches.length > 0) {
+    const s = tryParseDate(startMatches[0])
+    if (s) candidates.startDate = { value: s, confidence: 'high', source: sourceId }
+  }
+  if (endMatches.length > 0) {
+    const e = tryParseDate(endMatches[0])
+    if (e) candidates.endDate = { value: e, confidence: 'high', source: sourceId }
   }
 
-  // Contacts: scan each line for emails, try to pull associated name
+  // Fall back to bare date scan if NL patterns didn't find anything
+  if (!candidates.startDate || !candidates.endDate) {
+    const allDates = extractAllDates(text)
+    if (!candidates.startDate && allDates.length >= 1) {
+      const s = tryParseDate(allDates[0])
+      if (s) candidates.startDate = { value: s, confidence: 'medium', source: sourceId }
+    }
+    if (!candidates.endDate && allDates.length >= 2) {
+      const e = tryParseDate(allDates[1])
+      if (e) candidates.endDate = { value: e, confidence: 'medium', source: sourceId }
+    }
+  }
+
+  // ── Contacts: scan for emails with associated names ──
   for (const line of text.split('\n')) {
     const lineEmails = [...(line.matchAll(EMAIL_RE))].map(m => m[0])
     if (!lineEmails.length) continue
     const email = lineEmails[0]
-    const nameMatch = line.match(/^([A-Z][a-z]+ (?:[A-Z][a-z]+ )?[A-Z][a-z]+)/) ||
-                      line.match(/([A-Z][a-z]+ [A-Z][a-z]+)\s*[<(]/)
+    // Try "First Last <email>" or "First Last (email)" or line starting with a name
+    const nameMatch =
+      line.match(/^([A-Z][a-z]+ (?:[A-Z][a-z]+ )?[A-Z][a-z]+)/) ||
+      line.match(/([A-Z][a-z]+ [A-Z][a-z]+)\s*[<(]/)
     const name = nameMatch?.[1] || null
     contacts.push({
       id:         crypto.randomUUID(),
@@ -113,13 +185,31 @@ export function parseTextContent(text, sourceId) {
     })
   }
 
+  // Also catch "contact is [Name]" / "contact: [Name]" natural language
+  const contactNLRe = /(?:contact(?:\s+is)?|reach out to|speak to|talk to)\s+([A-Z][a-z]+ [A-Z][a-z]+)/gi
+  for (const m of text.matchAll(contactNLRe)) {
+    const name = m[1]
+    if (!contacts.find(c => c.name === name)) {
+      contacts.push({
+        id:         crypto.randomUUID(),
+        name,
+        email:      '',
+        phone:      '',
+        company:    '',
+        roleGuess:  '',
+        confidence: 'medium',
+        source:     sourceId,
+      })
+    }
+  }
+
   // Attach loose phone numbers to first contactless slot
   extractPhones(text).forEach(phone => {
     const slot = contacts.find(c => !c.phone)
     if (slot) slot.phone = phone
   })
 
-  // Concerns: lines containing concern keywords
+  // ── Concerns ──
   text.split('\n')
     .filter(line => CONCERN_KEYWORDS.some(k => line.toLowerCase().includes(k)) && line.trim().length > 12)
     .slice(0, 3)
