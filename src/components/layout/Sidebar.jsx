@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  LayoutDashboard, Film, Calendar, BarChart3, Users, LogOut, Radio,
+  LayoutDashboard, Film, Calendar, BarChart3, Users, LogOut,
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
@@ -59,7 +59,7 @@ export function Sidebar() {
               </span>
             </div>
             <p className="font-telemetry text-[9px] tracking-[0.22em] mt-0.5"
-               style={{ color: '#3f5a75' }}>
+               style={{ color: '#7090a8' }}>
               ORBITAL STUDIOS
             </p>
           </div>
@@ -77,7 +77,7 @@ export function Sidebar() {
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
         {/* Section label */}
         <p className="px-3 mb-2 font-telemetry text-[8px] tracking-[0.2em]"
-           style={{ color: '#2a4060' }}>
+           style={{ color: '#4d6a82' }}>
           NAVIGATION
         </p>
 
@@ -150,9 +150,9 @@ export function Sidebar() {
         <button
           onClick={() => { logout(); navigate('/login') }}
           className="w-full flex items-center gap-3 px-3 py-2 text-sm transition-all group"
-          style={{ color: '#3f5a75' }}
+          style={{ color: '#7090a8' }}
           onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}
-          onMouseLeave={e => { e.currentTarget.style.color = '#3f5a75' }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#7090a8' }}
         >
           <LogOut size={14} />
           <span style={{ letterSpacing: '0.02em' }}>Sign out</span>

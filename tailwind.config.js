@@ -26,12 +26,12 @@ export default {
           bg:      '#03070d',   // deep space black
           surface: '#060e1a',   // instrument panel
           panel:   '#091624',   // raised surface
-          border:  '#112235',   // chrome divider
-          chrome:  '#1a3050',   // highlighted chrome
-          muted:   '#1c2e42',   // recessed surface
-          text:    '#cdd8e8',   // cool white
-          subtle:  '#3f5a75',   // de-emphasised
-          dim:     '#1e2f40',   // very muted
+          border:  '#1e3248',   // chrome divider — visible against dark
+          chrome:  '#274660',   // highlighted chrome
+          muted:   '#1a2d42',   // recessed surface
+          text:    '#d4e2f0',   // cool white — primary text
+          subtle:  '#7090a8',   // secondary text — readable blue-gray
+          dim:     '#2a3f55',   // very muted tint
         },
         status: {
           incoming:  '#3b82f6',

@@ -1,9 +1,9 @@
+/* ─── Fonts must be imported before any other rules ────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* ─── Google Font import (fallback if HTML link misses) ─────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BASE
@@ -61,25 +61,23 @@
   /* ── Card / Panel ────────────────────────────────────────────────────────── */
   /* Chrome instrument-panel look: dark base, subtle top highlight, hard edge  */
   .card {
-    @apply relative bg-orbital-surface border border-orbital-border;
+    @apply relative border border-orbital-border;
     background: linear-gradient(180deg,
-      rgba(255,255,255,0.025) 0%,
-      transparent 60%),
-      #060e1a;
+      rgba(255,255,255,0.03) 0%,
+      rgba(6,14,26,0.95) 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.055),
-      0 2px 16px rgba(0, 0, 0, 0.55);
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 2px 16px rgba(0, 0, 0, 0.5);
   }
 
   /* Elevated card — for modals / sheets */
   .card-elevated {
-    @apply relative bg-orbital-panel border border-orbital-chrome;
+    @apply relative border border-orbital-chrome;
     background: linear-gradient(180deg,
-      rgba(255,255,255,0.04) 0%,
-      transparent 50%),
-      #091624;
+      rgba(255,255,255,0.05) 0%,
+      rgba(9,22,36,0.98) 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.09),
       0 8px 40px rgba(0, 0, 0, 0.7);
   }
 
@@ -189,24 +187,22 @@
 
   /* ── Labels ──────────────────────────────────────────────────────────────── */
   .label {
-    @apply block text-xs font-medium uppercase tracking-widest mb-1.5;
+    @apply block text-xs font-medium uppercase tracking-widest mb-1.5 text-orbital-subtle;
     font-family: 'Space Mono', monospace;
-    color: #3f5a75;
     letter-spacing: 0.12em;
   }
 
   /* ── Section title ───────────────────────────────────────────────────────── */
   .section-title {
-    @apply text-xs font-semibold uppercase tracking-widest;
+    @apply text-xs font-semibold uppercase tracking-widest text-orbital-subtle;
     font-family: 'Space Mono', monospace;
-    color: #3f5a75;
     letter-spacing: 0.15em;
   }
 
   /* ── HUD label — monospace telemetry style ───────────────────────────────── */
   .hud-label {
-    font-family: 'Space Mono', monospace;
     @apply text-[10px] uppercase tracking-widest text-orbital-subtle;
+    font-family: 'Space Mono', monospace;
     letter-spacing: 0.18em;
   }
 

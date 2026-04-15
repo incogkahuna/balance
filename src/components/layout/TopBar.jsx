@@ -57,13 +57,13 @@ export function TopBar() {
         <button
           onClick={() => { logout(); navigate('/login') }}
           className="p-2 transition-colors"
-          style={{ color: '#3f5a75', border: '1px solid transparent' }}
+          style={{ color: '#7090a8', border: '1px solid transparent' }}
           onMouseEnter={e => {
             e.currentTarget.style.color = '#ef4444'
             e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.color = '#3f5a75'
+            e.currentTarget.style.color = '#7090a8'
             e.currentTarget.style.borderColor = 'transparent'
           }}
         >
