@@ -1,4 +1,4 @@
-/* ─── Fonts must be imported before any other rules ────────────────────────── */
+/* ─── Fonts ─────────────────────────────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
 
 @tailwind base;
@@ -13,44 +13,24 @@
 
   html { -webkit-tap-highlight-color: transparent; }
 
-  /* Therapeutic deep-space background ───────────────────────────────────────
-     Three slow-drifting radial glow sources, like looking at a nebula through
-     a viewport. Barely visible — felt more than seen.                        */
   body {
     @apply bg-orbital-bg text-orbital-text font-sans antialiased;
     min-height: 100dvh;
-    position: relative;
-    overflow-x: hidden;
   }
 
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(ellipse 140% 70% at 50% -5%,  rgba(14, 165, 233, 0.055) 0%, transparent 60%),
-      radial-gradient(ellipse 70%  70% at  5%  85%,  rgba(6,  182, 212, 0.04)  0%, transparent 55%),
-      radial-gradient(ellipse 90%  60% at 95%  60%,  rgba(30,  64, 175, 0.05)  0%, transparent 55%),
-      radial-gradient(ellipse 50%  40% at 50% 110%,  rgba(14, 165, 233, 0.03)  0%, transparent 50%);
-    animation: ambient 30s ease-in-out infinite;
-  }
+  /* No decorative backgrounds — flat charcoal, like a real tool */
+  #root { position: relative; }
 
-  /* Ensure content sits above the background glow */
-  #root { position: relative; z-index: 1; }
-
-  /* ── Scrollbar — thin chrome ─────────────────────────────────────────────── */
+  /* Scrollbar — thin and minimal */
   ::-webkit-scrollbar       { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: rgba(26, 48, 80, 0.8);
+    background: #35363e;
     border-radius: 0;
   }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(14, 165, 233, 0.4); }
+  ::-webkit-scrollbar-thumb:hover { background: #4a4b55; }
 
-  /* ── Selection ───────────────────────────────────────────────────────────── */
-  ::selection { background: rgba(14, 165, 233, 0.25); color: #cdd8e8; }
+  ::selection { background: rgba(59,130,246,0.25); color: #d0d1d5; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -58,194 +38,118 @@
    ══════════════════════════════════════════════════════════════════════════════ */
 @layer components {
 
-  /* ── Card / Panel ────────────────────────────────────────────────────────── */
-  /* Chrome instrument-panel look: dark base, subtle top highlight, hard edge  */
+  /* ── Panel / Card ────────────────────────────────────────────────────────── */
+  /* Flat surface — like a panel in DaVinci Resolve or Unreal.                 */
+  /* No gradients, no shadows, just a border.                                  */
   .card {
-    @apply relative border border-orbital-border;
-    background: linear-gradient(180deg,
-      rgba(255,255,255,0.03) 0%,
-      rgba(6,14,26,0.95) 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 2px 16px rgba(0, 0, 0, 0.5);
+    @apply bg-orbital-surface border border-orbital-border;
   }
 
-  /* Elevated card — for modals / sheets */
   .card-elevated {
-    @apply relative border border-orbital-chrome;
-    background: linear-gradient(180deg,
-      rgba(255,255,255,0.05) 0%,
-      rgba(9,22,36,0.98) 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.09),
-      0 8px 40px rgba(0, 0, 0, 0.7);
-  }
-
-  /* Corner accent decoration — adds L-shaped chrome corners to any element   */
-  /* Usage: <div class="chrome-corners"> …                                     */
-  .chrome-corners {
-    @apply relative;
-  }
-  .chrome-corners::before,
-  .chrome-corners::after {
-    content: '';
-    position: absolute;
-    width: 10px; height: 10px;
-    pointer-events: none;
-    z-index: 2;
-  }
-  .chrome-corners::before {
-    top: 0; left: 0;
-    border-top:  1px solid rgba(14, 165, 233, 0.5);
-    border-left: 1px solid rgba(14, 165, 233, 0.5);
-  }
-  .chrome-corners::after {
-    bottom: 0; right: 0;
-    border-bottom: 1px solid rgba(14, 165, 233, 0.3);
-    border-right:  1px solid rgba(14, 165, 233, 0.3);
+    @apply bg-orbital-panel border border-orbital-chrome;
   }
 
   /* ── Buttons ─────────────────────────────────────────────────────────────── */
+  /* Tool-style: compact, precise height, clear purpose.                       */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-sm transition-all
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5
+           text-sm font-medium transition-colors
            disabled:opacity-40 disabled:cursor-not-allowed;
-    background: linear-gradient(180deg, #1d8ce0 0%, #1470b8 100%);
-    border: 1px solid rgba(14, 165, 233, 0.6);
-    color: #e8f4ff;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.12),
-      0 0 0 1px rgba(14,165,233,0.15),
-      0 2px 8px rgba(0,0,0,0.4);
-    letter-spacing: 0.02em;
+    background: #2563eb;
+    border: 1px solid rgba(59,130,246,0.5);
+    color: #e8efff;
+    letter-spacing: 0.01em;
   }
-  .btn-primary:hover:not(:disabled) {
-    background: linear-gradient(180deg, #2596e8 0%, #1d7ed0 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.15),
-      0 0 0 1px rgba(14,165,233,0.3),
-      0 0 16px rgba(14,165,233,0.2),
-      0 2px 8px rgba(0,0,0,0.4);
-  }
-  .btn-primary:active:not(:disabled) { transform: scale(0.98); }
+  .btn-primary:hover:not(:disabled)  { background: #2d6ef0; }
+  .btn-primary:active:not(:disabled) { background: #1d56d8; }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-sm
-           text-orbital-text transition-all;
-    background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 100%), #0c1825;
-    border: 1px solid #1a3050;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 2px 6px rgba(0,0,0,0.4);
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5
+           text-sm font-medium text-orbital-text transition-colors;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid #2e2f36;
   }
-  .btn-secondary:hover { border-color: #243d58; background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%), #0f1e2e; }
-  .btn-secondary:active { transform: scale(0.98); }
+  .btn-secondary:hover { background: rgba(255,255,255,0.07); border-color: #3c3d46; }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-2 font-medium text-sm
-           text-orbital-subtle hover:text-orbital-text transition-all;
+    @apply inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5
+           text-sm font-medium text-orbital-subtle hover:text-orbital-text transition-colors;
     border: 1px solid transparent;
   }
-  .btn-ghost:hover { background: rgba(255,255,255,0.03); border-color: #112235; }
-  .btn-ghost:active { transform: scale(0.98); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.04); border-color: #2e2f36; }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 font-medium text-sm transition-all;
-    background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
-    border: 1px solid rgba(239,68,68,0.5);
-    color: #fff5f5;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 8px rgba(0,0,0,0.4);
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5
+           text-sm font-medium transition-colors;
+    background: #7f1d1d;
+    border: 1px solid rgba(239,68,68,0.4);
+    color: #fecaca;
   }
-  .btn-danger:hover { background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%); }
-  .btn-danger:active { transform: scale(0.98); }
+  .btn-danger:hover { background: #991b1b; }
 
   /* ── Inputs ──────────────────────────────────────────────────────────────── */
   .input {
-    @apply w-full px-3 py-2.5 text-orbital-text placeholder-orbital-subtle text-sm
-           transition-all;
-    background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%), #040b14;
-    border: 1px solid #112235;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), inset 0 1px 0 rgba(0,0,0,0.2);
+    @apply w-full px-2.5 py-1.5 text-sm text-orbital-text transition-colors;
+    background: #0e0f11;
+    border: 1px solid #27282e;
     outline: none;
   }
+  .input::placeholder { color: #45464f; }
   .input:focus {
-    border-color: rgba(14, 165, 233, 0.55);
-    box-shadow:
-      inset 0 2px 4px rgba(0,0,0,0.35),
-      0 0 0 2px rgba(14,165,233,0.1),
-      0 0 12px rgba(14,165,233,0.08);
+    border-color: rgba(59,130,246,0.55);
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.08);
   }
 
   .select {
-    @apply w-full px-3 py-2.5 text-orbital-text text-sm transition-all appearance-none;
-    background: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.05) 100%), #040b14;
-    border: 1px solid #112235;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35);
+    @apply w-full px-2.5 py-1.5 text-sm text-orbital-text transition-colors appearance-none;
+    background: #0e0f11;
+    border: 1px solid #27282e;
     outline: none;
   }
-  .select:focus {
-    border-color: rgba(14, 165, 233, 0.55);
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.35), 0 0 0 2px rgba(14,165,233,0.1);
-  }
+  .select:focus { border-color: rgba(59,130,246,0.55); }
 
   /* ── Labels ──────────────────────────────────────────────────────────────── */
   .label {
-    @apply block text-xs font-medium uppercase tracking-widest mb-1.5 text-orbital-subtle;
-    font-family: 'Space Mono', monospace;
-    letter-spacing: 0.12em;
+    @apply block text-xs font-medium mb-1.5 text-orbital-subtle;
+    letter-spacing: 0.03em;
   }
 
-  /* ── Section title ───────────────────────────────────────────────────────── */
   .section-title {
-    @apply text-xs font-semibold uppercase tracking-widest text-orbital-subtle;
-    font-family: 'Space Mono', monospace;
-    letter-spacing: 0.15em;
+    @apply text-xs font-semibold uppercase text-orbital-subtle;
+    letter-spacing: 0.07em;
   }
 
-  /* ── HUD label — monospace telemetry style ───────────────────────────────── */
+  /* Space Mono only for actual data values: timecodes, counts, codes */
   .hud-label {
-    @apply text-[10px] uppercase tracking-widest text-orbital-subtle;
+    @apply text-xs uppercase text-orbital-subtle;
     font-family: 'Space Mono', monospace;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.1em;
   }
 
-  /* ── Status indicator dot ────────────────────────────────────────────────── */
+  /* ── Section header — panel label strip ──────────────────────────────────── */
+  .panel-section {
+    @apply flex items-center gap-2 px-0 pb-2;
+    border-bottom: 1px solid #27282e;
+  }
+  .panel-section-bar {
+    @apply w-0.5 h-3 flex-shrink-0;
+    background: #3b82f6;
+  }
+  .panel-section-label {
+    @apply text-xs font-medium uppercase tracking-widest text-orbital-subtle;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Status dot ──────────────────────────────────────────────────────────── */
   .status-dot {
-    @apply inline-block w-1.5 h-1.5;
-    animation: indicator-pulse 2.5s ease-in-out infinite;
-  }
-
-  /* ── Scan line overlay — applied to sidebar ──────────────────────────────── */
-  /* NOTE: pointer-events must NOT be set on the container — that would        */
-  /* prevent NavLink children from receiving clicks in some browsers.          */
-  /* Only the ::after scan line itself should be non-interactive.              */
-  .scan-overlay {
-    position: relative;
-    overflow: hidden;
-  }
-  .scan-overlay::after {
-    content: '';
-    position: absolute;
-    left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 0%, rgba(14,165,233,0.15) 50%, transparent 100%);
-    animation: scan-line 12s linear infinite;
-    z-index: 10;
-    pointer-events: none; /* scan line must not intercept clicks */
-  }
-
-  /* ── Chrome divider ──────────────────────────────────────────────────────── */
-  .chrome-divider {
-    height: 1px;
-    background: linear-gradient(90deg,
-      transparent 0%,
-      rgba(255,255,255,0.06) 20%,
-      rgba(255,255,255,0.06) 80%,
-      transparent 100%);
+    @apply inline-block w-1.5 h-1.5 rounded-full;
   }
 
   /* ── Modal ───────────────────────────────────────────────────────────────── */
   .modal-backdrop {
     @apply fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4;
-    background: rgba(2, 5, 10, 0.85);
-    backdrop-filter: blur(6px);
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(3px);
   }
   .modal-panel {
     @apply card-elevated w-full sm:max-w-lg max-h-[90dvh] overflow-y-auto animate-hud-in;
@@ -253,39 +157,23 @@
 
   /* ── Progress bar ────────────────────────────────────────────────────────── */
   .progress-track {
-    @apply w-full h-0.5 bg-orbital-border overflow-hidden;
+    @apply w-full h-0.5 overflow-hidden;
+    background: #27282e;
   }
   .progress-fill {
-    @apply h-full transition-all duration-500;
-    background: linear-gradient(90deg, #0ea5e9 0%, #38bdf8 100%);
-    box-shadow: 0 0 6px rgba(14,165,233,0.5);
+    @apply h-full transition-all duration-300;
+    background: #3b82f6;
   }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   UTILITIES — extra helpers not covered by Tailwind
+   UTILITIES
    ══════════════════════════════════════════════════════════════════════════════ */
 @layer utilities {
-
-  /* Metallic top highlight — add to any panel for the chrome sheen */
-  .chrome-top {
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
-  }
-
-  /* Active/selected state for panels */
-  .panel-active {
-    border-color: rgba(14, 165, 233, 0.4) !important;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.07),
-      0 0 0 1px rgba(14,165,233,0.15),
-      0 0 16px rgba(14,165,233,0.08);
-  }
-
-  /* Glow text colors for live indicators */
-  .text-glow-green { text-shadow: 0 0 8px rgba(34, 197, 94, 0.6);  }
-  .text-glow-blue  { text-shadow: 0 0 8px rgba(14, 165, 233, 0.6); }
-  .text-glow-red   { text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);  }
-
-  /* Font mono shorthand */
   .font-telemetry { font-family: 'Space Mono', monospace; }
+
+  /* Status text glow — used on live indicators only */
+  .text-glow-green { text-shadow: 0 0 6px rgba(34,197,94,0.5);  }
+  .text-glow-blue  { text-shadow: 0 0 6px rgba(59,130,246,0.5); }
+  .text-glow-red   { text-shadow: 0 0 6px rgba(239,68,68,0.5);  }
 }

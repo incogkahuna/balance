@@ -6,101 +6,62 @@ export default {
   ],
   darkMode: 'class',
   theme: {
-    // Hard-edge scale — override Tailwind defaults so no component
-    // accidentally gets soft corners. rounded-full is preserved for
-    // circular avatar / indicator elements only.
+    // Hard edges — no soft rounding anywhere except full circles
     borderRadius: {
       'none': '0px',
       'sm':   '1px',
-      DEFAULT:'2px',
+      DEFAULT: '2px',
       'md':   '2px',
       'lg':   '2px',
-      'xl':   '3px',
-      '2xl':  '3px',
-      '3xl':  '4px',
+      'xl':   '2px',
+      '2xl':  '2px',
+      '3xl':  '3px',
       'full': '9999px',
     },
     extend: {
       colors: {
         orbital: {
-          bg:      '#03070d',   // deep space black
-          surface: '#060e1a',   // instrument panel
-          panel:   '#091624',   // raised surface
-          border:  '#1e3248',   // chrome divider — visible against dark
-          chrome:  '#274660',   // highlighted chrome
-          muted:   '#1a2d42',   // recessed surface
-          text:    '#d4e2f0',   // cool white — primary text
-          subtle:  '#7090a8',   // secondary text — readable blue-gray
-          dim:     '#2a3f55',   // very muted tint
+          // Charcoal base — not navy, not pure black.
+          // Matches the tone of DaVinci Resolve / Unreal Engine panels.
+          bg:      '#131416',   // page background
+          surface: '#1a1b1e',   // panel / card surface
+          panel:   '#1f2024',   // elevated surface (modals, popovers)
+          border:  '#27282e',   // default 1px separator
+          chrome:  '#353640',   // active / hover border
+          muted:   '#101113',   // recessed / inset areas
+          text:    '#d0d1d5',   // primary readable text
+          subtle:  '#6e6f78',   // secondary / de-emphasised text
+          dim:     '#35363e',   // placeholder / disabled
         },
         status: {
-          incoming:  '#3b82f6',
-          active:    '#22c55e',
-          wrap:      '#f59e0b',
-          completed: '#475569',
-          flagged:   '#ef4444',
+          incoming:  '#3b82f6',  // blue
+          active:    '#22c55e',  // green
+          wrap:      '#f59e0b',  // amber
+          completed: '#52525b',  // zinc muted
+          flagged:   '#ef4444',  // red
         },
       },
       fontFamily: {
-        sans:  ['Inter', 'system-ui', 'sans-serif'],
-        mono:  ['"Space Mono"', 'ui-monospace', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['"Space Mono"', 'ui-monospace', 'monospace'],
       },
-      // ── Custom animations ──────────────────────────────────────────────────
+      // Minimal animation set — only functional, no decorative
       animation: {
-        'ambient':        'ambient 25s ease-in-out infinite',
-        'scan-line':      'scan-line 10s linear infinite',
-        'glow-pulse':     'glow-pulse 3s ease-in-out infinite',
-        'data-flicker':   'data-flicker 5s ease-in-out infinite',
-        'corner-draw':    'corner-draw 0.4s ease-out forwards',
-        'hud-in':         'hud-in 0.25s ease-out forwards',
-        'lock-blink':     'lock-blink 1.2s step-end infinite',
-        'indicator-pulse':'indicator-pulse 2.5s ease-in-out infinite',
+        'indicator-pulse': 'indicator-pulse 2.5s ease-in-out infinite',
+        'hud-in':          'hud-in 0.15s ease-out forwards',
       },
       keyframes: {
-        ambient: {
-          '0%, 100%': { opacity: '1', transform: 'scale(1)' },
-          '50%':      { opacity: '0.6', transform: 'scale(1.08)' },
-        },
-        'scan-line': {
-          '0%':   { transform: 'translateY(-10px)', opacity: '0' },
-          '5%':   { opacity: '1' },
-          '95%':  { opacity: '1' },
-          '100%': { transform: 'translateY(100vh)', opacity: '0' },
-        },
-        'glow-pulse': {
-          '0%, 100%': { opacity: '1',   boxShadow: '0 0 8px currentColor' },
-          '50%':      { opacity: '0.4', boxShadow: '0 0 2px currentColor' },
-        },
-        'data-flicker': {
-          '0%, 100%':  { opacity: '1' },
-          '91%, 93%':  { opacity: '0.7' },
-          '92%':       { opacity: '0.2' },
-        },
-        'corner-draw': {
-          '0%':   { opacity: '0', transform: 'scale(0.95)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
+        'indicator-pulse': {
+          '0%, 100%': { opacity: '1' },
+          '50%':      { opacity: '0.25' },
         },
         'hud-in': {
-          '0%':   { opacity: '0', transform: 'translateY(6px)' },
+          '0%':   { opacity: '0', transform: 'translateY(4px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        'lock-blink': {
-          '0%, 100%': { opacity: '1' },
-          '50%':      { opacity: '0' },
-        },
-        'indicator-pulse': {
-          '0%, 100%': { opacity: '1',   transform: 'scale(1)' },
-          '50%':      { opacity: '0.35',transform: 'scale(0.85)' },
         },
       },
       boxShadow: {
-        'chrome':        'inset 0 1px 0 rgba(255,255,255,0.06), 0 2px 8px rgba(0,0,0,0.6)',
-        'chrome-active': 'inset 0 1px 0 rgba(255,255,255,0.09), 0 0 0 1px rgba(14,165,233,0.4), 0 0 20px rgba(14,165,233,0.08)',
-        'panel':         '0 4px 32px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.04)',
-        'glow-blue':     '0 0 20px rgba(14,165,233,0.25)',
-        'glow-green':    '0 0 20px rgba(34,197,94,0.2)',
-        'glow-red':      '0 0 20px rgba(239,68,68,0.2)',
-        'inset-well':    'inset 0 2px 6px rgba(0,0,0,0.5), inset 0 1px 0 rgba(0,0,0,0.3)',
+        'overlay': '0 4px 24px rgba(0,0,0,0.7)',
       },
     },
   },

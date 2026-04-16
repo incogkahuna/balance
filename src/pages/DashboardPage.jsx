@@ -1,52 +1,44 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
-import { Film, CheckSquare, AlertTriangle, Clock } from 'lucide-react'
+import { Film, CheckSquare, AlertTriangle, Clock, ChevronRight } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
-import { StatusBadge, TaskStatusBadge, PriorityBadge } from '../components/ui/StatusBadge.jsx'
+import { StatusBadge, TaskStatusBadge, PriorityBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
 import { UpcomingMilestones } from '../features/productions/roadmap/UpcomingMilestones.jsx'
 import { TickerBanner } from '../components/ui/TickerBanner.jsx'
 
-// ── Status accent colors ──────────────────────────────────────────────────────
-const TASK_BORDER = {
-  [TASK_STATUS.NOT_STARTED]:  '#4d6a82',
-  [TASK_STATUS.IN_PROGRESS]:  '#60a5fa',
-  [TASK_STATUS.NEEDS_REVIEW]: '#fbbf24',
-  [TASK_STATUS.COMPLETE]:     '#4ade80',
-  [TASK_STATUS.VERIFIED]:     '#34d399',
-  [TASK_STATUS.BLOCKED]:      '#f87171',
+// ── Task status → accent colors ───────────────────────────────────────────────
+const TASK_STATUS_COLOR = {
+  [TASK_STATUS.NOT_STARTED]:  '#35363e',
+  [TASK_STATUS.IN_PROGRESS]:  '#3b82f6',
+  [TASK_STATUS.NEEDS_REVIEW]: '#f59e0b',
+  [TASK_STATUS.COMPLETE]:     '#22c55e',
+  [TASK_STATUS.VERIFIED]:     '#16a34a',
+  [TASK_STATUS.BLOCKED]:      '#ef4444',
 }
 
-const PROD_BORDER = {
-  [PRODUCTION_STATUS.ACTIVE]:    '#4ade80',
-  [PRODUCTION_STATUS.INCOMING]:  '#60a5fa',
-  [PRODUCTION_STATUS.WRAP]:      '#fbbf24',
-  [PRODUCTION_STATUS.COMPLETED]: '#475569',
-}
-
-// ── Due-date label ────────────────────────────────────────────────────────────
-function DueDateLabel({ date }) {
+// ── Due date inline label ─────────────────────────────────────────────────────
+function DueLabel({ date }) {
   if (!date) return null
   const d = parseISO(date)
-  if (isToday(d))    return <span className="font-telemetry text-[8px] tracking-[0.1em] text-amber-400">DUE TODAY</span>
-  if (isTomorrow(d)) return <span className="font-telemetry text-[8px] tracking-[0.1em] text-blue-400">TOMORROW</span>
-  if (isPast(d))     return <span className="font-telemetry text-[8px] tracking-[0.1em] text-red-400">OVERDUE</span>
-  return <span className="font-telemetry text-[8px] tracking-[0.08em] text-orbital-subtle">{format(d, 'MMM d').toUpperCase()}</span>
+  if (isToday(d))    return <span className="text-amber-400 text-xs">Today</span>
+  if (isTomorrow(d)) return <span className="text-blue-400  text-xs">Tomorrow</span>
+  if (isPast(d))     return <span className="text-red-400   text-xs font-medium">Overdue</span>
+  return <span className="text-orbital-subtle text-xs">{format(d, 'MMM d')}</span>
 }
 
-// ── Instrument panel section header ──────────────────────────────────────────
-function HudHeader({ label, action }) {
+// ── Section header ────────────────────────────────────────────────────────────
+function SectionHeader({ label, action }) {
   return (
     <div className="flex items-center justify-between mb-3">
-      <div className="flex items-center gap-2.5">
-        <div className="w-0.5 h-3.5 flex-shrink-0" style={{ background: 'rgba(14,165,233,0.65)' }} />
-        <span className="font-telemetry text-[9px] tracking-[0.2em]" style={{ color: '#7090a8' }}>
+      <div className="flex items-center gap-2">
+        <div className="w-0.5 h-3" style={{ background: '#3b82f6' }} />
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-orbital-subtle"
+          style={{ letterSpacing: '0.08em' }}>
           {label}
-        </span>
-        <div className="h-px w-10"
-          style={{ background: 'linear-gradient(90deg, rgba(255,255,255,0.07), transparent)' }} />
+        </h2>
       </div>
       {action}
     </div>
@@ -62,10 +54,7 @@ export function DashboardPage() {
 
   const myTasks        = tasks.filter(t => t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED)
   const myPendingTasks = myTasks.filter(t => t.status !== TASK_STATUS.COMPLETE && t.status !== TASK_STATUS.VERIFIED)
-
-  const activeProductions = productions.filter(p =>
-    p.status === PRODUCTION_STATUS.ACTIVE || p.status === PRODUCTION_STATUS.INCOMING
-  )
+  const activeProds    = productions.filter(p => p.status === PRODUCTION_STATUS.ACTIVE || p.status === PRODUCTION_STATUS.INCOMING)
 
   const pendingVerification = isAdminOrSup
     ? tasks.filter(t => t.status === TASK_STATUS.COMPLETE || t.status === TASK_STATUS.NEEDS_REVIEW)
@@ -81,96 +70,96 @@ export function DashboardPage() {
   return (
     <div>
       <TopBar />
-      <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
 
-        {/* ── Operator console header ── */}
-        <div className="mb-8">
-          <p className="font-telemetry text-[8px] tracking-[0.28em] mb-2" style={{ color: '#4d6a82' }}>
-            OPERATOR CONSOLE
-          </p>
-          <h1 className="text-2xl font-bold text-orbital-text">{currentUser?.name}</h1>
-          <p className="font-telemetry text-[9px] tracking-[0.14em] mt-1.5" style={{ color: '#5a7a92' }}>
-            {format(new Date(), 'EEEE · MMMM d · yyyy').toUpperCase()}
-          </p>
+      {/* ── Live feed ticker ── */}
+      <div className="-mx-0">
+        <TickerBanner />
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 lg:px-6 py-5">
+
+        {/* ── Page header ── */}
+        <div className="flex items-baseline justify-between mb-5">
+          <div>
+            <h1 className="text-base font-semibold text-orbital-text">{currentUser?.name}</h1>
+            <p className="text-xs text-orbital-subtle mt-0.5">
+              {format(new Date(), 'EEEE, MMMM d, yyyy')}
+            </p>
+          </div>
         </div>
 
-        {/* ── Live task feed ── */}
-        <div className="-mx-4 lg:-mx-8 mb-8">
-          <TickerBanner />
+        {/* ── Stats strip — four connected blocks ── */}
+        <div
+          className="grid grid-cols-2 lg:grid-cols-4 mb-6"
+          style={{
+            border: '1px solid #27282e',
+            borderRight: 'none',
+          }}
+        >
+          {[
+            { icon: Film,          label: 'Active',   value: totalActive,    color: '#22c55e', to: `/productions?status=${PRODUCTION_STATUS.ACTIVE}` },
+            { icon: Clock,         label: 'Incoming', value: totalIncoming,  color: '#3b82f6', to: `/productions?status=${PRODUCTION_STATUS.INCOMING}` },
+            { icon: CheckSquare,   label: 'My Tasks', value: myTasks.length, color: '#a78bfa', to: '/tasks?filter=mine' },
+            { icon: AlertTriangle, label: 'Overdue',  value: totalOverdue,   color: totalOverdue > 0 ? '#ef4444' : '#52525b', to: '/tasks?filter=overdue' },
+          ].map(({ icon: Icon, label, value, color, to }) => (
+            <Link
+              key={label}
+              to={to}
+              className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-orbital-panel"
+              style={{
+                background: '#1a1b1e',
+                borderRight: '1px solid #27282e',
+              }}
+            >
+              <Icon size={14} style={{ color, opacity: 0.8 }} className="flex-shrink-0" />
+              <div>
+                <p className="text-xl font-bold leading-none font-mono" style={{ color }}>{value}</p>
+                <p className="text-[11px] text-orbital-subtle mt-0.5">{label}</p>
+              </div>
+            </Link>
+          ))}
         </div>
 
-        {/* ── Telemetry stat row ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-          <StatCard
-            icon={Film}          label="Active"   value={totalActive}
-            color="text-green-400"
-            to={`/productions?status=${encodeURIComponent(PRODUCTION_STATUS.ACTIVE)}`}
-          />
-          <StatCard
-            icon={Clock}         label="Incoming" value={totalIncoming}
-            color="text-blue-400"
-            to={`/productions?status=${encodeURIComponent(PRODUCTION_STATUS.INCOMING)}`}
-          />
-          <StatCard
-            icon={CheckSquare}   label="My Tasks" value={myTasks.length}
-            color="text-purple-400"
-            to="/tasks?filter=mine"
-          />
-          <StatCard
-            icon={AlertTriangle} label="Overdue"  value={totalOverdue}
-            color="text-red-400"
-            alert={totalOverdue > 0}
-            to="/tasks?filter=overdue"
-          />
-        </div>
+        {/* ── Main content grid ── */}
+        <div className="grid lg:grid-cols-2 gap-5">
 
-        <div className="grid lg:grid-cols-2 gap-6">
-
-          {/* ── My Tasks ── */}
+          {/* My Tasks */}
           <section>
-            <HudHeader
-              label="MY TASKS"
+            <SectionHeader
+              label="My Tasks"
               action={myPendingTasks.length > 3 && (
-                <button
-                  onClick={() => navigate('/productions')}
-                  className="font-telemetry text-[8px] tracking-[0.1em] transition-colors"
-                  style={{ color: '#4d6a82' }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#60a5fa' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = '#4d6a82' }}
-                >
-                  VIEW ALL ›
+                <button onClick={() => navigate('/productions')}
+                  className="flex items-center gap-0.5 text-[11px] text-orbital-subtle hover:text-orbital-text transition-colors">
+                  View all <ChevronRight size={12} />
                 </button>
               )}
             />
             {myPendingTasks.length === 0 ? (
-              <div className="card p-5 text-center">
-                <p className="font-telemetry text-[9px] tracking-[0.18em]" style={{ color: '#4ade80' }}>
-                  ALL SYSTEMS NOMINAL
-                </p>
-                <p className="text-xs text-orbital-subtle mt-1 opacity-60">No pending tasks.</p>
+              <div className="card px-4 py-5 text-center">
+                <p className="text-xs text-orbital-subtle">No pending tasks.</p>
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="card divide-y" style={{ '--tw-divide-opacity': 1, borderColor: '#27282e' }}>
                 {myPendingTasks.slice(0, 5).map(task => {
-                  const production  = productions.find(p => p.id === task.productionId)
-                  const borderColor = TASK_BORDER[task.status] || '#4d6a82'
+                  const prod        = productions.find(p => p.id === task.productionId)
+                  const accentColor = TASK_STATUS_COLOR[task.status] || '#35363e'
                   return (
                     <div
                       key={task.id}
                       onClick={() => navigate(`/productions/${task.productionId}`)}
-                      className="card p-3 cursor-pointer transition-all active:scale-[0.99]"
-                      style={{ borderLeft: `2px solid ${borderColor}` }}
+                      className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-orbital-panel transition-colors"
+                      style={{ borderLeft: `2px solid ${accentColor}` }}
                     >
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <p className="text-sm font-medium text-orbital-text leading-snug">{task.title}</p>
-                        <TaskStatusBadge task={task} className="flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-orbital-text leading-snug truncate">{task.title}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] text-orbital-subtle truncate">{prod?.name}</span>
+                          <DueLabel date={task.dueDate} />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-telemetry text-[8px] tracking-[0.08em] text-orbital-subtle truncate">
-                          {production?.name?.toUpperCase()}
-                        </span>
-                        <DueDateLabel date={task.dueDate} />
+                      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
                         <PriorityBadge priority={task.priority} />
+                        <TaskStatusBadge task={task} />
                       </div>
                     </div>
                   )
@@ -179,71 +168,49 @@ export function DashboardPage() {
             )}
           </section>
 
-          {/* ── Active Productions ── */}
+          {/* Active Productions */}
           <section>
-            <HudHeader
-              label="ACTIVE PRODUCTIONS"
+            <SectionHeader
+              label="Active Productions"
               action={isAdminOrSup && (
-                <button
-                  onClick={() => navigate('/productions')}
-                  className="font-telemetry text-[8px] tracking-[0.1em] transition-colors"
-                  style={{ color: '#4d6a82' }}
-                  onMouseEnter={e => { e.currentTarget.style.color = '#60a5fa' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = '#4d6a82' }}
-                >
-                  VIEW ALL ›
+                <button onClick={() => navigate('/productions')}
+                  className="flex items-center gap-0.5 text-[11px] text-orbital-subtle hover:text-orbital-text transition-colors">
+                  View all <ChevronRight size={12} />
                 </button>
               )}
             />
-            {activeProductions.length === 0 ? (
-              <div className="card p-5 text-center">
-                <p className="font-telemetry text-[9px] tracking-[0.18em] text-orbital-subtle">
-                  NO ACTIVE UNITS
-                </p>
+            {activeProds.length === 0 ? (
+              <div className="card px-4 py-5 text-center">
+                <p className="text-xs text-orbital-subtle">No active or incoming productions.</p>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                {activeProductions.slice(0, 5).map(prod => {
+              <div className="card divide-y" style={{ borderColor: '#27282e' }}>
+                {activeProds.slice(0, 5).map(prod => {
                   const prodTasks      = tasks.filter(t => t.productionId === prod.id)
                   const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
-                  const borderColor    = PROD_BORDER[prod.status] || '#475569'
                   const pct            = prodTasks.length > 0 ? (completedTasks / prodTasks.length) * 100 : 0
+                  const accent         = STATUS_COLOR[prod.status] || '#52525b'
                   return (
                     <div
                       key={prod.id}
                       onClick={() => navigate(`/productions/${prod.id}`)}
-                      className="card p-3 cursor-pointer transition-all active:scale-[0.99]"
-                      style={{ borderLeft: `2px solid ${borderColor}` }}
+                      className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-orbital-panel transition-colors"
+                      style={{ borderLeft: `2px solid ${accent}` }}
                     >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div>
-                          <p className="text-sm font-medium text-orbital-text">{prod.name}</p>
-                          <p className="font-telemetry text-[8px] tracking-[0.1em] mt-0.5" style={{ color: '#5a7a92' }}>
-                            {prod.client?.toUpperCase()}
-                          </p>
-                        </div>
-                        <StatusBadge status={prod.status} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-orbital-text truncate">{prod.name}</p>
+                        <p className="text-[11px] text-orbital-subtle mt-0.5 truncate">{prod.client}</p>
                       </div>
-                      <div className="flex items-center justify-between">
-                        {prod.startDate && (
-                          <span className="font-telemetry text-[8px] tracking-[0.08em] text-orbital-subtle">
-                            {format(parseISO(prod.startDate), 'MMM d').toUpperCase()}
-                            {prod.endDate && ` → ${format(parseISO(prod.endDate), 'MMM d').toUpperCase()}`}
-                          </span>
-                        )}
+                      <div className="flex items-center gap-3 flex-shrink-0">
                         {prodTasks.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <div className="w-14 h-0.5 bg-orbital-muted overflow-hidden">
-                              <div className="h-full" style={{
-                                width: `${pct}%`,
-                                background: `linear-gradient(90deg, ${borderColor}, ${borderColor}99)`,
-                              }} />
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-16 h-0.5" style={{ background: '#27282e' }}>
+                              <div className="h-full" style={{ width: `${pct}%`, background: accent }} />
                             </div>
-                            <span className="font-telemetry text-[8px]" style={{ color: '#5a7a92' }}>
-                              {completedTasks}/{prodTasks.length}
-                            </span>
+                            <span className="text-[11px] text-orbital-subtle font-mono">{completedTasks}/{prodTasks.length}</span>
                           </div>
                         )}
+                        <StatusBadge status={prod.status} />
                       </div>
                     </div>
                   )
@@ -252,54 +219,46 @@ export function DashboardPage() {
             )}
           </section>
 
-          {/* ── Upcoming Milestones ── */}
+          {/* Upcoming milestones */}
           <section className="lg:col-span-2">
             <UpcomingMilestones />
           </section>
 
-          {/* ── Needs Verification (admin/sup) ── */}
+          {/* Needs verification */}
           {isAdminOrSup && pendingVerification.length > 0 && (
             <section className="lg:col-span-2">
-              <HudHeader
-                label="NEEDS VERIFICATION"
+              <SectionHeader
+                label="Needs Verification"
                 action={
-                  <span
-                    className="font-telemetry text-[9px] tracking-[0.1em] px-2 py-0.5"
-                    style={{
-                      color: '#fbbf24',
-                      background: 'rgba(245,158,11,0.08)',
-                      border: '1px solid rgba(245,158,11,0.35)',
-                    }}
-                  >
+                  <span className="text-xs px-2 py-0.5"
+                    style={{ color: '#fbbf24', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)' }}>
                     {pendingVerification.length}
                   </span>
                 }
               />
-              <div className="grid sm:grid-cols-2 gap-1.5">
+              <div className="card divide-y" style={{ borderColor: '#27282e' }}>
                 {pendingVerification.map(task => {
-                  const production = productions.find(p => p.id === task.productionId)
+                  const prod = productions.find(p => p.id === task.productionId)
                   return (
                     <div
                       key={task.id}
                       onClick={() => navigate(`/productions/${task.productionId}`)}
-                      className="card p-3 cursor-pointer transition-all active:scale-[0.99]"
-                      style={{ borderLeft: '2px solid rgba(245,158,11,0.6)' }}
+                      className="flex items-start gap-3 px-3 py-2.5 cursor-pointer hover:bg-orbital-panel transition-colors"
+                      style={{ borderLeft: '2px solid rgba(245,158,11,0.5)' }}
                     >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className="text-sm font-medium text-orbital-text">{task.title}</p>
-                        <TaskStatusBadge task={task} className="flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-orbital-text truncate">{task.title}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Avatar userId={task.assigneeId} size="xs" />
+                          <span className="text-[11px] text-orbital-subtle truncate">{prod?.name}</span>
+                        </div>
+                        {task.completionNote && (
+                          <p className="text-[11px] text-orbital-subtle mt-1 line-clamp-1 italic opacity-70">
+                            "{task.completionNote}"
+                          </p>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <Avatar userId={task.assigneeId} size="xs" />
-                        <span className="font-telemetry text-[8px] tracking-[0.08em] text-orbital-subtle">
-                          {production?.name?.toUpperCase()}
-                        </span>
-                      </div>
-                      {task.completionNote && (
-                        <p className="text-xs text-orbital-subtle mt-2 line-clamp-2 italic opacity-70">
-                          "{task.completionNote}"
-                        </p>
-                      )}
+                      <TaskStatusBadge task={task} className="flex-shrink-0 mt-0.5" />
                     </div>
                   )
                 })}
@@ -311,56 +270,4 @@ export function DashboardPage() {
       </div>
     </div>
   )
-}
-
-// ── Telemetry stat card ───────────────────────────────────────────────────────
-function StatCard({ icon: Icon, label, value, color, alert, to }) {
-  const colorHex = {
-    'text-green-400':  '#4ade80',
-    'text-blue-400':   '#60a5fa',
-    'text-purple-400': '#c084fc',
-    'text-red-400':    '#f87171',
-  }[color] || '#60a5fa'
-
-  const cardStyle = alert && value > 0 ? { borderColor: `${colorHex}40` } : {}
-
-  const content = (
-    <div className="relative p-4">
-      {/* Corner L-brackets */}
-      <div className="absolute top-0 left-0 w-3.5 h-3.5 pointer-events-none"
-        style={{ borderTop: `1px solid ${colorHex}60`, borderLeft: `1px solid ${colorHex}60` }} />
-      <div className="absolute bottom-0 right-0 w-3.5 h-3.5 pointer-events-none"
-        style={{ borderBottom: `1px solid ${colorHex}35`, borderRight: `1px solid ${colorHex}35` }} />
-
-      {/* Label row */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-telemetry text-[8px] tracking-[0.2em]" style={{ color: '#5a7a92' }}>
-          {label.toUpperCase()}
-        </span>
-        <Icon size={11} style={{ color: colorHex, opacity: 0.6 }} />
-      </div>
-
-      {/* Readout */}
-      <p className="font-mono font-bold tabular-nums leading-none" style={{ fontSize: 28, color: colorHex }}>
-        {String(value).padStart(2, '0')}
-      </p>
-
-      {/* Bottom accent */}
-      <div className="absolute bottom-0 left-0 right-0 h-px pointer-events-none"
-        style={{ background: `linear-gradient(90deg, ${colorHex}50 0%, transparent 65%)` }} />
-    </div>
-  )
-
-  if (to) {
-    return (
-      <Link
-        to={to}
-        className="card block transition-all hover:-translate-y-px active:scale-[0.97] focus:outline-none"
-        style={cardStyle}
-      >
-        {content}
-      </Link>
-    )
-  }
-  return <div className="card" style={cardStyle}>{content}</div>
 }
