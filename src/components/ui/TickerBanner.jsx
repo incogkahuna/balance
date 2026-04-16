@@ -22,7 +22,7 @@ const DEFAULT_SETTINGS = {
 const SPEED_LABEL = { slow: 'Slow', normal: 'Normal', fast: 'Fast' }
 
 // seconds per logical item (items are padded to ≥12 before the DOM doubling)
-const SPEED_SPX = { slow: 4.5, normal: 2.2, fast: 1.0 }
+const SPEED_SPX = { slow: 8.0, normal: 4.5, fast: 2.2 }
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const TASK_STATUS_CFG = {
