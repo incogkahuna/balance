@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTheme } from '../context/ThemeContext.jsx'
 import { format, parseISO, subMonths, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -14,7 +15,13 @@ const CHART_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ef4444']
 
 export function AnalyticsPage() {
   const { currentUser, productions, tasks } = useApp()
+  const { theme } = useTheme()
   const navigate = useNavigate()
+
+  // Chart colors that flip per theme
+  const axisTickColor  = theme === 'dark' ? '#6e6f78' : '#6b7280'
+  const cursorFillColor = theme === 'dark' ? '#27282e' : '#e5e7eb'
+  const legendTextColor = theme === 'dark' ? '#6e6f78' : '#6b7280'
 
   // Admin only
   if (currentUser?.role !== ROLES.ADMIN) {
@@ -92,10 +99,10 @@ export function AnalyticsPage() {
   }, [productions])
 
   const customTooltipStyle = {
-    backgroundColor: '#161a1f',
-    border: '1px solid #232830',
-    borderRadius: 8,
-    color: '#e8eaf0',
+    backgroundColor: 'var(--orbital-panel)',
+    border: '1px solid var(--orbital-border)',
+    borderRadius: 2,
+    color: 'var(--orbital-text)',
     fontSize: 12,
   }
 
@@ -119,9 +126,9 @@ export function AnalyticsPage() {
             <h3 className="font-semibold text-orbital-text mb-4">Productions per Month</h3>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={productionsPerMonth} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <XAxis dataKey="month" tick={{ fill: '#8b92a4', fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#8b92a4', fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                <Tooltip contentStyle={customTooltipStyle} cursor={{ fill: '#232830' }} />
+                <XAxis dataKey="month" tick={{ fill: axisTickColor, fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: axisTickColor, fontSize: 12 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={customTooltipStyle} cursor={{ fill: cursorFillColor }} />
                 <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Productions" />
               </BarChart>
             </ResponsiveContainer>
@@ -148,7 +155,7 @@ export function AnalyticsPage() {
                   </Pie>
                   <Tooltip contentStyle={customTooltipStyle} />
                   <Legend
-                    formatter={(value) => <span style={{ color: '#8b92a4', fontSize: 12 }}>{value}</span>}
+                    formatter={(value) => <span style={{ color: legendTextColor, fontSize: 12 }}>{value}</span>}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -188,9 +195,9 @@ export function AnalyticsPage() {
             {topEquipment.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={topEquipment} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                  <XAxis type="number" tick={{ fill: '#8b92a4', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: '#8b92a4', fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
-                  <Tooltip contentStyle={customTooltipStyle} cursor={{ fill: '#232830' }} />
+                  <XAxis type="number" tick={{ fill: axisTickColor, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fill: axisTickColor, fontSize: 11 }} axisLine={false} tickLine={false} width={100} />
+                  <Tooltip contentStyle={customTooltipStyle} cursor={{ fill: cursorFillColor }} />
                   <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="Uses" />
                 </BarChart>
               </ResponsiveContainer>

@@ -50,7 +50,7 @@ export function UpcomingMilestones() {
         </span>
       </div>
 
-      <div className="card divide-y" style={{ borderColor: '#27282e' }}>
+      <div className="card divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
         {upcoming.slice(0, 7).map(m => {
           const d       = parseISO(m.date)
           const typeCfg = MILESTONE_TYPE_CONFIG[m.type] || MILESTONE_TYPE_CONFIG['Pre-Production']

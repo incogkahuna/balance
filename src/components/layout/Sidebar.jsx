@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, BarChart3, Users, LogOut } from 'lucide-react'
+import { LayoutDashboard, Film, Calendar, BarChart3, Users, LogOut, Sun, Moon } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useTheme } from '../../context/ThemeContext.jsx'
 import { ROLES } from '../../data/models.js'
 
 const NAV_ITEMS = [
@@ -19,6 +20,7 @@ const ROLE_LABEL = {
 
 export function Sidebar() {
   const { currentUser, logout } = useApp()
+  const { theme, toggleTheme }  = useTheme()
   const navigate = useNavigate()
 
   const visibleItems = NAV_ITEMS.filter(item => {
@@ -31,14 +33,14 @@ export function Sidebar() {
     <aside
       className="hidden lg:flex flex-col w-52 h-screen sticky top-0 flex-shrink-0"
       style={{
-        background: '#111214',
-        borderRight: '1px solid #22232a',
+        background: 'var(--orbital-sidebar-bg)',
+        borderRight: '1px solid var(--orbital-sidebar-border)',
       }}
     >
       {/* ── App identity ── */}
       <div
         className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ borderBottom: '1px solid #22232a' }}
+        style={{ borderBottom: '1px solid var(--orbital-sidebar-border)' }}
       >
         <div>
           <span className="text-sm font-semibold tracking-tight text-orbital-text">
@@ -63,8 +65,8 @@ export function Sidebar() {
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-4 py-2 text-[13px] font-medium transition-colors ${
                 isActive
-                  ? 'text-white bg-white/[0.06]'
-                  : 'text-orbital-subtle hover:text-orbital-text hover:bg-white/[0.03]'
+                  ? 'text-orbital-text bg-black/[0.06] dark:bg-white/[0.06]'
+                  : 'text-orbital-subtle hover:text-orbital-text hover:bg-black/[0.03] dark:hover:bg-white/[0.03]'
               }`
             }
             style={({ isActive }) => ({
@@ -78,10 +80,27 @@ export function Sidebar() {
         ))}
       </nav>
 
+      {/* ── Theme toggle ── */}
+      <div
+        className="px-3 py-2 flex-shrink-0"
+        style={{ borderTop: '1px solid var(--orbital-sidebar-border)' }}
+      >
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-2 px-1 py-1.5 text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark'
+            ? <><Sun size={12} /> Light mode</>
+            : <><Moon size={12} /> Dark mode</>
+          }
+        </button>
+      </div>
+
       {/* ── User panel ── */}
       <div
         className="flex-shrink-0 px-3 py-3"
-        style={{ borderTop: '1px solid #22232a' }}
+        style={{ borderTop: '1px solid var(--orbital-sidebar-border)' }}
       >
         <div className="flex items-center gap-2.5 mb-2 px-1">
           <div

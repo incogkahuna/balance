@@ -21,17 +21,17 @@ export default {
     extend: {
       colors: {
         orbital: {
-          // Charcoal base — not navy, not pure black.
-          // Matches the tone of DaVinci Resolve / Unreal Engine panels.
-          bg:      '#131416',   // page background
-          surface: '#1a1b1e',   // panel / card surface
-          panel:   '#1f2024',   // elevated surface (modals, popovers)
-          border:  '#27282e',   // default 1px separator
-          chrome:  '#353640',   // active / hover border
-          muted:   '#101113',   // recessed / inset areas
-          text:    '#d0d1d5',   // primary readable text
-          subtle:  '#6e6f78',   // secondary / de-emphasised text
-          dim:     '#35363e',   // placeholder / disabled
+          // Values are CSS custom properties — both themes share these names,
+          // :root (light) and .dark override the actual hex at runtime.
+          bg:      'var(--orbital-bg)',
+          surface: 'var(--orbital-surface)',
+          panel:   'var(--orbital-panel)',
+          border:  'var(--orbital-border)',
+          chrome:  'var(--orbital-chrome)',
+          muted:   'var(--orbital-muted)',
+          text:    'var(--orbital-text)',
+          subtle:  'var(--orbital-subtle)',
+          dim:     'var(--orbital-dim)',
         },
         status: {
           incoming:  '#3b82f6',  // blue

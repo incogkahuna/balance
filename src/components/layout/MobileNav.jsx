@@ -24,8 +24,8 @@ export function MobileNav() {
     <nav
       className="lg:hidden fixed bottom-0 left-0 right-0 z-40"
       style={{
-        background: '#111214',
-        borderTop: '1px solid #22232a',
+        background: 'var(--orbital-sidebar-bg)',
+        borderTop: '1px solid var(--orbital-sidebar-border)',
       }}
     >
       <div
@@ -38,7 +38,7 @@ export function MobileNav() {
             to={to}
             className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 transition-colors"
             style={({ isActive }) => ({
-              color: isActive ? '#d0d1d5' : '#52535c',
+              color: isActive ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
               borderTop: isActive ? '1px solid #3b82f6' : '1px solid transparent',
             })}
           >

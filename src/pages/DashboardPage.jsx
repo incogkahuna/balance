@@ -11,7 +11,7 @@ import { TickerBanner } from '../components/ui/TickerBanner.jsx'
 
 // ── Task status → accent colors ───────────────────────────────────────────────
 const TASK_STATUS_COLOR = {
-  [TASK_STATUS.NOT_STARTED]:  '#35363e',
+  [TASK_STATUS.NOT_STARTED]:  'var(--orbital-dim)',
   [TASK_STATUS.IN_PROGRESS]:  '#3b82f6',
   [TASK_STATUS.NEEDS_REVIEW]: '#f59e0b',
   [TASK_STATUS.COMPLETE]:     '#22c55e',
@@ -92,7 +92,7 @@ export function DashboardPage() {
         <div
           className="grid grid-cols-2 lg:grid-cols-4 mb-6"
           style={{
-            border: '1px solid #27282e',
+            border: '1px solid var(--orbital-border)',
             borderRight: 'none',
           }}
         >
@@ -100,15 +100,15 @@ export function DashboardPage() {
             { icon: Film,          label: 'Active',   value: totalActive,    color: '#22c55e', to: `/productions?status=${PRODUCTION_STATUS.ACTIVE}` },
             { icon: Clock,         label: 'Incoming', value: totalIncoming,  color: '#3b82f6', to: `/productions?status=${PRODUCTION_STATUS.INCOMING}` },
             { icon: CheckSquare,   label: 'My Tasks', value: myTasks.length, color: '#a78bfa', to: '/tasks?filter=mine' },
-            { icon: AlertTriangle, label: 'Overdue',  value: totalOverdue,   color: totalOverdue > 0 ? '#ef4444' : '#52525b', to: '/tasks?filter=overdue' },
+            { icon: AlertTriangle, label: 'Overdue',  value: totalOverdue,   color: totalOverdue > 0 ? '#ef4444' : 'var(--orbital-subtle)', to: '/tasks?filter=overdue' },
           ].map(({ icon: Icon, label, value, color, to }) => (
             <Link
               key={label}
               to={to}
               className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-orbital-panel"
               style={{
-                background: '#1a1b1e',
-                borderRight: '1px solid #27282e',
+                background: 'var(--orbital-surface)',
+                borderRight: '1px solid var(--orbital-border)',
               }}
             >
               <Icon size={14} style={{ color, opacity: 0.8 }} className="flex-shrink-0" />
@@ -139,7 +139,7 @@ export function DashboardPage() {
                 <p className="text-xs text-orbital-subtle">No pending tasks.</p>
               </div>
             ) : (
-              <div className="card divide-y" style={{ '--tw-divide-opacity': 1, borderColor: '#27282e' }}>
+              <div className="card divide-y" style={{ '--tw-divide-opacity': 1, borderColor: 'var(--orbital-border)' }}>
                 {myPendingTasks.slice(0, 5).map(task => {
                   const prod        = productions.find(p => p.id === task.productionId)
                   const accentColor = TASK_STATUS_COLOR[task.status] || '#35363e'
@@ -184,7 +184,7 @@ export function DashboardPage() {
                 <p className="text-xs text-orbital-subtle">No active or incoming productions.</p>
               </div>
             ) : (
-              <div className="card divide-y" style={{ borderColor: '#27282e' }}>
+              <div className="card divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
                 {activeProds.slice(0, 5).map(prod => {
                   const prodTasks      = tasks.filter(t => t.productionId === prod.id)
                   const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
@@ -204,7 +204,7 @@ export function DashboardPage() {
                       <div className="flex items-center gap-3 flex-shrink-0">
                         {prodTasks.length > 0 && (
                           <div className="flex items-center gap-1.5">
-                            <div className="w-16 h-0.5" style={{ background: '#27282e' }}>
+                            <div className="w-16 h-0.5" style={{ background: 'var(--orbital-border)' }}>
                               <div className="h-full" style={{ width: `${pct}%`, background: accent }} />
                             </div>
                             <span className="text-[11px] text-orbital-subtle font-mono">{completedTasks}/{prodTasks.length}</span>
@@ -236,7 +236,7 @@ export function DashboardPage() {
                   </span>
                 }
               />
-              <div className="card divide-y" style={{ borderColor: '#27282e' }}>
+              <div className="card divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
                 {pendingVerification.map(task => {
                   const prod = productions.find(p => p.id === task.productionId)
                   return (

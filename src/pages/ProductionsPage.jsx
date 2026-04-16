@@ -164,7 +164,7 @@ export function ProductionsPage() {
           {/* Filter tab strip */}
           <div
             className="flex"
-            style={{ borderBottom: '1px solid #27282e' }}
+            style={{ borderBottom: '1px solid var(--orbital-border)' }}
           >
             {filterTabs.map(s => {
               const isActive = statusFilter === s
@@ -256,9 +256,9 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
     <div
       className="absolute top-full left-0 mt-1 z-50 p-2.5"
       style={{
-        background: '#1a1b1e',
-        border: '1px solid #27282e',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+        background: 'var(--orbital-surface)',
+        border: '1px solid var(--orbital-border)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
       }}
       onClick={e => e.stopPropagation()}
     >
@@ -272,11 +272,11 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
             className="w-6 h-6 flex items-center justify-center transition-opacity hover:opacity-80"
             style={value
               ? { backgroundColor: `${value}28`, border: `1px solid ${value}70` }
-              : { background: '#27282e', border: '1px solid #35363e' }
+              : { background: 'var(--orbital-border)', border: '1px solid var(--orbital-chrome)' }
             }
           >
             {currentColor === value && (
-              <Check size={10} style={{ color: value || '#6e6f78' }} />
+              <Check size={10} style={{ color: value || 'var(--orbital-subtle)' }} />
             )}
           </button>
         ))}
@@ -347,9 +347,9 @@ function ProductionCard({
               onClick={(e) => { e.stopPropagation(); setPickerOpen(o => !o) }}
               className="p-1 transition-colors"
               style={{
-                background: '#1a1b1e',
-                border: '1px solid #27282e',
-                color: '#6e6f78',
+                background: 'var(--orbital-surface)',
+                border: '1px solid var(--orbital-border)',
+                color: 'var(--orbital-subtle)',
               }}
               title="Card colour"
             >
@@ -372,7 +372,7 @@ function ProductionCard({
         )}
         <div
           className="p-1 cursor-grab active:cursor-grabbing"
-          style={{ background: '#1a1b1e', border: '1px solid #27282e', color: '#6e6f78' }}
+          style={{ background: 'var(--orbital-surface)', border: '1px solid var(--orbital-border)', color: 'var(--orbital-subtle)' }}
           title="Drag to reorder"
         >
           <GripVertical size={11} />
@@ -431,12 +431,12 @@ function ProductionCard({
         {/* Row 3: avatars + task progress */}
         <div
           className="px-3 py-2 flex items-center justify-between"
-          style={{ borderTop: '1px solid #27282e' }}
+          style={{ borderTop: '1px solid var(--orbital-border)' }}
         >
           <AvatarGroup userIds={memberIds} size="sm" />
           {prodTasks.length > 0 ? (
             <div className="flex items-center gap-2">
-              <div className="w-20 h-0.5" style={{ background: '#27282e' }}>
+              <div className="w-20 h-0.5" style={{ background: 'var(--orbital-border)' }}>
                 <div
                   className="h-full transition-all duration-300"
                   style={{ width: `${pct}%`, background: borderColor }}

@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { LogOut, Sun, Moon } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useTheme } from '../../context/ThemeContext.jsx'
 
 const ROLE_LABEL = {
   admin:      'Admin',
@@ -10,6 +11,7 @@ const ROLE_LABEL = {
 
 export function TopBar() {
   const { currentUser, logout } = useApp()
+  const { theme, toggleTheme }  = useTheme()
   const navigate = useNavigate()
 
   return (
@@ -17,8 +19,8 @@ export function TopBar() {
       className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4"
       style={{
         height: 44,
-        background: '#111214',
-        borderBottom: '1px solid #22232a',
+        background: 'var(--orbital-sidebar-bg)',
+        borderBottom: '1px solid var(--orbital-sidebar-border)',
       }}
     >
       {/* Left — app name */}
@@ -28,8 +30,15 @@ export function TopBar() {
         <span className="text-xs text-orbital-subtle">/ Orbital</span>
       </div>
 
-      {/* Right — user + logout */}
-      <div className="flex items-center gap-3">
+      {/* Right — theme toggle + user + logout */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={toggleTheme}
+          className="p-1.5 text-orbital-subtle hover:text-orbital-text transition-colors"
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
         <span className="text-xs text-orbital-subtle">
           {ROLE_LABEL[currentUser?.role] || 'Crew'}
         </span>

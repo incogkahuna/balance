@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/balance-icon.svg" />
@@ -11,6 +11,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   </head>
   <body>
+    <!-- Apply theme class before React renders to prevent flash -->
+    <script>(function(){var t=localStorage.getItem('balance_theme')||'dark';if(t==='dark')document.documentElement.classList.add('dark')})()</script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
