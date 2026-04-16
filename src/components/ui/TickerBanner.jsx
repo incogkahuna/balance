@@ -440,78 +440,101 @@ export function TickerBanner() {
   return (
     <>
       <style>{keyframes}</style>
+
+      {/*
+        Outer wrapper: relative, NO overflow:hidden.
+        The gear button + panel live here so they're never clipped.
+      */}
       <div
-        className="w-full overflow-hidden relative select-none"
-        style={{
-          height: 32,
-          background: 'var(--orbital-muted)',
-          borderBottom: '1px solid var(--orbital-border)',
-        }}
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
+        className="w-full relative select-none"
+        style={{ borderBottom: '1px solid var(--orbital-border)' }}
       >
-        {/* Fixed LIVE label */}
+        {/* ── Scrolling strip (overflow:hidden lives only here) ── */}
         <div
-          className="absolute left-0 top-0 bottom-0 z-10 flex items-center gap-2 px-3 flex-shrink-0"
+          className="w-full overflow-hidden"
           style={{
+            height: 32,
             background: 'var(--orbital-muted)',
-            borderRight: '1px solid var(--orbital-border)',
           }}
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
         >
-          <span
-            className="w-1.5 h-1.5 rounded-full bg-green-500 animate-indicator-pulse flex-shrink-0"
+          {/* Fixed LIVE label */}
+          <div
+            className="absolute left-0 top-0 z-10 flex items-center gap-2 px-3 flex-shrink-0"
+            style={{
+              height: 32,
+              background: 'var(--orbital-muted)',
+              borderRight: '1px solid var(--orbital-border)',
+            }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-indicator-pulse flex-shrink-0" />
+            <span className="text-[10px] font-bold tracking-[0.15em] text-orbital-subtle font-mono">
+              LIVE
+            </span>
+          </div>
+
+          {/* Scrolling track — doubled for seamless loop */}
+          <div
+            className="inline-flex items-center h-full whitespace-nowrap"
+            style={{
+              paddingLeft: 68,
+              paddingRight: 36,
+              animation: `ticker-scroll ${duration} linear infinite`,
+              animationPlayState: paused ? 'paused' : 'running',
+            }}
+          >
+            {[...base, ...base]}
+          </div>
+
+          {/* Right fade — purely visual, doesn't block clicks */}
+          <div
+            className="absolute top-0 right-8 pointer-events-none"
+            style={{
+              height: 32,
+              width: 48,
+              background: 'linear-gradient(to left, var(--orbital-muted) 40%, transparent)',
+            }}
           />
-          <span className="text-[10px] font-bold tracking-[0.15em] text-orbital-subtle font-mono">
-            LIVE
-          </span>
+
+          {/* Pause label */}
+          {paused && !showSettings && (
+            <div className="absolute top-0 right-10 pointer-events-none flex items-center" style={{ height: 32 }}>
+              <span className="text-[9px] text-orbital-dim tracking-widest font-mono">PAUSED</span>
+            </div>
+          )}
         </div>
 
-        {/* Scrolling track — doubled for seamless loop */}
-        <div
-          className="inline-flex items-center h-full whitespace-nowrap"
-          style={{
-            paddingLeft: 68,
-            animation: `ticker-scroll ${duration} linear infinite`,
-            animationPlayState: paused ? 'paused' : 'running',
-          }}
-        >
-          {[...base, ...base]}
+        {/* ── Gear button — outside overflow:hidden, anchored bottom-right ── */}
+        {/*
+          Positioned at the right edge of the strip but rendered as a sibling
+          of the strip div, so the dropdown can escape downward freely.
+        */}
+        <div className="absolute top-0 right-0 z-20" style={{ height: 32 }}>
+          <button
+            onClick={() => setShowSettings(s => !s)}
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+            className={`h-full px-2.5 flex items-center justify-center transition-colors ${
+              showSettings
+                ? 'text-orbital-text'
+                : 'text-orbital-dim hover:text-orbital-subtle'
+            }`}
+            style={{ background: 'var(--orbital-muted)' }}
+            title="Ticker settings"
+          >
+            <Settings size={12} />
+          </button>
+
+          {/* Panel drops below the strip — never clipped */}
+          {showSettings && (
+            <SettingsPanel
+              settings={mergedSettings}
+              onChange={setSettings}
+              onClose={() => setShowSettings(false)}
+            />
+          )}
         </div>
-
-        {/* Right controls area — settings button + fade */}
-        <div
-          className="absolute top-0 right-0 bottom-0 flex items-center z-10"
-          style={{ background: 'linear-gradient(to left, var(--orbital-muted) 60%, transparent)' }}
-        >
-          <div className="relative mr-1">
-            <button
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); setShowSettings(s => !s) }}
-              onMouseEnter={() => setPaused(true)}
-              className={`p-1.5 transition-colors flex items-center justify-center ${
-                showSettings ? 'text-orbital-text' : 'text-orbital-dim hover:text-orbital-subtle'
-              }`}
-              title="Ticker settings"
-            >
-              <Settings size={12} />
-            </button>
-
-            {showSettings && (
-              <SettingsPanel
-                settings={mergedSettings}
-                onChange={setSettings}
-                onClose={() => setShowSettings(false)}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Pause label */}
-        {paused && !showSettings && (
-          <div className="absolute top-0 right-10 bottom-0 flex items-center z-10 pointer-events-none">
-            <span className="text-[9px] text-orbital-dim tracking-widest font-mono">PAUSED</span>
-          </div>
-        )}
       </div>
     </>
   )
