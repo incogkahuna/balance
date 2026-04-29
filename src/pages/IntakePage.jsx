@@ -48,27 +48,22 @@ export function IntakePage() {
   const createdIdRef = useRef(null)
 
   // ── Stage: Input → Parsing ─────────────────────────────────────────────────
+  // Parse eagerly here — before the animation — so parsingSummary and extracted
+  // fields are fully populated when ParsingStage renders and displays them.
   const handleInputsReady = useCallback((inputs) => {
-    setDraft(d => ({ ...d, inputs }))
+    const { extracted, contacts, concerns, parsingSummary } = mockParseInputs(inputs)
+    const qs = generateQuestions(extracted, {})
+    // Reset answers/edits when re-submitting inputs so questions regenerate cleanly
+    setDraft(d => ({ ...d, inputs, extracted, contacts, concerns, parsingSummary, answers: {}, edits: {} }))
+    setQuestions(qs)
     setStage('parsing')
   }, [])
 
   // ── Stage: Parsing complete ────────────────────────────────────────────────
+  // Parsing already happened in handleInputsReady — just advance the stage.
   const handleParsingComplete = useCallback(() => {
-    setDraft(prev => {
-      const { extracted, contacts, concerns, parsingSummary } = mockParseInputs(prev.inputs)
-      const qs = generateQuestions(extracted, prev.answers)
-      setQuestions(qs)
-      const updated = { ...prev, extracted, contacts, concerns, parsingSummary }
-
-      // Skip questions if none needed
-      setTimeout(() => {
-        setStage(qs.length > 0 ? 'questions' : 'review')
-      }, 0)
-
-      return updated
-    })
-  }, [])
+    setStage(questions.length > 0 ? 'questions' : 'review')
+  }, [questions.length])
 
   // ── Stage: Q&A ────────────────────────────────────────────────────────────
   const handleAnswer = useCallback((field, value) => {
@@ -105,25 +100,18 @@ export function IntakePage() {
   }, [])
 
   // ── Stage: Finalize → create production ───────────────────────────────────
+  // Read draft directly (not via updater) so context writes don't run twice
+  // in React Strict Mode. All setProductions calls are batched by React 18.
   const handleFinalize = useCallback(() => {
+    const { production, tasks, milestones } = buildProductionFromDraft(draft, currentUser)
+    createdIdRef.current = production.id
+
+    addProduction(production)
+    tasks.forEach(task => addTask(task))
+    milestones.forEach(m => addMilestone(production.id, m))
+
     setStage('finalizing')
-
-    setDraft(prev => {
-      const { production, tasks, milestones } = buildProductionFromDraft(prev, currentUser)
-      createdIdRef.current = production.id
-
-      // Persist production
-      addProduction(production)
-
-      // Persist tasks
-      tasks.forEach(task => addTask(task))
-
-      // Persist milestones via _updateRoadmap (addMilestone in context)
-      milestones.forEach(m => addMilestone(production.id, m))
-
-      return prev
-    })
-  }, [currentUser, addProduction, addTask, addMilestone])
+  }, [draft, currentUser, addProduction, addTask, addMilestone])
 
   const handleRedirect = useCallback(() => {
     if (createdIdRef.current) {

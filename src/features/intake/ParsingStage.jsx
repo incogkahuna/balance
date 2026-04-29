@@ -11,11 +11,15 @@ const STEPS = [
   { id: 6, text: 'Building your draft',            delay: 2100 },
 ]
 
-const TOTAL_DURATION = 2700 // ms before advancing
+const DONE_AT = 2200  // when the spinner flips to checkmark
 
 export function ParsingStage({ parsingSummary = [], onComplete }) {
   const [visibleSteps, setVisibleSteps] = useState([])
   const [done,         setDone]         = useState(false)
+
+  // Longer pause when "Found" panel has content so the user can read it
+  const hasFindings = parsingSummary.length > 0
+  const advanceAt   = hasFindings ? 3800 : 2800
 
   useEffect(() => {
     const timers = []
@@ -26,16 +30,18 @@ export function ParsingStage({ parsingSummary = [], onComplete }) {
       }, step.delay))
     })
 
-    // Mark complete + advance
+    // Flip to complete state
     timers.push(setTimeout(() => {
       setDone(true)
-    }, TOTAL_DURATION - 200))
+    }, DONE_AT))
 
+    // Advance stage
     timers.push(setTimeout(() => {
       onComplete()
-    }, TOTAL_DURATION))
+    }, advanceAt))
 
     return () => timers.forEach(clearTimeout)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onComplete])
 
   return (
@@ -64,7 +70,10 @@ export function ParsingStage({ parsingSummary = [], onComplete }) {
           {done ? 'Analysis complete' : 'Analysing your inputs…'}
         </h2>
         <p className="text-sm text-orbital-subtle mt-1">
-          {done ? 'Building your draft now' : 'Finding everything I can'}
+          {done
+            ? (hasFindings ? 'Here\'s what I found' : 'Building your draft now')
+            : 'Finding everything I can'
+          }
         </p>
       </div>
 
