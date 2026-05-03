@@ -1,9 +1,10 @@
 import { Component } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import { AppProvider } from './context/AppContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { AppShell } from './components/layout/AppShell.jsx'
-import { LoginPage } from './pages/LoginPage.jsx'
+import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage.jsx'
 import { ProductionsPage } from './pages/ProductionsPage.jsx'
 import { ProductionDetailPage } from './pages/ProductionDetailPage.jsx'
@@ -53,6 +54,7 @@ function wrap(el) {
 export default function App() {
   return (
     <ThemeProvider>
+    <AuthProvider>
     <AppProvider>
       <BrowserRouter>
         <Routes>
@@ -71,6 +73,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AppProvider>
+    </AuthProvider>
     </ThemeProvider>
   )
 }

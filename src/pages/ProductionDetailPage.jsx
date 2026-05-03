@@ -520,6 +520,7 @@ function PackageTab({ production, readOnly, onUpdate }) {
         pkg={production.instructionPackage}
         onChange={onUpdate}
         readOnly={readOnly}
+        scope={{ kind: 'production', id: production.id }}
       />
     </div>
   )
