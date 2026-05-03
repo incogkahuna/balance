@@ -10,6 +10,7 @@ import { Modal } from '../../components/ui/Modal.jsx'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx'
 import { ContractorForm } from './ContractorForm.jsx'
 import { StatusBadge } from '../../components/ui/StatusBadge.jsx'
+import { ContractorPhoto } from '../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
 const AVAIL_STYLES = {
@@ -49,10 +50,12 @@ export function ContractorProfile({ contractor, onClose, onDeleted }) {
         {/* Header */}
         <div className="flex items-start gap-4">
           <div className="w-16 h-16 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center bg-orbital-muted text-orbital-text font-bold text-xl border border-orbital-border">
-            {contractor.photoUrl
-              ? <img src={contractor.photoUrl} alt={contractor.name} className="w-full h-full object-cover" />
-              : <span>{contractor.name.charAt(0).toUpperCase()}</span>
-            }
+            <ContractorPhoto
+              photoUrl={contractor.photoUrl}
+              alt={contractor.name}
+              className="w-full h-full object-cover"
+              fallback={<span>{contractor.name.charAt(0).toUpperCase()}</span>}
+            />
           </div>
 
           <div className="flex-1 min-w-0">

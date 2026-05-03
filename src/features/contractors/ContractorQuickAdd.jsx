@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Search, X, Plus } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { AVAILABILITY_STATUS, CONTRACTOR_FLAG } from '../../data/models.js'
+import { ContractorPhoto } from '../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
 const AVAIL_DOT = {
@@ -81,10 +82,12 @@ export function ContractorQuickAdd({ assignedMembers, onToggle, onSetRole }) {
                 >
                   {/* Avatar */}
                   <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center bg-orbital-muted text-orbital-text font-semibold text-xs">
-                    {c.photoUrl
-                      ? <img src={c.photoUrl} alt={c.name} className="w-full h-full object-cover" />
-                      : c.name.charAt(0).toUpperCase()
-                    }
+                    <ContractorPhoto
+                      photoUrl={c.photoUrl}
+                      alt={c.name}
+                      className="w-full h-full object-cover"
+                      fallback={<span>{c.name.charAt(0).toUpperCase()}</span>}
+                    />
                   </div>
 
                   <div className="flex-1 min-w-0">

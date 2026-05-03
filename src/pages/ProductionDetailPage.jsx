@@ -23,6 +23,9 @@ import { ProductionBible } from '../features/productionBible/ProductionBible.jsx
 import { TeamAssignment } from '../features/productions/team/TeamAssignment.jsx'
 import { RoadmapTab } from '../features/productions/roadmap/RoadmapTab.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
+import { StoredImage } from '../components/files/StoredImage.tsx'
+import { ContractorPhoto } from '../components/files/ContractorPhoto.tsx'
+import { BUCKETS } from '../lib/storage.ts'
 import clsx from 'clsx'
 
 // Bible tab is conditionally appended for Admin/Supervisor — built below
@@ -157,10 +160,12 @@ export function ProductionDetailPage() {
                       className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden flex-shrink-0"
                       style={!sm.photoUrl ? { backgroundColor: sm.color || '#64748b' } : {}}
                     >
-                      {sm.photoUrl
-                        ? <img src={sm.photoUrl} alt={sm.name} className="w-full h-full object-cover" />
-                        : (sm.avatar || sm.name?.charAt(0).toUpperCase())
-                      }
+                      <ContractorPhoto
+                        photoUrl={sm.photoUrl}
+                        alt={sm.name}
+                        className="w-full h-full object-cover"
+                        fallback={<>{sm.avatar || sm.name?.charAt(0).toUpperCase()}</>}
+                      />
                     </div>
                     <span className="text-xs font-medium text-orbital-text">{sm.name}</span>
                     <span className="text-xs text-blue-400 font-medium">Stage Manager</span>
@@ -182,10 +187,12 @@ export function ProductionDetailPage() {
                         className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden"
                         style={!person.photoUrl ? { backgroundColor: person.color || '#64748b' } : {}}
                       >
-                        {person.photoUrl
-                          ? <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
-                          : (person.avatar || person.name?.charAt(0).toUpperCase())
-                        }
+                        <ContractorPhoto
+                          photoUrl={person.photoUrl}
+                          alt={person.name}
+                          className="w-full h-full object-cover"
+                          fallback={<>{person.avatar || person.name?.charAt(0).toUpperCase()}</>}
+                        />
                       </div>
                       <span className="text-xs font-medium text-orbital-text">{person.name}</span>
                       {roleOnProduction && (
@@ -206,10 +213,12 @@ export function ProductionDetailPage() {
                         className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden"
                         style={!person.photoUrl ? { backgroundColor: person.color || '#64748b' } : {}}
                       >
-                        {person.photoUrl
-                          ? <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
-                          : (person.avatar || person.name?.charAt(0).toUpperCase())
-                        }
+                        <ContractorPhoto
+                          photoUrl={person.photoUrl}
+                          alt={person.name}
+                          className="w-full h-full object-cover"
+                          fallback={<>{person.avatar || person.name?.charAt(0).toUpperCase()}</>}
+                        />
                       </div>
                       <span className="text-xs font-medium text-orbital-text">{person.name}</span>
                       {role && <span className="text-xs text-orbital-subtle">{role}</span>}
@@ -638,12 +647,22 @@ function AddonCard({ addon, canDelete, onDelete }) {
           {showPhotos && (
             <div className="grid grid-cols-3 gap-2 mt-2">
               {addon.damagePhotos.map(photo => (
-                <img
-                  key={photo.id}
-                  src={photo.url}
-                  alt={photo.name}
-                  className="w-full h-20 object-cover rounded-lg border border-orbital-border"
-                />
+                photo.storage_path ? (
+                  <StoredImage
+                    key={photo.id}
+                    bucket={BUCKETS.damagePhotos}
+                    path={photo.storage_path}
+                    alt={photo.name || 'Damage photo'}
+                    className="w-full h-20 object-cover rounded-lg border border-orbital-border"
+                  />
+                ) : (
+                  <img
+                    key={photo.id}
+                    src={photo.url}
+                    alt={photo.name}
+                    className="w-full h-20 object-cover rounded-lg border border-orbital-border"
+                  />
+                )
               ))}
             </div>
           )}

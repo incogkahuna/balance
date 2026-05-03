@@ -4,6 +4,7 @@ import { useApp } from '../../../context/AppContext.jsx'
 import { AVAILABILITY_STATUS } from '../../../data/models.js'
 import { ContractorSelectSheet } from './ContractorSelectSheet.jsx'
 import { AvailabilityPrompt } from './AvailabilityPrompt.jsx'
+import { ContractorPhoto } from '../../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
 const AVAIL_STYLES = {
@@ -53,17 +54,16 @@ export function StageManagerSlot({ production, isAdminOrSup }) {
         {stageManager ? (
           <div className="flex items-center gap-3">
             {/* Avatar */}
-            {stageManager.photoUrl ? (
-              <img
-                src={stageManager.photoUrl}
-                alt={stageManager.name}
-                className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-orbital-muted flex items-center justify-center text-sm font-bold text-orbital-text flex-shrink-0">
-                {stageManager.name.charAt(0).toUpperCase()}
-              </div>
-            )}
+            <ContractorPhoto
+              photoUrl={stageManager.photoUrl}
+              alt={stageManager.name}
+              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+              fallback={
+                <div className="w-10 h-10 rounded-full bg-orbital-muted flex items-center justify-center text-sm font-bold text-orbital-text flex-shrink-0">
+                  {stageManager.name.charAt(0).toUpperCase()}
+                </div>
+              }
+            />
 
             {/* Info */}
             <div className="flex-1 min-w-0">

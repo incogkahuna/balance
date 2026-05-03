@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { AVAILABILITY_STATUS } from '../../../data/models.js'
+import { ContractorPhoto } from '../../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
 const AVAIL_STYLES = {
@@ -34,17 +35,16 @@ export function AssignedTeamMember({ assignment, productionId, isAdminOrSup }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg bg-orbital-muted border border-orbital-border group">
       {/* Avatar */}
-      {contractor.photoUrl ? (
-        <img
-          src={contractor.photoUrl}
-          alt={contractor.name}
-          className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-        />
-      ) : (
-        <div className="w-8 h-8 rounded-full bg-orbital-surface flex items-center justify-center text-sm font-bold text-orbital-text flex-shrink-0">
-          {contractor.name.charAt(0).toUpperCase()}
-        </div>
-      )}
+      <ContractorPhoto
+        photoUrl={contractor.photoUrl}
+        alt={contractor.name}
+        className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+        fallback={
+          <div className="w-8 h-8 rounded-full bg-orbital-surface flex items-center justify-center text-sm font-bold text-orbital-text flex-shrink-0">
+            {contractor.name.charAt(0).toUpperCase()}
+          </div>
+        }
+      />
 
       {/* Info */}
       <div className="flex-1 min-w-0">

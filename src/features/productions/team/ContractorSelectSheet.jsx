@@ -3,6 +3,7 @@ import { Search, X, Star } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { AVAILABILITY_STATUS, CONTRACTOR_FLAG } from '../../../data/models.js'
 import { AvailabilityPrompt } from './AvailabilityPrompt.jsx'
+import { ContractorPhoto } from '../../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
 const AVAIL_STYLES = {
@@ -86,17 +87,16 @@ export function ContractorSelectSheet({ production, mode = 'assign', onAssign, o
                 className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-orbital-muted transition-colors text-left group"
               >
                 {/* Avatar */}
-                {contractor.photoUrl ? (
-                  <img
-                    src={contractor.photoUrl}
-                    alt={contractor.name}
-                    className="w-9 h-9 rounded-full object-cover flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-orbital-muted flex items-center justify-center text-sm font-bold text-orbital-text flex-shrink-0">
-                    {contractor.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <ContractorPhoto
+                  photoUrl={contractor.photoUrl}
+                  alt={contractor.name}
+                  className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+                  fallback={
+                    <div className="w-9 h-9 rounded-full bg-orbital-muted flex items-center justify-center text-sm font-bold text-orbital-text flex-shrink-0">
+                      {contractor.name.charAt(0).toUpperCase()}
+                    </div>
+                  }
+                />
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">

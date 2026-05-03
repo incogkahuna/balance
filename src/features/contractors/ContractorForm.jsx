@@ -1,15 +1,20 @@
 import { useState, useRef } from 'react'
-import { Camera, X } from 'lucide-react'
+import { Camera } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import {
   ROLES, AVAILABILITY_STATUS, EXPERIENCE_LEVEL, CONTRACTOR_FLAG,
   createContractor,
 } from '../../data/models.js'
+import { ContractorPhoto } from '../../components/files/ContractorPhoto.tsx'
+import { uploadFile, BUCKETS, paths } from '../../lib/storage.ts'
 
 export function ContractorForm({ initial, onSubmit, onCancel }) {
   const { currentUser } = useApp()
   const isAdmin = currentUser?.role === ROLES.ADMIN
   const photoInputRef = useRef(null)
+
+  // Stable id — needed in the storage path before submit.
+  const [contractorId] = useState(() => initial?.id || crypto.randomUUID())
 
   const [form, setForm] = useState({
     name:              initial?.name || '',
@@ -32,20 +37,40 @@ export function ContractorForm({ initial, onSubmit, onCancel }) {
     ecPhone:           initial?.emergencyContact?.phone || '',
   })
 
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState(null)
+
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
-  const handlePhoto = (e) => {
+  const handlePhoto = async (e) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => set('photoUrl', ev.target.result)
-    reader.readAsDataURL(file)
+
+    setUploadError(null)
+    setUploading(true)
+    try {
+      // Upsert because the path is deterministic per contractor — replacing
+      // the photo overwrites the existing object instead of leaving orphans.
+      const path = paths.contractorPhoto(contractorId, file.name)
+      await uploadFile(BUCKETS.contractorPhotos, path, file, {
+        contentType: file.type,
+        upsert: true,
+      })
+      set('photoUrl', path)
+    } catch (err) {
+      console.error('[ContractorForm] photo upload failed:', err)
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
     const contractor = createContractor({
       ...(initial || {}),
+      id:             contractorId,
       name:           form.name.trim(),
       photoUrl:       form.photoUrl,
       phone:          form.phone.trim(),
@@ -76,22 +101,25 @@ export function ContractorForm({ initial, onSubmit, onCancel }) {
       <div className="flex items-center gap-4">
         <div
           className="w-16 h-16 rounded-full bg-orbital-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-orbital-border cursor-pointer"
-          onClick={() => photoInputRef.current?.click()}
+          onClick={() => !uploading && photoInputRef.current?.click()}
         >
-          {form.photoUrl
-            ? <img src={form.photoUrl} alt="Photo" className="w-full h-full object-cover" />
-            : <Camera size={20} className="text-orbital-subtle" />
-          }
+          <ContractorPhoto
+            photoUrl={form.photoUrl}
+            alt="Photo"
+            className="w-full h-full object-cover"
+            fallback={<Camera size={20} className="text-orbital-subtle" />}
+          />
         </div>
         <div>
           <button
             type="button"
             onClick={() => photoInputRef.current?.click()}
-            className="btn-ghost text-xs"
+            disabled={uploading}
+            className="btn-ghost text-xs disabled:opacity-50"
           >
-            {form.photoUrl ? 'Change photo' : 'Add photo'}
+            {uploading ? 'Uploading...' : (form.photoUrl ? 'Change photo' : 'Add photo')}
           </button>
-          {form.photoUrl && (
+          {form.photoUrl && !uploading && (
             <button
               type="button"
               onClick={() => set('photoUrl', null)}
@@ -100,7 +128,10 @@ export function ContractorForm({ initial, onSubmit, onCancel }) {
               Remove
             </button>
           )}
-          <p className="text-xs text-orbital-subtle mt-1">Optional. Stores locally.</p>
+          <p className="text-xs text-orbital-subtle mt-1">Optional. Stored in Supabase.</p>
+          {uploadError && (
+            <p className="text-xs text-red-400 mt-1">{uploadError}</p>
+          )}
         </div>
         <input
           ref={photoInputRef}
@@ -321,10 +352,10 @@ export function ContractorForm({ initial, onSubmit, onCancel }) {
       )}
 
       <div className="flex gap-3 pt-2">
-        <button type="button" onClick={onCancel} className="btn-secondary flex-1">
+        <button type="button" onClick={onCancel} className="btn-secondary flex-1" disabled={uploading}>
           Cancel
         </button>
-        <button type="submit" className="btn-primary flex-1">
+        <button type="submit" className="btn-primary flex-1" disabled={uploading}>
           {initial?.id ? 'Save Changes' : 'Add Contractor'}
         </button>
       </div>
