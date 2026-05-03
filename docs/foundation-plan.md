@@ -106,13 +106,17 @@ By end of Phase 2: AppContext mostly gone (or just orchestrates). All studio dat
 
 **Goal:** Real files. No more base64.
 
-1. Supabase Storage buckets: `instruction-packages`, `task-completion-photos`, `contractor-photos`, `damage-photos`
-2. Bucket-level RLS (production-scoped)
-3. Replace base64 fields with `storage_path` columns
-4. Upload component with progress UI
-5. Mobile camera capture (`<input type="file" accept="image/*" capture="environment">`)
-6. Signed URL generation for reads
-7. One-time migration of any existing base64 data (or drop it — likely simpler)
+1. ✅ Supabase Storage buckets: `instruction-packages`, `task-completion-photos`, `contractor-photos`, `damage-photos`, `voice-memos` — created in `phase3_storage` migration with tiered RLS (admin-only write vs crew-writable)
+2. ✅ Bucket-level RLS (production-scoped reads, owner/admin update/delete)
+3. ✅ Shared upload primitives in `src/lib/storage.ts` (BUCKETS, paths, uploadFile, signedUrl(s), deleteFile) and components in `src/components/files/` (FileUploadButton, StoredImage, StoredFileLink, ContractorPhoto)
+4. ✅ Mobile camera capture wired in upload sites (`capture="environment"`)
+5. ✅ Wired surfaces: InstructionPackage (PDFs/images), TaskCard (completion photos), AddonForm (damage photos), ContractorForm (headshots)
+6. ⏳ Cross-device verification check-in still pending — needs user-driven Test 1 (PDF upload + cross-tab refresh) and Test 2 (task photo cross-device)
+
+**Implementation notes:**
+- Photos in JSONB sub-objects (task `completionPhotos`, addon `damagePhotos`) carry `storage_path` alongside legacy `url`/base64 — display sites branch on which is present.
+- Contractor headshots reuse the existing `photo_url` column to store storage paths going forward; legacy `data:`/`http(s)` values still render via `<img>` thanks to the shared `ContractorPhoto` component. Sample data has `photoUrl: null`, so no real legacy data to migrate.
+- Path conventions documented in the `phase3_storage` migration header.
 
 **✅ Check-in:** Upload PDF on desktop → open on phone. Take damage photo on phone → see on desktop. Verify storage quotas.
 
