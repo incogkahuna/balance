@@ -356,7 +356,8 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                       />
                       <button
                         onClick={() => setCompletionPhoto(null)}
-                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors"
+                        aria-label="Remove photo"
+                        className="absolute top-2 right-2 w-9 h-9 sm:w-7 sm:h-7 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors"
                       >
                         <X size={14} className="text-white" />
                       </button>
@@ -478,7 +479,8 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                     />
                     <button
                       onClick={() => setCommentPhoto(null)}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors"
+                      aria-label="Remove photo"
+                      className="absolute top-1.5 right-1.5 w-9 h-9 sm:w-6 sm:h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors"
                     >
                       <X size={11} className="text-white" />
                     </button>
@@ -504,10 +506,11 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                     <button
                       type="button"
                       onClick={() => commentPhotoRef.current?.click()}
-                      className="absolute right-2 bottom-2 p-1.5 rounded-lg text-orbital-subtle hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                      className="absolute right-1 bottom-1 w-9 h-9 flex items-center justify-center rounded-lg text-orbital-subtle hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
                       title="Attach photo"
+                      aria-label="Attach photo"
                     >
-                      <Camera size={15} />
+                      <Camera size={16} />
                     </button>
                   </div>
                   <button

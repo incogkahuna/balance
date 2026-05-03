@@ -231,13 +231,13 @@ export function ProductionDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 overflow-x-auto pb-px">
+        <div className="flex gap-1 mb-6 overflow-x-auto pb-px -mx-4 px-4 lg:mx-0 lg:px-0">
           {TABS.map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={clsx(
-                'px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors',
+                'px-4 py-3 lg:py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors',
                 tab === t
                   ? 'bg-blue-600/15 text-blue-400'
                   : 'text-orbital-subtle hover:text-orbital-text hover:bg-orbital-muted'
