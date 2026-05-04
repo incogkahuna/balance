@@ -160,13 +160,18 @@ By end of Phase 2: AppContext mostly gone (or just orchestrates). All studio dat
 
 **Goal:** Works on a phone for crew checking tasks on-set.
 
-1. Audit every page at 375px width — inventory issues
-2. Bottom navigation bar for primary flows
-3. Touch target audit — minimum 44×44px
-4. Task card swipe actions (left = complete, right = blocked)
-5. Camera capture for completion photos
-6. Mobile variant of the ticker
-7. "What do I need to do today?" thumb-only quick view
+1. ⏳ Audit every page at 375px width — Dashboard / Productions / Tasks / ProductionDetail / Contractors covered; Schedule (Gantt) and IntakePage deferred (admin flows, lower priority for crew)
+2. ✅ Bottom navigation bar — `MobileNav` exists, `<lg:hidden>` sidebar handles desktop; AppShell pb on mobile now clears MobileNav + safe-area on notched iPhones
+3. ✅ Touch target audit — TopBar 44×44, Modal close 44×44, button classes get a mobile-only @media padding bump (~40px), tab strips py-3, filter chips py-2/2.5, photo-remove X buttons get a 36px hit area on mobile
+4. ⏭️ Task card swipe actions — deferred (touch gesture surface is finicky; current expand-to-action UX is workable)
+5. ✅ Camera capture — already wired in Phase 3 (`capture="environment"` on file inputs)
+6. ⏭️ Mobile variant of the ticker — deferred (Danny redesigned the ticker in recent commits; not restructuring without his input)
+7. ✅ Today-focused crew dashboard — `myPendingTasks` now sorts by due date asc with overdue first and undated last, so the next thing to do floats to the top. Visual urgency via the existing `DueLabel` (Today / Tomorrow / Overdue).
+
+**iOS-specific fixes shipped:**
+- `font-size: 16px !important` on `input/select/textarea` below 768px — stops Safari's zoom-and-scroll dance on focus
+- `viewport-fit=cover` so safe-area insets resolve at the edges
+- `env(safe-area-inset-top)` on TopBar, `env(safe-area-inset-bottom)` on MobileNav and AppShell main pb
 
 **✅ Check-in:** Walk full task lifecycle on a real phone — log in, see assignments, complete with photo, comment, log out.
 
