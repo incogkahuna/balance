@@ -127,16 +127,27 @@ By end of Phase 2: AppContext mostly gone (or just orchestrates). All studio dat
 **Goal:** Intake automation becomes the actual differentiator. Two input paths feed the same Claude pipeline.
 
 ### 4a — Server-side proxies (½ day)
-- Edge Function `transcribe`: audio blob → Whisper → transcript (keeps OpenAI key server-side)
-- Edge Function `parse-production-intake`: transcript or email body → Claude with structured output → typed JSON matching production shape
-- Edge Function `email-webhook`: receives inbound emails, extracts body + attachments, calls parse function
-- CORS, auth check, rate limiting
+- ✅ Edge Function `transcribe` (Whisper proxy): `supabase/functions/transcribe/index.ts`. Verifies the caller's Supabase session, forwards audio to OpenAI Whisper, returns `{ transcript, durationSec }`. CORS preflight, auth check, 25 MB cap, 180s recording ceiling enforced client-side to stay under the 150s Edge timeout.
+- ⏳ Edge Function `parse-production-intake` (Claude proxy): not yet written
+- ⏳ Edge Function `email-webhook`: not yet written
+- ⏳ Rate limiting
+
+**Deploy steps for `transcribe` (when ready):**
+```bash
+supabase login
+supabase link --project-ref ectyohuqgpnwivpjpuga
+supabase secrets set OPENAI_API_KEY=sk-...
+supabase functions deploy transcribe
+```
+Full notes in `supabase/functions/README.md`.
 
 ### 4b — Voice intake (1 day)
-- Replace Web Speech API with MediaRecorder → upload → Whisper
-- Replace `mockParseInputs` with real Claude call
-- Streaming UX: show parsing as Claude streams structured output
-- Editable review stage
+- ✅ `MediaRecorder` recorder (`src/hooks/useVoiceRecorder.ts`) with permission handling, live duration counter, automatic mic-stream cleanup
+- ✅ Shared `<VoiceRecorder>` component (`src/components/voice/VoiceRecorder.tsx`) — record → preview → transcribe-via-Whisper. Handles auth-expired and "function not deployed" errors with readable messages.
+- ✅ `InputStage` rewired: Web Speech API removed; transcript fills an editable textarea so the user can fix errors before adding to intake. Whisper prompt seeds with studio vocabulary (`STUDIO_VOCAB_PROMPT`) — grow this list as new recurring proper nouns surface.
+- ⏳ Replace `mockParseInputs` with real Claude call
+- ⏳ Streaming UX: show parsing as Claude streams structured output
+- ⏳ Editable review stage (already exists; needs to wire to real data)
 
 ### 4c — Email intake (1 day)
 - Inbound email handling: `intake@<domain>` (via Cloudflare Email Routing → Worker → Supabase Edge Function, or via SendGrid/Postmark inbound)
