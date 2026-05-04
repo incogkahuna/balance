@@ -183,12 +183,18 @@ By end of Phase 2: AppContext mostly gone (or just orchestrates). All studio dat
 
 **Goal:** Real URL. Real users. Real data.
 
-1. Cloudflare Pages project linked to GitHub repo
-2. Environment variables in Cloudflare dashboard
-3. Production Supabase project (separate from dev — point hosting at it)
-4. Custom domain (e.g. `balance.<orbital-domain>`)
-5. Sentry or similar for error tracking — replaces silent PageBoundary failures
-6. Initial real user accounts seeded
+1. ⏳ Cloudflare Pages project linked to GitHub repo
+2. ⏳ Environment variables in Cloudflare dashboard (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
+3. ⏳ Production Supabase project (separate from dev — point hosting at it)
+4. ⏳ Custom domain (e.g. `balance.<orbital-domain>`)
+5. ⏳ Sentry or similar for error tracking — replaces silent PageBoundary failures
+6. ⏳ Initial real user accounts seeded
+
+**Repo-level deploy prep that's already in place:**
+- ✅ `public/_redirects` with the SPA fallback rule (`/* /index.html 200`) so direct hits and refreshes on client routes don't 404
+- ✅ `public/_headers` — long cache for `/assets/*` (Vite hashes filenames), no-cache for `index.html`, baseline security headers (`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`)
+- ✅ Bundle code-split: `AnalyticsPage` (Recharts, ~108kB gzip), `SchedulePage`, and `IntakePage` are lazy-loaded — initial JS dropped from ~296kB gzip to ~172kB
+- ✅ `PageBoundary` already wraps every route in `App.jsx` so a render error in one page doesn't take down the shell
 
 **✅ Check-in:** Studio team can log in at the real domain on the device they'll use day-to-day. Watch them use it for 15 minutes, triage issues.
 
