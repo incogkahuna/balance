@@ -93,7 +93,7 @@ export function TasksPage() {
               key={key}
               onClick={() => setFilter(key)}
               className={clsx(
-                'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors active:scale-[0.97]',
+                'flex items-center gap-1.5 px-3 py-2.5 lg:py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors active:scale-[0.97]',
                 filter === key
                   ? 'bg-blue-600 text-white'
                   : 'bg-orbital-surface border border-orbital-border text-orbital-subtle hover:text-orbital-text'

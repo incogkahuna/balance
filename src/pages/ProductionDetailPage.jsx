@@ -82,7 +82,7 @@ export function ProductionDetailPage() {
         {/* Back */}
         <button
           onClick={() => navigate('/productions')}
-          className="flex items-center gap-1.5 text-sm text-orbital-subtle hover:text-orbital-text mb-5 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-orbital-subtle hover:text-orbital-text mb-5 transition-colors -ml-1.5 px-1.5 py-2 -mt-2 lg:mt-0"
         >
           <ArrowLeft size={16} /> All Productions
         </button>
