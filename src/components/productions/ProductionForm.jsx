@@ -137,7 +137,7 @@ export function ProductionForm({ initial, onSubmit, onCancel }) {
           {USERS.map(user => {
             const assigned = form.assignedMembers.find(m => m.userId === user.id)
             return (
-              <div key={user.id} className="flex items-center gap-3">
+              <div key={user.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                 <button
                   type="button"
                   onClick={() => toggleMember(user.id)}
@@ -165,7 +165,7 @@ export function ProductionForm({ initial, onSubmit, onCancel }) {
                 </button>
                 {assigned && (
                   <input
-                    className="input w-40 text-xs"
+                    className="input w-full sm:w-40"
                     placeholder="Role on this job"
                     value={assigned.roleOnProduction}
                     onChange={e => setMemberRole(user.id, e.target.value)}
