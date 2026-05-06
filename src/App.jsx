@@ -12,6 +12,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage.jsx'
 import { TasksPage } from './pages/TasksPage.jsx'
 import { ContractorsPage } from './features/contractors/ContractorsPage.jsx'
 import { IntakePage } from './pages/IntakePage.jsx'
+import { PrototypePage } from './pages/PrototypePage.jsx'
 
 // ── Per-page error boundary — keeps sidebar alive if one page crashes ─────────
 class PageBoundary extends Component {
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="/schedule"          element={wrap(<SchedulePage />)} />
             <Route path="/analytics"         element={wrap(<AnalyticsPage />)} />
             <Route path="/contractors"       element={wrap(<ContractorsPage />)} />
+            <Route path="/prototype/resources" element={wrap(<PrototypePage />)} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

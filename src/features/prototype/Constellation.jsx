@@ -1,0 +1,1182 @@
+import { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect, Fragment } from 'react'
+import { format } from 'date-fns'
+import { AlertTriangle, RotateCcw, Home, ArrowLeft } from 'lucide-react'
+import {
+  PRODUCTIONS, RESOURCES, COMMITMENTS,
+  WINDOW_DAYS, dateAtDayIndex, dayIndex,
+  productionsForResource, hasConflict, commitmentLoad,
+} from './sampleData.js'
+
+// ── Layout constants ──────────────────────────────────────────────────────
+const VIEW_W = 1280
+const VIEW_H = 720
+const CENTER = { x: 640, y: 360 }
+const HOME_RADIUS = 110
+const PLANET_RADIUS = 58
+const ORBIT_R_PEOPLE = 95
+const ORBIT_R_GEAR   = 132
+const HOME_R_PEOPLE  = HOME_RADIUS + 10
+const HOME_R_GEAR    = HOME_RADIUS + 30
+
+const SMOOTH_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
+
+// ── Production planet positions — compass corners ────────────────────────
+const PLANET_POS = {
+  apex:    { x: CENTER.x - 215, y: CENTER.y - 215 },  // NW
+  lunar:   { x: CENTER.x + 215, y: CENTER.y - 215 },  // NE
+  neon:    { x: CENTER.x + 215, y: CENTER.y + 215 },  // SE
+  halcyon: { x: CENTER.x - 215, y: CENTER.y + 215 },  // SW
+}
+
+// People + gear orbit. Locations are shown as labels on planets, not as orbiters.
+const ORBITERS = RESOURCES.filter(r => r.kind === 'people' || r.kind === 'gear')
+
+// Stable per-orbiter phase offset so siblings don't pile on top of each other.
+const ORBITER_PHASE = (() => {
+  const out = {}
+  ORBITERS.forEach((r, i) => {
+    out[r.id] = (i / ORBITERS.length) * Math.PI * 2
+  })
+  return out
+})()
+
+// Locations indexed by id → resource (used for planet labels)
+const LOCATIONS_BY_ID = Object.fromEntries(
+  RESOURCES.filter(r => r.kind === 'locations').map(r => [r.id, r])
+)
+
+// Each production has at most one location commitment. Resolve it once.
+const PRODUCTION_LOCATION = (() => {
+  const out = {}
+  PRODUCTIONS.forEach(p => {
+    const c = COMMITMENTS.find(c =>
+      c.productionId === p.id && LOCATIONS_BY_ID[c.resourceId]
+    )
+    if (c) out[p.id] = LOCATIONS_BY_ID[c.resourceId]
+  })
+  return out
+})()
+
+function shortLocationLabel(loc) {
+  if (!loc) return null
+  if (loc.id === 'l1') return 'HOME BASE'
+  return loc.name.toUpperCase().replace(' STAGE ', ' ')
+}
+
+// ── Position helpers ─────────────────────────────────────────────────────
+function homeSurfacePosition(idx, total, kind) {
+  const radius = kind === 'gear' ? HOME_R_GEAR : HOME_R_PEOPLE
+  const angle = (idx / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2
+  return {
+    x: CENTER.x + Math.cos(angle) * radius,
+    y: CENTER.y + Math.sin(angle) * radius,
+  }
+}
+
+function orbitPosition(planet, kind, phase, t) {
+  const radius = kind === 'gear' ? ORBIT_R_GEAR : ORBIT_R_PEOPLE
+  // Gear orbits in the opposite direction so the two rings feel distinct
+  const dir = kind === 'gear' ? -1 : 1
+  return {
+    x: planet.x + Math.cos(dir * t + phase) * radius,
+    y: planet.y + Math.sin(dir * t + phase) * radius,
+  }
+}
+
+function midpointPosition(planets, phase, t) {
+  const cx = planets.reduce((s, p) => s + p.x, 0) / planets.length
+  const cy = planets.reduce((s, p) => s + p.y, 0) / planets.length
+  // Slow lazy figure-8 wobble while torn between projects
+  return {
+    x: cx + Math.cos(t * 0.6 + phase) * 16,
+    y: cy + Math.sin(t * 1.2 + phase) * 10,
+  }
+}
+
+// ── Scene state for one orbiter at scrubber time ────────────────────────
+function computeResourceState(resource, scrubDate) {
+  const active = COMMITMENTS.filter(c =>
+    c.resourceId === resource.id && c.start <= scrubDate && scrubDate <= c.end
+  ).map(c => c.productionId)
+  if (active.length === 0) return { mode: 'home', activeProds: [] }
+  if (active.length === 1) return { mode: 'orbit', activeProds: active }
+  return { mode: 'conflict', activeProds: active }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Component
+// ══════════════════════════════════════════════════════════════════════════
+export function Constellation() {
+  const [scrubDay, setScrubDay] = useState(7)
+  const [hoveredPersonId, setHoveredPersonId] = useState(null)
+  const [selectedPlanet, setSelectedPlanet] = useState(null)
+  const [selectedPerson, setSelectedPerson] = useState(null)
+
+  const scrubDate = dateAtDayIndex(scrubDay)
+
+  // ── Derive per-orbiter state (people + gear) ─────────────────────────
+  const orbiterStates = useMemo(() => {
+    return ORBITERS.map(resource => ({
+      resource,
+      ...computeResourceState(resource, scrubDate),
+    }))
+  }, [scrubDate])
+
+  // Index into the home-surface ring, separate per kind so people and
+  // gear sit on their own concentric rings
+  const onHomeIndex = useMemo(() => {
+    const totals = { people: 0, gear: 0 }
+    orbiterStates.forEach(s => {
+      if (s.mode === 'home') totals[s.resource.kind]++
+    })
+    const out = {}
+    const counters = { people: 0, gear: 0 }
+    orbiterStates.forEach(s => {
+      if (s.mode === 'home') {
+        const kind = s.resource.kind
+        out[s.resource.id] = { idx: counters[kind]++, total: totals[kind] }
+      }
+    })
+    return out
+  }, [orbiterStates])
+
+  const onHomeCount = orbiterStates.filter(s => s.mode === 'home').length
+
+  // ── Conflicting planet pairs (for filaments between contested planets) ─
+  const conflictPairs = useMemo(() => {
+    const pairs = new Map()
+    orbiterStates.forEach(s => {
+      if (s.mode !== 'conflict') return
+      for (let i = 0; i < s.activeProds.length; i++) {
+        for (let j = i + 1; j < s.activeProds.length; j++) {
+          const key = [s.activeProds[i], s.activeProds[j]].sort().join('-')
+          pairs.set(key, (pairs.get(key) ?? 0) + 1)
+        }
+      }
+    })
+    return Array.from(pairs.entries()).map(([key, count]) => {
+      const [a, b] = key.split('-')
+      return { a, b, count }
+    })
+  }, [orbiterStates])
+
+  // ── rAF orbit animation ─────────────────────────────────────────────
+  const orbiterStatesRef = useRef(orbiterStates)
+  const onHomeIndexRef = useRef(onHomeIndex)
+  useEffect(() => { orbiterStatesRef.current = orbiterStates }, [orbiterStates])
+  useEffect(() => { onHomeIndexRef.current = onHomeIndex }, [onHomeIndex])
+
+  const orbiterRefs = useRef({})          // id -> SVG <g>
+  const orbiterPositions = useRef({})     // id -> {x, y}
+  const orbitTimeRef = useRef(0)
+
+  const computeTarget = useCallback((resource) => {
+    const states = orbiterStatesRef.current
+    const state = states.find(s => s.resource.id === resource.id)
+    if (!state) return { x: CENTER.x, y: CENTER.y }
+    const phase = ORBITER_PHASE[resource.id] ?? 0
+    const t = orbitTimeRef.current
+    if (state.mode === 'home') {
+      const home = onHomeIndexRef.current[resource.id] ?? { idx: 0, total: 1 }
+      return homeSurfacePosition(home.idx, home.total, resource.kind)
+    }
+    if (state.mode === 'orbit') {
+      return orbitPosition(PLANET_POS[state.activeProds[0]], resource.kind, phase, t)
+    }
+    return midpointPosition(state.activeProds.map(id => PLANET_POS[id]), phase, t)
+  }, [])
+
+  // ── Initial position before paint, so nothing flashes at (0,0) ───────
+  useLayoutEffect(() => {
+    ORBITERS.forEach(resource => {
+      const target = computeTarget(resource)
+      orbiterPositions.current[resource.id] = target
+      const el = orbiterRefs.current[resource.id]
+      if (el) el.setAttribute('transform', `translate(${target.x} ${target.y})`)
+    })
+  }, [computeTarget])
+
+  useEffect(() => {
+    let raf
+    let last = performance.now()
+    const tick = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000)
+      last = now
+      orbitTimeRef.current += dt * 0.08    // ~78s full orbit
+
+      const lerp = 0.13
+      ORBITERS.forEach(resource => {
+        const target = computeTarget(resource)
+        const cur = orbiterPositions.current[resource.id] ?? target
+        const dx = target.x - cur.x
+        const dy = target.y - cur.y
+        const next = { x: cur.x + dx * lerp, y: cur.y + dy * lerp }
+        orbiterPositions.current[resource.id] = next
+        const el = orbiterRefs.current[resource.id]
+        if (el) el.setAttribute('transform', `translate(${next.x} ${next.y})`)
+      })
+
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [computeTarget])
+
+  // ── Production "currently active" status at scrubber time ────────────
+  const productionActive = useMemo(() => {
+    const out = {}
+    PRODUCTIONS.forEach(p => {
+      out[p.id] = scrubDate >= p.start && scrubDate <= p.end
+    })
+    return out
+  }, [scrubDate])
+
+  // ── Camera — focal point + zoom level driven by selectedPlanet ───────
+  const camera = useMemo(() => {
+    if (!selectedPlanet) return { x: CENTER.x, y: CENTER.y, zoom: 1 }
+    if (selectedPlanet === 'home') return { x: CENTER.x, y: CENTER.y, zoom: 1.55 }
+    const pos = PLANET_POS[selectedPlanet]
+    if (!pos) return { x: CENTER.x, y: CENTER.y, zoom: 1 }
+    return { x: pos.x, y: pos.y, zoom: 1.95 }
+  }, [selectedPlanet])
+
+  const cameraTransform = `translate(${VIEW_W/2 - camera.x * camera.zoom}px, ${VIEW_H/2 - camera.y * camera.zoom}px) scale(${camera.zoom})`
+
+  const focusedProduction = selectedPlanet && selectedPlanet !== 'home'
+    ? PRODUCTIONS.find(p => p.id === selectedPlanet)
+    : null
+
+  // ── Highlight logic ──────────────────────────────────────────────────
+  const isOrbiterDimmed = (rid) => {
+    if (selectedPerson)  return selectedPerson !== rid
+    if (selectedPlanet) {
+      const state = orbiterStates.find(s => s.resource.id === rid)
+      return !state?.activeProds.includes(selectedPlanet)
+    }
+    if (hoveredPersonId) return hoveredPersonId !== rid
+    return false
+  }
+
+  const isPlanetDimmed = (prodId) => {
+    if (selectedPlanet) return selectedPlanet !== prodId
+    if (selectedPerson) {
+      const state = orbiterStates.find(s => s.resource.id === selectedPerson)
+      return !state?.activeProds.includes(prodId)
+    }
+    return false
+  }
+
+  const resetView = () => {
+    setSelectedPlanet(null)
+    setSelectedPerson(null)
+    setScrubDay(7)
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────
+  return (
+    <div className="px-6 py-5">
+      <Header />
+
+      <div className="card-elevated mt-4 overflow-hidden">
+        <Toolbar
+          scrubDay={scrubDay}
+          orbiterStates={orbiterStates}
+          conflictPairs={conflictPairs}
+          onReset={resetView}
+        />
+
+        <div
+          className="relative select-none"
+          style={{
+            background: 'radial-gradient(ellipse at center, #0a0e1f 0%, #050608 70%)',
+            height: 720,
+          }}
+          onClick={() => { setSelectedPlanet(null); setSelectedPerson(null) }}
+        >
+          <Starfield />
+          <NebulaBackground />
+
+          <svg
+            viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+            preserveAspectRatio="xMidYMid meet"
+            className="relative w-full h-full"
+          >
+            <PlanetDefs />
+
+            {/* ── Camera wrapper: smooth zoom + pan to focused planet ── */}
+            <g style={{
+              transform: cameraTransform,
+              transition: `transform 1100ms ${SMOOTH_EASE}`,
+              transformOrigin: '0 0',
+            }}>
+
+            {/* ── Conflict filaments — drawn beneath planets ──────── */}
+            {conflictPairs.map(({ a, b, count }) => {
+              const pa = PLANET_POS[a], pb = PLANET_POS[b]
+              if (!pa || !pb) return null
+              return (
+                <line
+                  key={`${a}-${b}`}
+                  x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
+                  stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.45}
+                  strokeDasharray="6 5"
+                  style={{
+                    animation: 'conflict-dash 1.2s linear infinite',
+                    filter: 'drop-shadow(0 0 6px rgba(239,68,68,0.6))',
+                  }}
+                />
+              )
+            })}
+
+            {/* ── Orbit rings beneath planets (people inner, gear outer) ─ */}
+            {PRODUCTIONS.map(p => {
+              const pos = PLANET_POS[p.id]
+              const dim = isPlanetDimmed(p.id) || !productionActive[p.id]
+              const ringStyle = {
+                animation: 'orbit-trail 60s linear infinite',
+                transition: `stroke-opacity 600ms ${SMOOTH_EASE}`,
+              }
+              return (
+                <Fragment key={`rings-${p.id}`}>
+                  <circle
+                    cx={pos.x} cy={pos.y} r={ORBIT_R_PEOPLE}
+                    fill="none" stroke={p.color}
+                    strokeOpacity={dim ? 0.05 : 0.25}
+                    strokeWidth={1}
+                    strokeDasharray="3 4"
+                    style={ringStyle}
+                  />
+                  <circle
+                    cx={pos.x} cy={pos.y} r={ORBIT_R_GEAR}
+                    fill="none" stroke={p.color}
+                    strokeOpacity={dim ? 0.04 : 0.15}
+                    strokeWidth={0.8}
+                    strokeDasharray="2 5"
+                    style={ringStyle}
+                  />
+                </Fragment>
+              )
+            })}
+
+            {/* ── Project planets ─────────────────────────────────── */}
+            {PRODUCTIONS.map(p => (
+              <ProjectPlanet
+                key={p.id}
+                production={p}
+                pos={PLANET_POS[p.id]}
+                radius={PLANET_RADIUS}
+                isActive={productionActive[p.id]}
+                isSelected={selectedPlanet === p.id}
+                isDimmed={isPlanetDimmed(p.id)}
+                location={PRODUCTION_LOCATION[p.id]}
+                activeCount={orbiterStates.filter(s =>
+                  s.activeProds.includes(p.id)
+                ).length}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedPlanet(s => s === p.id ? null : p.id)
+                  setSelectedPerson(null)
+                }}
+              />
+            ))}
+
+            {/* ── Home planet (Orbital Studio) ─────────────────────── */}
+            <HomePlanet
+              pos={CENTER}
+              radius={HOME_RADIUS}
+              onStation={orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'people').length}
+              gearOnStation={orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'gear').length}
+              isSelected={selectedPlanet === 'home'}
+              onClick={(e) => {
+                e.stopPropagation()
+                setSelectedPlanet(s => s === 'home' ? null : 'home')
+                setSelectedPerson(null)
+              }}
+            />
+
+            {/* ── Orbiters: people + gear (positions driven by rAF) ── */}
+            {orbiterStates.map(({ resource, mode }) => (
+              <g
+                key={resource.id}
+                ref={el => { if (el) orbiterRefs.current[resource.id] = el }}
+                style={{
+                  cursor: 'pointer',
+                  opacity: isOrbiterDimmed(resource.id) ? 0.2 : 1,
+                  transition: `opacity 350ms ${SMOOTH_EASE}`,
+                }}
+                onMouseEnter={() => setHoveredPersonId(resource.id)}
+                onMouseLeave={() => setHoveredPersonId(null)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedPerson(s => s === resource.id ? null : resource.id)
+                }}
+              >
+                <ResourceGlyph resource={resource} mode={mode} />
+              </g>
+            ))}
+            </g>{/* end camera wrapper */}
+          </svg>
+
+          {/* ── Focus lock HUD (when a planet is selected) ─────────── */}
+          {selectedPlanet && (
+            <FocusLock
+              focusedProduction={focusedProduction}
+              isHome={selectedPlanet === 'home'}
+              onReturn={(e) => { e.stopPropagation(); setSelectedPlanet(null) }}
+            />
+          )}
+
+          {/* ── Hovered orbiter tooltip ─────────────────────────────── */}
+          <ResourceTooltip
+            resourceId={selectedPerson || hoveredPersonId}
+            states={orbiterStates}
+            scrubDate={scrubDate}
+          />
+
+          <SceneStats orbiterStates={orbiterStates} conflictPairs={conflictPairs} />
+        </div>
+
+        <TimeScrubber day={scrubDay} setDay={setScrubDay} />
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Header & toolbar
+// ══════════════════════════════════════════════════════════════════════════
+function Header() {
+  return (
+    <div>
+      <p className="hud-label mb-1">CONSTELLATION VIEW</p>
+      <h1 className="text-2xl font-semibold text-orbital-text tracking-tight">
+        The studio's gravitational map
+      </h1>
+      <p className="text-sm text-orbital-subtle mt-0.5">
+        People orbit the productions they're committed to. When two productions need them at once, they're stuck at the midpoint — torn.
+      </p>
+    </div>
+  )
+}
+
+function Toolbar({ scrubDay, orbiterStates, conflictPairs, onReset }) {
+  const date = dateAtDayIndex(scrubDay)
+  const conflictCount = orbiterStates.filter(s => s.mode === 'conflict').length
+  return (
+    <div
+      className="flex items-center justify-between px-4 py-2.5 gap-4"
+      style={{ borderBottom: '1px solid var(--orbital-border)' }}
+    >
+      <div className="flex items-center gap-3">
+        <span className="hud-label">PLAYHEAD</span>
+        <span className="font-telemetry text-[12px] text-orbital-text tracking-wider">
+          {format(date, 'EEE · MMM d, yyyy').toUpperCase()}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <BadgeStat label="ON STATION" value={orbiterStates.filter(s => s.mode === 'home').length}
+          color="#60a5fa" />
+        <BadgeStat label="DEPLOYED" value={orbiterStates.filter(s => s.mode === 'orbit').length}
+          color="#34d399" />
+        <BadgeStat label="TORN" value={conflictCount}
+          color={conflictCount > 0 ? '#ef4444' : '#71717a'} pulse={conflictCount > 0} />
+        <button onClick={onReset}
+          className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest font-telemetry transition-colors"
+          style={{
+            color: 'var(--orbital-subtle)',
+            border: '1px solid var(--orbital-border)',
+            background: 'transparent',
+          }}>
+          <RotateCcw size={10} /> RESET
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function BadgeStat({ label, value, color, pulse }) {
+  return (
+    <div className="inline-flex items-center gap-1.5 px-2 py-1"
+      style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: '1px solid var(--orbital-border)',
+      }}>
+      <span
+        className={pulse ? 'animate-indicator-pulse' : ''}
+        style={{
+          width: 6, height: 6, borderRadius: '50%', background: color,
+          boxShadow: `0 0 6px ${color}`,
+        }}
+      />
+      <span className="font-telemetry text-[8px] text-orbital-subtle tracking-[0.2em]">{label}</span>
+      <span className="font-telemetry text-[12px] text-orbital-text tracking-wider">{value}</span>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Planet rendering
+// ══════════════════════════════════════════════════════════════════════════
+
+// Lighten/darken helpers (color must be hex #rrggbb)
+function adjustColor(hex, percent) {
+  const r = Math.max(0, Math.min(255, Math.round(parseInt(hex.slice(1, 3), 16) + 255 * percent)))
+  const g = Math.max(0, Math.min(255, Math.round(parseInt(hex.slice(3, 5), 16) + 255 * percent)))
+  const b = Math.max(0, Math.min(255, Math.round(parseInt(hex.slice(5, 7), 16) + 255 * percent)))
+  return `rgb(${r},${g},${b})`
+}
+
+function PlanetDefs() {
+  return (
+    <defs>
+      {/* ── Home planet gradients ─────────────────────────────────── */}
+      <radialGradient id="home-atm" cx="50%" cy="50%" r="50%">
+        <stop offset="58%" stopColor="rgba(75,180,220,0)" />
+        <stop offset="78%" stopColor="rgba(75,180,220,0.28)" />
+        <stop offset="100%" stopColor="rgba(75,180,220,0)" />
+      </radialGradient>
+      <radialGradient id="home-body" cx="35%" cy="32%" r="75%">
+        <stop offset="0%"  stopColor="#7ec1e0" />
+        <stop offset="40%" stopColor="#3a7a9a" />
+        <stop offset="80%" stopColor="#1a4060" />
+        <stop offset="100%" stopColor="#08213a" />
+      </radialGradient>
+      <radialGradient id="home-shade" cx="80%" cy="50%" r="60%">
+        <stop offset="0%"  stopColor="rgba(0,0,0,0.55)" />
+        <stop offset="60%" stopColor="rgba(0,0,0,0.0)" />
+      </radialGradient>
+      <linearGradient id="home-equator" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"  stopColor="rgba(120,180,210,0)" />
+        <stop offset="50%" stopColor="rgba(120,180,210,0.15)" />
+        <stop offset="100%" stopColor="rgba(120,180,210,0)" />
+      </linearGradient>
+
+      {/* ── Per-production planet gradients ─────────────────────── */}
+      {PRODUCTIONS.map(p => (
+        <Fragment key={p.id}>
+          <radialGradient id={`atm-${p.id}`} cx="50%" cy="50%" r="50%">
+            <stop offset="55%" stopColor={p.color} stopOpacity="0" />
+            <stop offset="78%" stopColor={p.color} stopOpacity="0.32" />
+            <stop offset="100%" stopColor={p.color} stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id={`body-${p.id}`} cx="35%" cy="30%" r="80%">
+            <stop offset="0%"  stopColor={adjustColor(p.color, 0.22)} />
+            <stop offset="50%" stopColor={p.color} />
+            <stop offset="100%" stopColor={adjustColor(p.color, -0.55)} />
+          </radialGradient>
+          <radialGradient id={`shade-${p.id}`} cx="82%" cy="50%" r="60%">
+            <stop offset="0%"  stopColor="rgba(0,0,0,0.55)" />
+            <stop offset="60%" stopColor="rgba(0,0,0,0.0)" />
+          </radialGradient>
+        </Fragment>
+      ))}
+
+      {/* Planet body clip — used to clip surface details inside a circle */}
+      {PRODUCTIONS.map(p => (
+        <clipPath key={`clip-${p.id}`} id={`clip-${p.id}`}>
+          <circle r={PLANET_RADIUS} />
+        </clipPath>
+      ))}
+      <clipPath id="clip-home">
+        <circle r={HOME_RADIUS} />
+      </clipPath>
+    </defs>
+  )
+}
+
+function HomePlanet({ pos, radius, onStation, gearOnStation, isSelected, onClick }) {
+  return (
+    <g transform={`translate(${pos.x} ${pos.y})`}
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}>
+      {/* Atmospheric halo */}
+      <circle r={radius * 1.55} fill="url(#home-atm)" />
+
+      {/* Body */}
+      <circle r={radius} fill="url(#home-body)" />
+
+      {/* Slowly rotating cloud + landmass overlay (clipped to body) */}
+      <g clipPath="url(#clip-home)">
+        <g>
+          {/* Faux continents */}
+          <ellipse cx={-radius * 0.32} cy={-radius * 0.18}
+            rx={radius * 0.4} ry={radius * 0.16}
+            fill="#0c2438" opacity={0.6}
+            transform="rotate(-22)" />
+          <ellipse cx={radius * 0.18} cy={radius * 0.28}
+            rx={radius * 0.45} ry={radius * 0.13}
+            fill="#0c2438" opacity={0.55}
+            transform="rotate(12)" />
+          <ellipse cx={radius * 0.42} cy={-radius * 0.32}
+            rx={radius * 0.22} ry={radius * 0.1}
+            fill="#0c2438" opacity={0.5} />
+          {/* Cloud bands */}
+          <ellipse cx={0} cy={-radius * 0.45}
+            rx={radius * 1.05} ry={radius * 0.12}
+            fill="white" opacity={0.13} />
+          <ellipse cx={0} cy={radius * 0.05}
+            rx={radius * 1.0} ry={radius * 0.08}
+            fill="white" opacity={0.08} />
+          <ellipse cx={0} cy={radius * 0.5}
+            rx={radius * 0.95} ry={radius * 0.1}
+            fill="white" opacity={0.11} />
+          <animateTransform attributeName="transform" type="rotate"
+            from="0 0 0" to="360 0 0" dur="240s" repeatCount="indefinite" />
+        </g>
+      </g>
+
+      {/* Day/night terminator */}
+      <circle r={radius} fill="url(#home-shade)" />
+
+      {/* Equatorial polish */}
+      <ellipse rx={radius} ry={radius * 0.45} fill="url(#home-equator)" />
+
+      {/* Specular highlight */}
+      <ellipse cx={-radius * 0.35} cy={-radius * 0.4}
+        rx={radius * 0.45} ry={radius * 0.22}
+        fill="rgba(255,255,255,0.22)" />
+
+      {/* Body outline ring */}
+      <circle r={radius} fill="none"
+        stroke={isSelected ? '#7ec1e0' : 'rgba(125,180,210,0.35)'}
+        strokeWidth={isSelected ? 1.2 : 0.6} />
+
+      {/* Label */}
+      <g transform={`translate(0 ${radius + 32})`}>
+        <text textAnchor="middle" fill="#fff"
+          fontSize={14} fontWeight={600} letterSpacing={0.5}>
+          ORBITAL STUDIO
+        </text>
+        <text textAnchor="middle" y={16} fill="#5a8aa8"
+          fontFamily="'Space Mono', monospace" fontSize={9} letterSpacing={2}>
+          HOME · {onStation} PPL · {gearOnStation} GEAR
+        </text>
+      </g>
+    </g>
+  )
+}
+
+function ProjectPlanet({ production, pos, radius, isActive, isSelected, isDimmed, location, activeCount, onClick }) {
+  const p = production
+  const opacity = isDimmed ? 0.35 : 1
+  const desat = !isActive ? 'saturate(0.55) brightness(0.7)' : 'none'
+  return (
+    <g transform={`translate(${pos.x} ${pos.y})`}
+      onClick={onClick}
+      style={{
+        cursor: 'pointer',
+        opacity,
+        filter: desat,
+        transition: `opacity 500ms ${SMOOTH_EASE}, filter 500ms ${SMOOTH_EASE}`,
+      }}>
+      {/* Atmospheric halo */}
+      <circle r={radius * 1.65} fill={`url(#atm-${p.id})`} />
+
+      {/* Pulse ring (only when this production is currently active) */}
+      {isActive && (
+        <circle r={radius + 4} fill="none" stroke={p.color}
+          strokeOpacity={0.4} strokeWidth={1}>
+          <animate attributeName="r" from={radius + 2} to={radius + 26}
+            dur="3.4s" repeatCount="indefinite" />
+          <animate attributeName="stroke-opacity" from="0.45" to="0"
+            dur="3.4s" repeatCount="indefinite" />
+        </circle>
+      )}
+
+      {/* Body */}
+      <circle r={radius} fill={`url(#body-${p.id})`} />
+
+      {/* Surface bands (clipped) */}
+      <g clipPath={`url(#clip-${p.id})`}>
+        <g>
+          <ellipse cx={0} cy={-radius * 0.45}
+            rx={radius * 1.05} ry={radius * 0.1}
+            fill={adjustColor(p.color, 0.2)} opacity={0.35} />
+          <ellipse cx={0} cy={-radius * 0.1}
+            rx={radius * 1.0} ry={radius * 0.07}
+            fill={adjustColor(p.color, -0.3)} opacity={0.45} />
+          <ellipse cx={0} cy={radius * 0.3}
+            rx={radius * 0.98} ry={radius * 0.09}
+            fill={adjustColor(p.color, 0.15)} opacity={0.4} />
+          <ellipse cx={0} cy={radius * 0.55}
+            rx={radius * 0.9} ry={radius * 0.08}
+            fill={adjustColor(p.color, -0.4)} opacity={0.5} />
+          <animateTransform attributeName="transform" type="rotate"
+            from="0 0 0" to="360 0 0" dur="180s" repeatCount="indefinite" />
+        </g>
+      </g>
+
+      {/* Day/night terminator */}
+      <circle r={radius} fill={`url(#shade-${p.id})`} />
+
+      {/* Specular highlight */}
+      <ellipse cx={-radius * 0.32} cy={-radius * 0.35}
+        rx={radius * 0.42} ry={radius * 0.2}
+        fill="rgba(255,255,255,0.22)" />
+
+      {/* Outline ring */}
+      <circle r={radius} fill="none"
+        stroke={isSelected ? p.color : `${p.color}55`}
+        strokeWidth={isSelected ? 1.5 : 0.7} />
+
+      {/* Label */}
+      <g transform={`translate(0 ${radius + 26})`}>
+        <text textAnchor="middle" fill="#e8eaee"
+          fontSize={13} fontWeight={600}>
+          {p.name}
+        </text>
+        <text textAnchor="middle" y={14} fill={p.color}
+          fontFamily="'Space Mono', monospace" fontSize={9} letterSpacing={1.5}
+          style={{ filter: `drop-shadow(0 0 4px ${p.glow})` }}>
+          {p.code} · {activeCount} ACTIVE
+        </text>
+        {location && (
+          <text textAnchor="middle" y={28} fill="#6e6f78"
+            fontFamily="'Space Mono', monospace" fontSize={8.5} letterSpacing={1.5}>
+            ◈ {shortLocationLabel(location)}
+          </text>
+        )}
+      </g>
+    </g>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Resource glyph — circle for people, hexagon for gear
+// ══════════════════════════════════════════════════════════════════════════
+function ResourceGlyph({ resource, mode }) {
+  const conflict = mode === 'conflict'
+  const isGear = resource.kind === 'gear'
+  return (
+    <g>
+      {/* Conflict glow halo */}
+      {conflict && (
+        <>
+          <ResourceShape kind={resource.kind} size={20} fill="rgba(239,68,68,0.18)">
+            <animate attributeName="opacity" values="0.55;0.05;0.55" dur="1.5s" repeatCount="indefinite" />
+          </ResourceShape>
+          <ResourceShape kind={resource.kind} size={14} fill="rgba(239,68,68,0.15)" />
+        </>
+      )}
+
+      {/* Subtle aura matching resource color */}
+      <ResourceShape kind={resource.kind} size={13} fill={resource.color} opacity={0.15} />
+
+      {/* Body */}
+      <ResourceShape
+        kind={resource.kind}
+        size={9.5}
+        fill={resource.color}
+        stroke={conflict ? '#ef4444' : 'rgba(255,255,255,0.5)'}
+        strokeWidth={1.4}
+        style={{ filter: `drop-shadow(0 0 5px ${resource.color}aa)` }}
+      />
+
+      {/* Initial */}
+      <text textAnchor="middle" dy={3.4} fill="#0a0c10"
+        fontSize={isGear ? 7.5 : 10}
+        fontWeight={800}
+        fontFamily={isGear ? "'Space Mono', monospace" : undefined}>
+        {resource.initial}
+      </text>
+
+      {/* Conflict warning badge */}
+      {conflict && (
+        <g transform="translate(8 -8)">
+          <circle r={6.5} fill="#ef4444"
+            stroke="#fff" strokeWidth={1.2} />
+          <text textAnchor="middle" dy={2.6} fill="#fff"
+            fontSize={9} fontWeight={800}>!</text>
+        </g>
+      )}
+
+      {/* Name label below */}
+      <text textAnchor="middle" y={22} fill="#d6d8dd"
+        fontSize={9.5} fontWeight={500}>
+        {resource.name}
+      </text>
+    </g>
+  )
+}
+
+function ResourceShape({ kind, size, fill, stroke, strokeWidth, opacity, style, children }) {
+  const props = { fill, stroke, strokeWidth, opacity, style }
+  if (kind === 'gear') {
+    const r = size
+    const pts = []
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 6
+      pts.push(`${(Math.cos(a) * r).toFixed(2)},${(Math.sin(a) * r).toFixed(2)}`)
+    }
+    return <polygon points={pts.join(' ')} {...props}>{children}</polygon>
+  }
+  // Default: people = circle
+  return <circle r={size} {...props}>{children}</circle>
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Focus lock HUD — shown while camera is zoomed into a planet
+// ══════════════════════════════════════════════════════════════════════════
+function FocusLock({ focusedProduction, isHome, onReturn }) {
+  const accent = isHome ? '#7ec1e0' : focusedProduction?.color
+  const glow   = isHome ? 'rgba(126,193,224,0.55)' : focusedProduction?.glow
+  const label  = isHome ? 'ORBITAL STUDIO · HOME BASE' : `${focusedProduction?.code} · ${focusedProduction?.name?.toUpperCase()}`
+  return (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 animate-hud-in">
+      <button
+        onClick={onReturn}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 transition-colors hover:text-white"
+        style={{
+          color: 'var(--orbital-subtle)',
+          background: 'rgba(15,17,22,0.85)',
+          backdropFilter: 'blur(6px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        <ArrowLeft size={11} />
+        <span className="font-telemetry text-[9px] tracking-[0.22em]">RETURN TO ORBIT</span>
+      </button>
+      <div className="inline-flex items-center gap-2 px-3 py-1.5"
+        style={{
+          background: 'rgba(15,17,22,0.85)',
+          backdropFilter: 'blur(6px)',
+          border: `1px solid ${accent}55`,
+          boxShadow: `0 0 14px ${glow}`,
+        }}>
+        {/* Targeting reticle corners */}
+        <span className="relative inline-block" style={{ width: 10, height: 10 }}>
+          <span className="absolute top-0 left-0" style={{ width: 4, height: 1, background: accent }} />
+          <span className="absolute top-0 left-0" style={{ width: 1, height: 4, background: accent }} />
+          <span className="absolute top-0 right-0" style={{ width: 4, height: 1, background: accent }} />
+          <span className="absolute top-0 right-0" style={{ width: 1, height: 4, background: accent }} />
+          <span className="absolute bottom-0 left-0" style={{ width: 4, height: 1, background: accent }} />
+          <span className="absolute bottom-0 left-0" style={{ width: 1, height: 4, background: accent }} />
+          <span className="absolute bottom-0 right-0" style={{ width: 4, height: 1, background: accent }} />
+          <span className="absolute bottom-0 right-0" style={{ width: 1, height: 4, background: accent }} />
+        </span>
+        <span className="font-telemetry text-[9px] tracking-[0.22em] animate-indicator-pulse"
+          style={{ color: accent, textShadow: `0 0 4px ${glow}` }}>
+          FOCUS LOCK
+        </span>
+        <span className="font-telemetry text-[10px] tracking-[0.18em] text-orbital-text">
+          {label}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Tooltip
+// ══════════════════════════════════════════════════════════════════════════
+function ResourceTooltip({ resourceId, states, scrubDate }) {
+  if (!resourceId) return null
+  const state = states.find(s => s.resource.id === resourceId)
+  if (!state) return null
+  const r = state.resource
+  const allProds = productionsForResource(resourceId)
+  const homeLabel = r.kind === 'gear' ? 'IN STORAGE' : 'ON STATION'
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={{
+        left: 16, bottom: 96,
+        padding: '12px 14px',
+        minWidth: 240,
+        background: 'rgba(15,17,22,0.92)',
+        backdropFilter: 'blur(8px)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span className="w-1.5 h-1.5 rounded-full"
+          style={{ background: r.color, boxShadow: `0 0 6px ${r.color}` }} />
+        <span className="text-[13px] font-medium text-orbital-text">{r.name}</span>
+        <span className="ml-1 font-telemetry text-[8px] text-orbital-dim tracking-widest">
+          {r.kind === 'gear' ? 'GEAR' : 'PERSON'}
+        </span>
+        {state.mode === 'conflict' && (
+          <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5"
+            style={{
+              background: 'rgba(239,68,68,0.18)',
+              border: '1px solid rgba(239,68,68,0.5)',
+              color: '#fca5a5',
+            }}>
+            <AlertTriangle size={10} />
+            <span className="font-telemetry text-[8px] tracking-widest">TORN</span>
+          </span>
+        )}
+        {state.mode === 'home' && (
+          <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5"
+            style={{
+              background: 'rgba(96,165,250,0.13)',
+              border: '1px solid rgba(96,165,250,0.4)',
+              color: '#93c5fd',
+            }}>
+            <Home size={9} />
+            <span className="font-telemetry text-[8px] tracking-widest">{homeLabel}</span>
+          </span>
+        )}
+      </div>
+      <p className="text-[11px] text-orbital-subtle leading-tight mb-2">
+        {r.role}
+        {r.contractor && (
+          <span className="ml-2 font-telemetry text-[9px] text-orbital-dim tracking-widest">EXT</span>
+        )}
+      </p>
+      <p className="font-telemetry text-[8px] text-orbital-subtle tracking-[0.2em] mb-1.5">
+        ASSIGNMENTS · {format(scrubDate, 'MMM d').toUpperCase()}
+      </p>
+      <div className="space-y-1">
+        {allProds.map(p => {
+          const isActive = state.activeProds.includes(p.id)
+          const days = commitmentLoad(resourceId, p.id)
+          return (
+            <div key={p.id} className="flex items-center justify-between text-[10px]">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5"
+                  style={{
+                    background: p.color,
+                    boxShadow: isActive ? `0 0 6px ${p.glow}` : 'none',
+                    opacity: isActive ? 1 : 0.4,
+                  }} />
+                <span className={isActive ? 'text-orbital-text' : 'text-orbital-subtle'}>
+                  {p.name}
+                </span>
+                {isActive && (
+                  <span className="font-telemetry text-[8px] text-green-400 tracking-widest ml-1">
+                    ACTIVE
+                  </span>
+                )}
+              </div>
+              <span className="font-telemetry text-orbital-subtle tracking-wider">{days}d</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Stats overlay
+// ══════════════════════════════════════════════════════════════════════════
+function SceneStats({ orbiterStates, conflictPairs }) {
+  const peopleCount = orbiterStates.filter(s => s.resource.kind === 'people').length
+  const gearCount   = orbiterStates.filter(s => s.resource.kind === 'gear').length
+  const home  = orbiterStates.filter(s => s.mode === 'home').length
+  const orbit = orbiterStates.filter(s => s.mode === 'orbit').length
+  const torn  = orbiterStates.filter(s => s.mode === 'conflict').length
+  return (
+    <div className="absolute bottom-3 right-3"
+      style={{
+        padding: '6px 10px',
+        background: 'rgba(15,17,22,0.85)',
+        backdropFilter: 'blur(6px)',
+        border: '1px solid rgba(255,255,255,0.06)',
+      }}>
+      <div className="flex items-center gap-3">
+        <Stat label="PPL"   value={peopleCount} />
+        <Stat label="GEAR"  value={gearCount} />
+        <span className="w-px h-3" style={{ background: 'rgba(255,255,255,0.1)' }} />
+        <Stat label="HOME"  value={home} />
+        <Stat label="ORBIT" value={orbit} />
+        <Stat label="TORN"  value={torn} color={torn > 0 ? '#ef4444' : undefined} />
+        <span className="w-px h-3" style={{ background: 'rgba(255,255,255,0.1)' }} />
+        <Stat label="LINKS" value={conflictPairs.length} />
+      </div>
+    </div>
+  )
+}
+
+function Stat({ label, value, color }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className="font-telemetry text-[8px] text-orbital-subtle tracking-[0.18em]">{label}</span>
+      <span className="font-telemetry text-[11px] tracking-wider"
+        style={{ color: color ?? '#d0d1d5' }}>{value}</span>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Time scrubber
+// ══════════════════════════════════════════════════════════════════════════
+function TimeScrubber({ day, setDay }) {
+  const trackRef = useRef(null)
+  const dragging = useRef(false)
+
+  const dayFromX = useCallback((cx) => {
+    const box = trackRef.current.getBoundingClientRect()
+    const x = cx - box.left
+    const ratio = Math.max(0, Math.min(1, x / box.width))
+    return Math.round(ratio * WINDOW_DAYS)
+  }, [])
+
+  const onDown = (e) => {
+    dragging.current = true
+    const cx = e.clientX ?? e.touches?.[0]?.clientX
+    setDay(dayFromX(cx))
+  }
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!dragging.current) return
+      const cx = e.clientX ?? e.touches?.[0]?.clientX
+      setDay(dayFromX(cx))
+    }
+    const onUp = () => { dragging.current = false }
+    globalThis.addEventListener('mousemove', onMove)
+    globalThis.addEventListener('mouseup', onUp)
+    globalThis.addEventListener('touchmove', onMove)
+    globalThis.addEventListener('touchend', onUp)
+    return () => {
+      globalThis.removeEventListener('mousemove', onMove)
+      globalThis.removeEventListener('mouseup', onUp)
+      globalThis.removeEventListener('touchmove', onMove)
+      globalThis.removeEventListener('touchend', onUp)
+    }
+  }, [dayFromX, setDay])
+
+  const weeks = Array.from({ length: 7 }, (_, i) => i)
+
+  return (
+    <div className="px-6 pt-4 pb-5"
+      style={{ borderTop: '1px solid var(--orbital-border)' }}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="hud-label">TIMELINE</span>
+        <span className="font-telemetry text-[10px] text-orbital-subtle tracking-wider">
+          DAY {String(day).padStart(2, '0')} / {WINDOW_DAYS}
+        </span>
+      </div>
+      <div
+        ref={trackRef}
+        onMouseDown={onDown}
+        onTouchStart={onDown}
+        className="relative cursor-pointer select-none"
+        style={{ height: 36 }}
+      >
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2"
+          style={{ height: 2, background: 'var(--orbital-border)' }} />
+        {weeks.map(i => (
+          <div key={i}
+            className="absolute top-1/2 -translate-y-1/2"
+            style={{
+              left: `${(i / 6) * 100}%`,
+              width: 1, height: 8, background: 'var(--orbital-chrome)',
+            }} />
+        ))}
+        {weeks.map(i => (
+          <span key={i}
+            className="absolute -bottom-1 -translate-x-1/2 font-telemetry text-[9px] text-orbital-subtle tracking-wider"
+            style={{ left: `${(i / 6) * 100}%` }}>
+            {format(dateAtDayIndex(i * 7), 'MMM d')}
+          </span>
+        ))}
+        <div className="absolute top-1/2 -translate-y-1/2"
+          style={{
+            left: 0, width: `${(day / WINDOW_DAYS) * 100}%`, height: 2,
+            background: 'linear-gradient(90deg, rgba(59,130,246,0.6), rgba(232,121,249,0.6))',
+            boxShadow: '0 0 10px rgba(59,130,246,0.7)',
+          }} />
+        <div className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+          style={{
+            left: `${(day / WINDOW_DAYS) * 100}%`,
+            width: 14, height: 18,
+            background: '#fff',
+            boxShadow: '0 0 14px rgba(255,255,255,0.7), 0 0 0 1px rgba(59,130,246,0.5) inset',
+          }} />
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Background — starfield + nebulae
+// ══════════════════════════════════════════════════════════════════════════
+function Starfield() {
+  const farStars  = useMemo(() => generateStars(120, 0.4, 1.1, 0.25, 0.55), [])
+  const midStars  = useMemo(() => generateStars(60,  0.8, 1.8, 0.45, 0.75), [])
+  const nearStars = useMemo(() => generateStars(22,  1.4, 2.6, 0.65, 0.95), [])
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <StarLayer stars={farStars}  duration="220s" />
+      <StarLayer stars={midStars}  duration="120s" />
+      <StarLayer stars={nearStars} duration="60s"  />
+    </div>
+  )
+}
+
+function StarLayer({ stars, duration }) {
+  return (
+    <div className="absolute top-0 left-0 h-full"
+      style={{
+        width: '200%',
+        animation: `star-drift ${duration} linear infinite`,
+        willChange: 'transform',
+      }}>
+      {[0, 1].map(half => (
+        <div key={half} className="absolute top-0 h-full"
+          style={{ left: `${half * 50}%`, width: '50%' }}>
+          {stars.map((s, i) => (
+            <span key={`${half}-${i}`}
+              className="absolute rounded-full"
+              style={{
+                left: `${s.x}%`, top: `${s.y}%`,
+                width: s.r, height: s.r,
+                background: '#fff',
+                boxShadow: s.r > 2 ? `0 0 ${s.r * 1.6}px rgba(255,255,255,0.4)` : undefined,
+                animation: `star-twinkle ${4 + s.tDelay * 6}s ease-in-out ${s.tDelay}s infinite`,
+                '--star-base': s.oBase,
+                '--star-peak': s.oPeak,
+              }} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function generateStars(count, rMin, rMax, oBaseMin, oPeakMax) {
+  let seed = count * 9301 + 49297
+  const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 }
+  return Array.from({ length: count }).map(() => ({
+    x: rand() * 100, y: rand() * 100,
+    r: rMin + rand() * (rMax - rMin),
+    oBase: oBaseMin + rand() * 0.15,
+    oPeak: 0.6 + rand() * (oPeakMax - 0.6),
+    tDelay: rand() * 5,
+  }))
+}
+
+function NebulaBackground() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      <div className="absolute"
+        style={{
+          left: '30%', top: '40%', width: 700, height: 700,
+          transform: 'translate(-50%, -50%)',
+          background: 'radial-gradient(circle, rgba(59,130,246,0.16), transparent 65%)',
+          filter: 'blur(20px)',
+          animation: 'nebula-pulse 14s ease-in-out infinite',
+        }} />
+      <div className="absolute"
+        style={{
+          left: '75%', top: '30%', width: 600, height: 600,
+          transform: 'translate(-50%, -50%)',
+          background: 'radial-gradient(circle, rgba(232,121,249,0.12), transparent 65%)',
+          filter: 'blur(22px)',
+          animation: 'nebula-pulse-slow 18s ease-in-out infinite',
+        }} />
+      <div className="absolute"
+        style={{
+          left: '60%', top: '75%', width: 500, height: 500,
+          transform: 'translate(-50%, -50%)',
+          background: 'radial-gradient(circle, rgba(34,211,238,0.10), transparent 65%)',
+          filter: 'blur(20px)',
+          animation: 'nebula-pulse 22s ease-in-out infinite',
+        }} />
+    </div>
+  )
+}

@@ -261,3 +261,36 @@
   .text-glow-blue  { text-shadow: 0 0 6px rgba(59,130,246,0.5); }
   .text-glow-red   { text-shadow: 0 0 6px rgba(239,68,68,0.5);  }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SPACE TRAVEL — keyframes for the Constellation prototype starfield
+   ══════════════════════════════════════════════════════════════════════════════ */
+@keyframes star-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+@keyframes nebula-pulse {
+  0%, 100% { opacity: 0.45; transform: translate3d(-50%, -50%, 0) scale(1); }
+  50%      { opacity: 0.7;  transform: translate3d(-50%, -50%, 0) scale(1.08); }
+}
+@keyframes nebula-pulse-slow {
+  0%, 100% { opacity: 0.3; transform: translate3d(-50%, -50%, 0) scale(1); }
+  50%      { opacity: 0.55; transform: translate3d(-50%, -50%, 0) scale(1.12); }
+}
+@keyframes warp-flash {
+  0%   { opacity: 0; transform: scaleX(0.1); }
+  18%  { opacity: 0.85; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1.4); }
+}
+@keyframes star-twinkle {
+  0%, 100% { opacity: var(--star-base, 0.4); }
+  50%      { opacity: var(--star-peak, 0.9); }
+}
+@keyframes orbit-trail {
+  0%   { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -24; }
+}
+@keyframes conflict-dash {
+  0%   { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -28; }
+}
