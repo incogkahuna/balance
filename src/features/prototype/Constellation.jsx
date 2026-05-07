@@ -246,8 +246,12 @@ export function Constellation() {
   // ── rAF orbit animation ─────────────────────────────────────────────
   const orbiterStatesRef = useRef(orbiterStates)
   const onHomeIndexRef = useRef(onHomeIndex)
+  const hoveredIdRef = useRef(hoveredPersonId)
+  const selectedPersonRef = useRef(selectedPerson)
   useEffect(() => { orbiterStatesRef.current = orbiterStates }, [orbiterStates])
   useEffect(() => { onHomeIndexRef.current = onHomeIndex }, [onHomeIndex])
+  useEffect(() => { hoveredIdRef.current = hoveredPersonId }, [hoveredPersonId])
+  useEffect(() => { selectedPersonRef.current = selectedPerson }, [selectedPerson])
 
   const orbiterRefs = useRef({})          // id -> SVG <g>
   const orbiterPositions = useRef({})     // id -> {x, y}
@@ -390,6 +394,7 @@ export function Constellation() {
 
       const lerp = 0.13
       const drag = dragRef.current
+      const frozenId = hoveredIdRef.current ?? selectedPersonRef.current
       ORBITERS.forEach(resource => {
         // While dragging, snap directly to cursor position — feels instant.
         if (drag && drag.resourceId === resource.id) {
@@ -398,6 +403,9 @@ export function Constellation() {
           if (el) el.setAttribute('transform', `translate(${drag.x} ${drag.y})`)
           return
         }
+        // While hovered or selected, freeze the orbiter so the user can study
+        // it without it sliding. The lerp picks back up when un-frozen.
+        if (frozenId === resource.id) return
         const target = computeTarget(resource)
         const cur = orbiterPositions.current[resource.id] ?? target
         const dx = target.x - cur.x
@@ -664,7 +672,13 @@ export function Constellation() {
                     setSelectedPerson(s => s === resource.id ? null : resource.id)
                   }}
                 >
-                  <ResourceGlyph resource={resource} mode={mode} dragging={isBeingDragged} manual={manual} />
+                  <ResourceGlyph
+                    resource={resource}
+                    mode={mode}
+                    dragging={isBeingDragged}
+                    manual={manual}
+                    hovered={hoveredPersonId === resource.id || selectedPerson === resource.id}
+                  />
                 </g>
               )
             })}
@@ -695,6 +709,8 @@ export function Constellation() {
             scrubMode={scrubMode}
             scrubStart={scrubStart}
             scrubEnd={scrubEnd}
+            scrubStartDay={scrubStartDay}
+            scrubEndDay={scrubEndDay}
           />
 
           <SceneStats orbiterStates={orbiterStates} conflictPairs={conflictPairs} />
@@ -1149,9 +1165,10 @@ function ProjectPlanet({ production, pos, radius, isActive, isSelected, isDimmed
 // ══════════════════════════════════════════════════════════════════════════
 // Resource glyph — circle for people, hexagon for gear
 // ══════════════════════════════════════════════════════════════════════════
-function ResourceGlyph({ resource, mode, dragging, manual }) {
+function ResourceGlyph({ resource, mode, dragging, manual, hovered }) {
   const conflict = mode === 'conflict'
   const isGear = resource.kind === 'gear'
+  const showNameLabel = mode !== 'home' || hovered || dragging
   // The PARENT <g> (set up in the orbiterStates.map) has its `transform`
   // attribute managed by rAF. This inner <g> uses a CSS transform so its
   // scale composes with the parent's translate without fighting it.
@@ -1168,6 +1185,16 @@ function ResourceGlyph({ resource, mode, dragging, manual }) {
         <circle r={22} fill="rgba(126,193,224,0.18)" stroke="rgba(126,193,224,0.5)" strokeWidth={1}>
           <animate attributeName="r" values="18;28;18" dur="1.1s" repeatCount="indefinite" />
         </circle>
+      )}
+      {/* Hover ring — also visually signals the orbit is paused */}
+      {hovered && !dragging && (
+        <>
+          <circle r={17} fill="none"
+            stroke={resource.color} strokeOpacity={0.7} strokeWidth={1}
+            strokeDasharray="3 2" />
+          <circle r={20} fill="none"
+            stroke={resource.color} strokeOpacity={0.18} strokeWidth={1} />
+        </>
       )}
       {/* Pin marker when this orbiter has a manual assignment */}
       {manual && !dragging && (
@@ -1215,13 +1242,21 @@ function ResourceGlyph({ resource, mode, dragging, manual }) {
         </g>
       )}
 
-      {/* Name label below — hidden when at home (would crowd inside the planet);
-          tooltip still surfaces the full name on hover */}
-      {mode !== 'home' && (
-        <text textAnchor="middle" y={22} fill="#d6d8dd"
-          fontSize={9.5} fontWeight={500}>
-          {resource.name}
-        </text>
+      {/* Name label below — hidden when at home (would crowd inside the planet),
+          but always shown on hover/select/drag so the user can identify the
+          icon they're studying. */}
+      {showNameLabel && (
+        <g>
+          {/* Subtle pill background so the label reads against any planet surface */}
+          <rect x={-resource.name.length * 3 - 4} y={15}
+            width={resource.name.length * 6 + 8} height={11}
+            fill="rgba(15,17,22,0.85)" stroke="rgba(255,255,255,0.08)" strokeWidth={0.5}
+            rx={1} />
+          <text textAnchor="middle" y={23} fill="#d6d8dd"
+            fontSize={9.5} fontWeight={500}>
+            {resource.name}
+          </text>
+        </g>
       )}
     </g>
   )
@@ -1336,104 +1371,254 @@ function DragBanner({ resource, targetId }) {
 // ══════════════════════════════════════════════════════════════════════════
 // Tooltip
 // ══════════════════════════════════════════════════════════════════════════
-function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd }) {
+function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd, scrubStartDay, scrubEndDay }) {
   if (!resourceId) return null
   const state = states.find(s => s.resource.id === resourceId)
   if (!state) return null
   const r = state.resource
   const allProds = productionsForResource(resourceId)
   const homeLabel = r.kind === 'gear' ? 'IN STORAGE' : 'ON STATION'
-  const headerLabel = scrubMode === 'day'
-    ? `ASSIGNMENTS · ${format(scrubStart, 'MMM d').toUpperCase()}`
-    : `ASSIGNMENTS · ${format(scrubStart, 'MMM d').toUpperCase()} → ${format(scrubEnd, 'MMM d').toUpperCase()}`
+  const myCommitments = COMMITMENTS.filter(c => c.resourceId === resourceId)
+  const totalCommittedDays = myCommitments.reduce(
+    (sum, c) => sum + (Math.round((c.end - c.start) / 86400000) + 1), 0
+  )
   return (
     <div
       className="absolute pointer-events-none"
       style={{
-        left: 16, bottom: 96,
-        padding: '12px 14px',
-        minWidth: 240,
-        background: 'rgba(15,17,22,0.92)',
-        backdropFilter: 'blur(8px)',
-        border: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        left: 16, bottom: 56,
+        padding: '20px 24px',
+        minWidth: 420,
+        maxWidth: 480,
+        background: 'rgba(11,13,18,0.96)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        boxShadow: '0 12px 48px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.03) inset',
       }}
     >
-      <div className="flex items-center gap-2 mb-1">
-        <span className="w-1.5 h-1.5 rounded-full"
-          style={{ background: r.color, boxShadow: `0 0 6px ${r.color}` }} />
-        <span className="text-[13px] font-medium text-orbital-text">{r.name}</span>
-        <span className="ml-1 font-telemetry text-[8px] text-orbital-dim tracking-widest">
+      {/* ── Header — name + kind + mode badge ─────────────────────── */}
+      <div className="flex items-center gap-2.5 mb-1.5">
+        <span className="w-2 h-2 rounded-full"
+          style={{ background: r.color, boxShadow: `0 0 8px ${r.color}` }} />
+        <span className="text-[18px] font-semibold text-orbital-text tracking-tight">{r.name}</span>
+        <span className="ml-1 font-telemetry text-[9px] text-orbital-dim tracking-widest">
           {r.kind === 'gear' ? 'GEAR' : 'PERSON'}
         </span>
         {state.mode === 'conflict' && (
-          <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5"
-            style={{
-              background: 'rgba(239,68,68,0.18)',
-              border: '1px solid rgba(239,68,68,0.5)',
-              color: '#fca5a5',
-            }}>
-            <AlertTriangle size={10} />
-            <span className="font-telemetry text-[8px] tracking-widest">TORN</span>
-          </span>
+          <ModeBadge accent="#ef4444" bg="rgba(239,68,68,0.18)" border="rgba(239,68,68,0.5)" color="#fca5a5">
+            <AlertTriangle size={10} /> TORN
+          </ModeBadge>
         )}
         {state.mode === 'multi' && (
-          <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5"
-            style={{
-              background: 'rgba(251,191,36,0.13)',
-              border: '1px solid rgba(251,191,36,0.4)',
-              color: '#fcd34d',
-            }}>
-            <span className="font-telemetry text-[8px] tracking-widest">MULTI</span>
-          </span>
+          <ModeBadge accent="#fbbf24" bg="rgba(251,191,36,0.13)" border="rgba(251,191,36,0.4)" color="#fcd34d">
+            MULTI
+          </ModeBadge>
         )}
         {state.mode === 'home' && (
-          <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5"
-            style={{
-              background: 'rgba(96,165,250,0.13)',
-              border: '1px solid rgba(96,165,250,0.4)',
-              color: '#93c5fd',
-            }}>
-            <Home size={9} />
-            <span className="font-telemetry text-[8px] tracking-widest">{homeLabel}</span>
-          </span>
+          <ModeBadge accent="#60a5fa" bg="rgba(96,165,250,0.13)" border="rgba(96,165,250,0.4)" color="#93c5fd">
+            <Home size={9} /> {homeLabel}
+          </ModeBadge>
         )}
+        {state.mode === 'orbit' && state.activeProds[0] && (() => {
+          const p = PRODUCTIONS.find(x => x.id === state.activeProds[0])
+          return p && (
+            <ModeBadge accent={p.color} bg={`${p.color}22`} border={`${p.color}77`} color={p.color}>
+              ON {p.code}
+            </ModeBadge>
+          )
+        })()}
       </div>
-      <p className="text-[11px] text-orbital-subtle leading-tight mb-2">
+
+      <p className="text-[13px] text-orbital-subtle leading-snug mb-3">
         {r.role}
         {r.contractor && (
-          <span className="ml-2 font-telemetry text-[9px] text-orbital-dim tracking-widest">EXT</span>
+          <span className="ml-2 font-telemetry text-[10px] text-orbital-dim tracking-widest">EXT</span>
+        )}
+        {state.manual && (
+          <span className="ml-2 font-telemetry text-[10px] tracking-widest"
+            style={{ color: '#fbbf24' }}>· MANUALLY ASSIGNED</span>
         )}
       </p>
-      <p className="font-telemetry text-[8px] text-orbital-subtle tracking-[0.2em] mb-1.5">
-        {headerLabel}
+
+      {/* ── Stat row ──────────────────────────────────────────────── */}
+      <div className="flex items-center gap-6 pb-3 mb-3"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <TipStat label="BOOKED" value={`${totalCommittedDays}d`} />
+        <TipStat label="PROJECTS" value={allProds.length} />
+        {state.activeProds.length > 0 && (
+          <TipStat label={scrubMode === 'day' ? 'NOW' : 'IN WINDOW'} value={state.activeProds.length} />
+        )}
+      </div>
+
+      {/* ── Mini-Gantt: shows where every commitment falls ─────── */}
+      <MiniGantt
+        resourceId={resourceId}
+        scrubStartDay={scrubStartDay}
+        scrubEndDay={scrubEndDay}
+        scrubMode={scrubMode}
+      />
+
+      {/* ── Peers — who else is on the active production(s) ───── */}
+      <PeersSection
+        resourceId={resourceId}
+        activeProds={state.activeProds}
+      />
+    </div>
+  )
+}
+
+function ModeBadge({ accent, bg, border, color, children }) {
+  return (
+    <span className="ml-auto inline-flex items-center gap-1.5 px-2 py-1"
+      style={{ background: bg, border: `1px solid ${border}`, color }}>
+      <span className="font-telemetry text-[10px] tracking-[0.18em]">{children}</span>
+    </span>
+  )
+}
+
+function TipStat({ label, value }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-telemetry text-[9px] text-orbital-subtle tracking-[0.2em]">{label}</span>
+      <span className="font-telemetry text-[15px] text-orbital-text tracking-wider">{value}</span>
+    </div>
+  )
+}
+
+// Mini horizontal Gantt — one row per production this resource touches,
+// commitment rendered as a colored bar inside the 6-week window track.
+function MiniGantt({ resourceId, scrubStartDay, scrubEndDay, scrubMode }) {
+  const myCommitments = COMMITMENTS.filter(c => c.resourceId === resourceId)
+  const productions = [...new Set(myCommitments.map(c => c.productionId))]
+    .map(id => PRODUCTIONS.find(p => p.id === id))
+    .filter(Boolean)
+  if (productions.length === 0) return null
+
+  const W = 420
+  const H_ROW = 22
+  const total = WINDOW_DAYS
+
+  return (
+    <div className="mb-3">
+      <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+        SCHEDULE · 6 WEEK WINDOW
       </p>
-      <div className="space-y-1">
-        {allProds.map(p => {
-          const isActive = state.activeProds.includes(p.id)
-          const days = commitmentLoad(resourceId, p.id)
+      <svg width={W} height={productions.length * H_ROW + 14} className="block overflow-visible">
+        {/* Window highlight in the background */}
+        <rect
+          x={(scrubStartDay / total) * W}
+          y={0}
+          width={Math.max(3, ((scrubEndDay - scrubStartDay + (scrubMode === 'day' ? 0 : 0)) / total) * W)}
+          height={productions.length * H_ROW}
+          fill="rgba(255,255,255,0.08)"
+          stroke="rgba(255,255,255,0.4)"
+          strokeWidth={0.7}
+          strokeDasharray="3 3"
+        />
+        {productions.map((p, i) => {
+          const c = myCommitments.find(x => x.productionId === p.id)
+          if (!c) return null
+          const startPx = (dayIndex(c.start) / total) * W
+          const endPx = ((dayIndex(c.end) + 1) / total) * W
           return (
-            <div key={p.id} className="flex items-center justify-between text-[10px]">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5"
-                  style={{
-                    background: p.color,
-                    boxShadow: isActive ? `0 0 6px ${p.glow}` : 'none',
-                    opacity: isActive ? 1 : 0.4,
-                  }} />
-                <span className={isActive ? 'text-orbital-text' : 'text-orbital-subtle'}>
-                  {p.name}
-                </span>
-                {isActive && (
-                  <span className="font-telemetry text-[8px] text-green-400 tracking-widest ml-1">
-                    ACTIVE
-                  </span>
-                )}
-              </div>
-              <span className="font-telemetry text-orbital-subtle tracking-wider">{days}d</span>
-            </div>
+            <g key={p.id} transform={`translate(0, ${i * H_ROW})`}>
+              {/* track */}
+              <rect x={0} y={9} width={W} height={3} fill="rgba(255,255,255,0.05)" />
+              {/* commitment bar */}
+              <rect x={startPx} y={5} width={Math.max(3, endPx - startPx)} height={11}
+                fill={p.color} opacity={0.85}
+                style={{ filter: `drop-shadow(0 0 5px ${p.glow})` }} />
+              {/* code label inside bar */}
+              <text x={startPx + 5} y={14}
+                fontFamily="'Space Mono', monospace"
+                fontSize={9.5}
+                letterSpacing={1}
+                fill="rgba(0,0,0,0.78)"
+                fontWeight={700}>
+                {p.code}
+              </text>
+              {/* day count to the right of the bar */}
+              <text x={endPx + 6} y={14}
+                fontFamily="'Space Mono', monospace"
+                fontSize={9}
+                fill="rgba(255,255,255,0.45)"
+                letterSpacing={0.8}>
+                {Math.round((c.end - c.start) / 86400000) + 1}d
+              </text>
+            </g>
           )
         })}
+        {/* Week tick marks below */}
+        {Array.from({ length: 7 }, (_, i) => i).map(i => (
+          <line key={i}
+            x1={(i / 6) * W} y1={productions.length * H_ROW}
+            x2={(i / 6) * W} y2={productions.length * H_ROW + 5}
+            stroke="rgba(255,255,255,0.25)" strokeWidth={0.7} />
+        ))}
+      </svg>
+      <div className="flex justify-between font-telemetry text-[9px] text-orbital-dim tracking-wider mt-1">
+        <span>{format(dateAtDayIndex(0), 'MMM d').toUpperCase()}</span>
+        <span>{format(dateAtDayIndex(WINDOW_DAYS), 'MMM d').toUpperCase()}</span>
+      </div>
+    </div>
+  )
+}
+
+// Peers — other resources on the same active production(s)
+function PeersSection({ resourceId, activeProds }) {
+  if (activeProds.length === 0) return null
+  const blocks = activeProds.map(prodId => {
+    const prod = PRODUCTIONS.find(p => p.id === prodId)
+    if (!prod) return null
+    const peers = RESOURCES.filter(r =>
+      r.id !== resourceId &&
+      (r.kind === 'people' || r.kind === 'gear') &&
+      COMMITMENTS.some(c => c.resourceId === r.id && c.productionId === prodId)
+    )
+    return { prod, peers }
+  }).filter(Boolean)
+  if (!blocks.some(b => b.peers.length > 0)) return null
+
+  return (
+    <div>
+      <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+        ALONGSIDE
+      </p>
+      <div className="space-y-2">
+        {blocks.map(({ prod, peers }) => (
+          <div key={prod.id} className="flex items-start gap-2.5">
+            <div className="flex items-center gap-1.5 min-w-[88px] flex-shrink-0">
+              <span className="w-2 h-2 flex-shrink-0"
+                style={{ background: prod.color, boxShadow: `0 0 5px ${prod.glow}` }} />
+              <span className="font-telemetry text-[10px] tracking-[0.15em]"
+                style={{ color: prod.color }}>
+                {prod.code}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {peers.length === 0 ? (
+                <span className="font-telemetry text-[10px] text-orbital-dim tracking-widest">SOLO</span>
+              ) : peers.map(peer => (
+                <span key={peer.id}
+                  className="inline-flex items-center justify-center font-telemetry font-bold"
+                  style={{
+                    width: 24, height: 20,
+                    fontSize: peer.kind === 'gear' ? 9 : 11,
+                    background: peer.color,
+                    color: '#0a0c10',
+                    boxShadow: `0 0 5px ${peer.color}88`,
+                    clipPath: peer.kind === 'gear'
+                      ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)'
+                      : undefined,
+                    borderRadius: peer.kind === 'people' ? '50%' : 0,
+                  }}
+                  title={peer.name}>
+                  {peer.initial}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
