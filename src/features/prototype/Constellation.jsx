@@ -1491,6 +1491,291 @@ function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd, 
         resourceId={resourceId}
         activeProds={state.activeProds}
       />
+
+      {/* ── EXPANDED-ONLY SECTIONS ─────────────────────────────── */}
+      {expanded && (
+        <>
+          <SectionDivider />
+          <AssignmentsDetail
+            resourceId={resourceId}
+            activeProds={state.activeProds}
+            scrubStart={scrubStart}
+            scrubEnd={scrubEnd}
+          />
+          {state.mode === 'conflict' && (
+            <>
+              <SectionDivider />
+              <ConflictsBreakdown resourceId={resourceId} />
+            </>
+          )}
+          <SectionDivider />
+          <UtilizationBar
+            resourceId={resourceId}
+            scrubStartDay={scrubStartDay}
+            scrubEndDay={scrubEndDay}
+          />
+          <SectionDivider />
+          <SkillsOrSpecs resource={r} />
+        </>
+      )}
+
+      {/* ── Hint footer ────────────────────────────────────────── */}
+      {!expanded && (
+        <div className="mt-3 pt-2 flex items-center justify-end"
+          style={{ borderTop: '1px dashed rgba(255,255,255,0.08)' }}>
+          <span className="font-telemetry text-[9px] text-orbital-dim tracking-[0.2em]">
+            CLICK ICON TO EXPAND ▸
+          </span>
+        </div>
+      )}
+
+      {/* ── Close button (expanded only) ───────────────────────── */}
+      {expanded && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onClose?.() }}
+          className="absolute top-3 right-3 inline-flex items-center justify-center transition-colors"
+          style={{
+            width: 22, height: 22,
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: 'var(--orbital-subtle)',
+          }}
+          title="Close (or click on empty space)"
+        >
+          <span className="text-[12px] leading-none">×</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+function SectionDivider() {
+  return (
+    <div className="my-3" style={{ borderTop: '1px dashed rgba(255,255,255,0.08)' }} />
+  )
+}
+
+// Detailed list of every commitment with date range, day count, location.
+// At-scrubber status is annotated as ACTIVE / UPCOMING / WRAPPED.
+function AssignmentsDetail({ resourceId, activeProds, scrubStart, scrubEnd }) {
+  const myCommitments = COMMITMENTS
+    .filter(c => c.resourceId === resourceId)
+    .sort((a, b) => a.start - b.start)
+  if (myCommitments.length === 0) return null
+
+  return (
+    <div>
+      <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+        ASSIGNMENT DETAIL
+      </p>
+      <div className="space-y-2.5">
+        {myCommitments.map((c, i) => {
+          const prod = PRODUCTIONS.find(p => p.id === c.productionId)
+          if (!prod) return null
+          const days = Math.round((c.end - c.start) / 86400000) + 1
+          const isActive = activeProds.includes(prod.id)
+          const isPast = c.end < scrubStart
+          const isFuture = c.start > scrubEnd
+          const status = isActive ? 'ACTIVE' : isPast ? 'WRAPPED' : isFuture ? 'UPCOMING' : 'PARTIAL'
+          const statusColor = isActive ? '#34d399' : isPast ? '#71717a' : isFuture ? '#60a5fa' : '#fbbf24'
+          const location = PRODUCTION_LOCATION[prod.id]
+          return (
+            <div key={i} className="flex items-start gap-3"
+              style={{ paddingLeft: 8, borderLeft: `2px solid ${prod.color}` }}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-telemetry text-[10px] tracking-[0.18em]"
+                    style={{ color: prod.color }}>
+                    {prod.code}
+                  </span>
+                  <span className="text-[12px] font-medium text-orbital-text">
+                    {prod.name}
+                  </span>
+                  <span className="ml-auto font-telemetry text-[9px] tracking-widest"
+                    style={{ color: statusColor }}>
+                    {status}
+                  </span>
+                </div>
+                <div className="font-telemetry text-[10px] text-orbital-subtle tracking-wider mt-0.5">
+                  {format(c.start, 'MMM d').toUpperCase()} → {format(c.end, 'MMM d').toUpperCase()} · {days}d
+                  {location && <span className="ml-2">· {shortLocationLabel(location)}</span>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Breakdown of every overlap pair for a TORN resource — which two productions
+// contest them, the exact overlap window, and the duration.
+function ConflictsBreakdown({ resourceId }) {
+  const myCommitments = COMMITMENTS.filter(c => c.resourceId === resourceId)
+  const overlaps = []
+  for (let i = 0; i < myCommitments.length; i++) {
+    for (let j = i + 1; j < myCommitments.length; j++) {
+      const a = myCommitments[i], b = myCommitments[j]
+      if (a.productionId === b.productionId) continue
+      if (a.start <= b.end && b.start <= a.end) {
+        const overlapStart = a.start > b.start ? a.start : b.start
+        const overlapEnd = a.end < b.end ? a.end : b.end
+        const days = Math.round((overlapEnd - overlapStart) / 86400000) + 1
+        overlaps.push({ a, b, overlapStart, overlapEnd, days })
+      }
+    }
+  }
+  if (overlaps.length === 0) return null
+
+  return (
+    <div>
+      <p className="font-telemetry text-[10px] tracking-[0.22em] mb-2"
+        style={{ color: '#fca5a5' }}>
+        ⚠ CONFLICTS · {overlaps.length} OVERLAP{overlaps.length > 1 ? 'S' : ''}
+      </p>
+      <div className="space-y-2">
+        {overlaps.map((o, i) => {
+          const pa = PRODUCTIONS.find(p => p.id === o.a.productionId)
+          const pb = PRODUCTIONS.find(p => p.id === o.b.productionId)
+          if (!pa || !pb) return null
+          return (
+            <div key={i} className="px-2.5 py-2"
+              style={{
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.25)',
+              }}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-1.5 h-1.5"
+                  style={{ background: pa.color, boxShadow: `0 0 4px ${pa.glow}` }} />
+                <span className="font-telemetry text-[10px] tracking-[0.18em]" style={{ color: pa.color }}>
+                  {pa.code}
+                </span>
+                <span className="font-telemetry text-[10px] text-orbital-subtle">━━</span>
+                <span className="w-1.5 h-1.5"
+                  style={{ background: pb.color, boxShadow: `0 0 4px ${pb.glow}` }} />
+                <span className="font-telemetry text-[10px] tracking-[0.18em]" style={{ color: pb.color }}>
+                  {pb.code}
+                </span>
+              </div>
+              <p className="font-telemetry text-[10px] text-orbital-text tracking-wider">
+                {format(o.overlapStart, 'MMM d').toUpperCase()} — {format(o.overlapEnd, 'MMM d').toUpperCase()} ·
+                <span className="ml-1.5" style={{ color: '#fca5a5' }}>{o.days} DAY OVERLAP</span>
+              </p>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Visual utilization bar — what % of the current scrubber window this
+// resource is committed for, with overcommitment shown as a red overflow.
+function UtilizationBar({ resourceId, scrubStartDay, scrubEndDay }) {
+  // For each day in the window, count active commitments
+  const span = Math.max(1, scrubEndDay - scrubStartDay)
+  let totalCommittedDays = 0
+  let overlappingDays = 0
+  for (let day = scrubStartDay; day <= scrubEndDay; day++) {
+    const date = dateAtDayIndex(day)
+    const active = COMMITMENTS.filter(c =>
+      c.resourceId === resourceId && c.start <= date && date <= c.end
+    ).length
+    if (active >= 1) totalCommittedDays++
+    if (active >= 2) overlappingDays++
+  }
+  const utilPct = Math.min(100, Math.round((totalCommittedDays / (span + 1)) * 100))
+  const overlapPct = Math.round((overlappingDays / (span + 1)) * 100)
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em]">
+          UTILIZATION · IN WINDOW
+        </p>
+        <span className="font-telemetry text-[12px] text-orbital-text tracking-wider">
+          {utilPct}%
+        </span>
+      </div>
+      <div className="relative" style={{ height: 10, background: 'rgba(255,255,255,0.05)' }}>
+        <div className="absolute top-0 bottom-0 left-0"
+          style={{
+            width: `${utilPct}%`,
+            background: utilPct > 80
+              ? 'linear-gradient(90deg, rgba(34,197,94,0.7), rgba(251,191,36,0.7))'
+              : 'linear-gradient(90deg, rgba(96,165,250,0.55), rgba(34,197,94,0.65))',
+            transition: 'width 350ms ease-out',
+          }} />
+        {overlapPct > 0 && (
+          <div className="absolute top-0 bottom-0 left-0"
+            style={{
+              width: `${overlapPct}%`,
+              background: 'repeating-linear-gradient(45deg, rgba(239,68,68,0.4), rgba(239,68,68,0.4) 4px, rgba(239,68,68,0.7) 4px, rgba(239,68,68,0.7) 8px)',
+              boxShadow: '0 0 8px rgba(239,68,68,0.5)',
+            }} />
+        )}
+      </div>
+      <div className="flex items-center justify-between mt-1.5 font-telemetry text-[9px] text-orbital-subtle tracking-wider">
+        <span>{totalCommittedDays} / {span + 1} DAYS BOOKED</span>
+        {overlapPct > 0 && (
+          <span style={{ color: '#fca5a5' }}>{overlappingDays} DAYS OVERLAP</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Skills (people) or specs (gear)
+function SkillsOrSpecs({ resource }) {
+  if (resource.kind === 'people') {
+    const skills = ROLE_SKILLS[resource.role] ?? []
+    if (skills.length === 0) return null
+    return (
+      <div>
+        <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+          SKILLS
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {skills.map(s => (
+            <span key={s}
+              className="inline-flex items-center px-2 py-0.5 font-telemetry text-[10px] tracking-[0.12em]"
+              style={{
+                background: `${resource.color}1a`,
+                border: `1px solid ${resource.color}55`,
+                color: resource.color,
+              }}>
+              {s}
+            </span>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  if (resource.kind === 'gear') {
+    const details = GEAR_DETAILS[resource.id]
+    return (
+      <div>
+        <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+          SPECS
+        </p>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+          <SpecRow label="MODEL" value={resource.role} />
+          {details && Object.entries(details).map(([k, v]) => (
+            <SpecRow key={k} label={k.toUpperCase()} value={v} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+  return null
+}
+
+function SpecRow({ label, value }) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span className="font-telemetry text-[9px] text-orbital-subtle tracking-[0.18em]">{label}</span>
+      <span className="font-telemetry text-[11px] text-orbital-text tracking-wider truncate">{value}</span>
     </div>
   )
 }
