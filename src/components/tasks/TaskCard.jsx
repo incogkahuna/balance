@@ -13,6 +13,8 @@ import { Avatar } from '../ui/Avatar.jsx'
 import { Modal } from '../ui/Modal.jsx'
 import { TaskForm } from './TaskForm.jsx'
 import { ConfirmDialog } from '../ui/ConfirmDialog.jsx'
+import { StoredImage } from '../files/StoredImage.tsx'
+import { uploadFile, signedUrl, BUCKETS, paths } from '../../lib/storage.ts'
 import clsx from 'clsx'
 
 // `showProduction`: surfaces a clickable production-name link above the title.
@@ -54,28 +56,69 @@ export function TaskCard({ task, productionId, showProduction = false }) {
   const StatusIcon = cfg.icon
 
   // ── Photo helpers ──────────────────────────────────────────────────────────
-  const readPhoto = (file, onDone) => {
-    const reader = new FileReader()
-    reader.onload = (e) => onDone({ url: e.target.result, name: file.name })
-    reader.readAsDataURL(file)
+  // Photos now upload to Supabase Storage immediately on selection. We keep
+  // the local preview via a temporary object URL, but the persisted record
+  // stores the storage_path so other devices can resolve it.
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const [photoError, setPhotoError] = useState(null)
+
+  const uploadPhotoToBucket = async (file, bucket, pathBuilder) => {
+    setPhotoUploading(true)
+    setPhotoError(null)
+    try {
+      const path = pathBuilder(file)
+      await uploadFile(bucket, path, file, { contentType: file.type })
+      return {
+        storage_path: path,
+        name: file.name,
+        url: URL.createObjectURL(file),  // local preview only
+      }
+    } catch (err) {
+      console.error('[TaskCard] photo upload failed:', err)
+      setPhotoError(err instanceof Error ? err.message : 'Upload failed')
+      return null
+    } finally {
+      setPhotoUploading(false)
+    }
   }
 
-  const handleCompletionPhotoSelect = (e) => {
+  const handleCompletionPhotoSelect = async (e) => {
     const file = e.target.files?.[0]
-    if (file) readPhoto(file, setCompletionPhoto)
     e.target.value = ''
+    if (!file) return
+    const photo = await uploadPhotoToBucket(
+      file,
+      BUCKETS.taskCompletionPhotos,
+      (f) => paths.taskCompletionPhoto(task.id, f.name),
+    )
+    if (photo) setCompletionPhoto(photo)
   }
 
-  const handleCommentPhotoSelect = (e) => {
+  const handleCommentPhotoSelect = async (e) => {
     const file = e.target.files?.[0]
-    if (file) readPhoto(file, setCommentPhoto)
     e.target.value = ''
+    if (!file) return
+    const photo = await uploadPhotoToBucket(
+      file,
+      BUCKETS.taskCompletionPhotos,
+      (f) => paths.taskCompletionPhoto(task.id, f.name),
+    )
+    if (photo) setCommentPhoto(photo)
   }
 
   // ── Task actions ───────────────────────────────────────────────────────────
   const handleMarkComplete = () => {
     const photos = completionPhoto
-      ? [...completionPhotos, { id: crypto.randomUUID(), url: completionPhoto.url, name: completionPhoto.name, uploadedAt: new Date().toISOString(), uploadedBy: currentUser?.id }]
+      ? [
+          ...completionPhotos,
+          {
+            id: crypto.randomUUID(),
+            storage_path: completionPhoto.storage_path,
+            name: completionPhoto.name,
+            uploadedAt: new Date().toISOString(),
+            uploadedBy: currentUser?.id,
+          },
+        ]
       : completionPhotos
 
     updateTask(task.id, {
@@ -118,7 +161,7 @@ export function TaskCard({ task, productionId, showProduction = false }) {
     addComment(task.id, {
       id: crypto.randomUUID(),
       text: commentText.trim(),
-      photoUrl: commentPhoto?.url || null,
+      photoStoragePath: commentPhoto?.storage_path || null,
       photoName: commentPhoto?.name || null,
       authorId: currentUser?.id,
       authorName: currentUser?.name,
@@ -255,14 +298,10 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                   {completionPhotos.map(photo => (
                     <button
                       key={photo.id}
-                      onClick={() => setLightbox(photo.url)}
+                      onClick={() => setLightbox(photo)}
                       className="block aspect-video rounded-lg overflow-hidden border border-orbital-border bg-black/20 hover:border-blue-500/40 transition-colors"
                     >
-                      <img
-                        src={photo.url}
-                        alt="Completion photo"
-                        className="w-full h-full object-cover"
-                      />
+                      <CompletionPhotoThumb photo={photo} />
                     </button>
                   ))}
                 </div>
@@ -317,7 +356,8 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                       />
                       <button
                         onClick={() => setCompletionPhoto(null)}
-                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors"
+                        aria-label="Remove photo"
+                        className="absolute top-2 right-2 w-9 h-9 sm:w-7 sm:h-7 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors"
                       >
                         <X size={14} className="text-white" />
                       </button>
@@ -439,7 +479,8 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                     />
                     <button
                       onClick={() => setCommentPhoto(null)}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors"
+                      aria-label="Remove photo"
+                      className="absolute top-1.5 right-1.5 w-9 h-9 sm:w-6 sm:h-6 rounded-full bg-black/70 flex items-center justify-center hover:bg-black/90 transition-colors"
                     >
                       <X size={11} className="text-white" />
                     </button>
@@ -465,10 +506,11 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                     <button
                       type="button"
                       onClick={() => commentPhotoRef.current?.click()}
-                      className="absolute right-2 bottom-2 p-1.5 rounded-lg text-orbital-subtle hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                      className="absolute right-1 bottom-1 w-9 h-9 flex items-center justify-center rounded-lg text-orbital-subtle hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
                       title="Attach photo"
+                      aria-label="Attach photo"
                     >
-                      <Camera size={15} />
+                      <Camera size={16} />
                     </button>
                   </div>
                   <button
@@ -531,14 +573,55 @@ export function TaskCard({ task, productionId, showProduction = false }) {
           >
             <X size={20} />
           </button>
-          <img
-            src={lightbox}
-            alt="Full size photo"
-            className="max-w-full max-h-[90vh] object-contain rounded-xl"
-            onClick={e => e.stopPropagation()}
+          <CompletionPhotoFull
+            photo={lightbox}
+            onClick={(e) => e.stopPropagation()}
           />
         </div>
       )}
     </>
+  )
+}
+
+// Photos store either `storage_path` (new) or `url` (legacy base64). This
+// renders the right thing.
+function CompletionPhotoThumb({ photo }) {
+  if (photo.storage_path) {
+    return (
+      <StoredImage
+        bucket={BUCKETS.taskCompletionPhotos}
+        path={photo.storage_path}
+        alt="Completion photo"
+        className="w-full h-full object-cover"
+      />
+    )
+  }
+  return (
+    <img
+      src={photo.url}
+      alt="Completion photo"
+      className="w-full h-full object-cover"
+    />
+  )
+}
+
+function CompletionPhotoFull({ photo, onClick }) {
+  return (
+    <div onClick={onClick}>
+      {photo.storage_path ? (
+        <StoredImage
+          bucket={BUCKETS.taskCompletionPhotos}
+          path={photo.storage_path}
+          alt="Full size photo"
+          className="max-w-full max-h-[90vh] object-contain rounded-xl"
+        />
+      ) : (
+        <img
+          src={photo.url}
+          alt="Full size photo"
+          className="max-w-full max-h-[90vh] object-contain rounded-xl"
+        />
+      )}
+    </div>
   )
 }

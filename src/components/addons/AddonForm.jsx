@@ -2,10 +2,15 @@ import { useState, useRef } from 'react'
 import { AlertTriangle, Camera, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { createAddon } from '../../data/models.js'
+import { StoredImage } from '../files/StoredImage.tsx'
+import { uploadFile, BUCKETS, paths } from '../../lib/storage.ts'
 
 export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
   const { currentUser } = useApp()
   const fileRef = useRef()
+
+  // Stable id for the addon — needed in the storage path before submit.
+  const [addonId] = useState(() => initial?.id || crypto.randomUUID())
 
   const [form, setForm] = useState({
     equipment: initial?.equipment || '',
@@ -17,28 +22,44 @@ export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
     damagePhotos: initial?.damagePhotos || [],
   })
 
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState(null)
+
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
-  const handlePhotoUpload = (e) => {
-    const files = Array.from(e.target.files)
-    files.forEach(file => {
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        set('damagePhotos', [...form.damagePhotos, {
+  const handlePhotoUpload = async (e) => {
+    const files = Array.from(e.target.files || [])
+    e.target.value = ''
+    if (files.length === 0) return
+
+    setUploadError(null)
+    setUploading(true)
+    try {
+      const uploaded = []
+      for (const file of files) {
+        const path = paths.damagePhoto(productionId, addonId, file.name)
+        await uploadFile(BUCKETS.damagePhotos, path, file, { contentType: file.type })
+        uploaded.push({
           id: crypto.randomUUID(),
           name: file.name,
-          url: ev.target.result,
+          storage_path: path,
           uploadedAt: new Date().toISOString(),
-        }])
+        })
       }
-      reader.readAsDataURL(file)
-    })
+      setForm(f => ({ ...f, damagePhotos: [...f.damagePhotos, ...uploaded] }))
+    } catch (err) {
+      console.error('[AddonForm] damage photo upload failed:', err)
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
     const addon = createAddon({
       ...(initial || {}),
+      id: addonId,
       productionId,
       equipment: form.equipment,
       quantity: form.quantity,
@@ -143,6 +164,7 @@ export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
               type="file"
               ref={fileRef}
               accept="image/*"
+              capture="environment"
               multiple
               className="hidden"
               onChange={handlePhotoUpload}
@@ -150,19 +172,19 @@ export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="btn-secondary w-full"
+              disabled={uploading}
+              className="btn-secondary w-full disabled:opacity-50"
             >
-              <Camera size={16} /> Upload Damage Photos
+              <Camera size={16} /> {uploading ? 'Uploading...' : 'Upload Damage Photos'}
             </button>
+            {uploadError && (
+              <p className="text-xs text-red-400 mt-2">{uploadError}</p>
+            )}
             {form.damagePhotos.length > 0 && (
               <div className="grid grid-cols-3 gap-2 mt-3">
                 {form.damagePhotos.map(photo => (
                   <div key={photo.id} className="relative group">
-                    <img
-                      src={photo.url}
-                      alt={photo.name}
-                      className="w-full h-20 object-cover rounded-lg border border-orbital-border"
-                    />
+                    <DamagePhotoThumb photo={photo} />
                     <button
                       type="button"
                       onClick={() => set('damagePhotos', form.damagePhotos.filter(p => p.id !== photo.id))}
@@ -180,10 +202,31 @@ export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
 
       <div className="flex gap-3 pt-1">
         <button type="button" onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
-        <button type="submit" className="btn-primary flex-1">
+        <button type="submit" className="btn-primary flex-1" disabled={uploading}>
           {initial?.id ? 'Save Add-on' : 'Log Add-on'}
         </button>
       </div>
     </form>
+  )
+}
+
+// Damage photos store either `storage_path` (new) or `url` (legacy base64).
+function DamagePhotoThumb({ photo }) {
+  if (photo.storage_path) {
+    return (
+      <StoredImage
+        bucket={BUCKETS.damagePhotos}
+        path={photo.storage_path}
+        alt={photo.name || 'Damage photo'}
+        className="w-full h-20 object-cover rounded-lg border border-orbital-border"
+      />
+    )
+  }
+  return (
+    <img
+      src={photo.url}
+      alt={photo.name}
+      className="w-full h-20 object-cover rounded-lg border border-orbital-border"
+    />
   )
 }

@@ -163,7 +163,7 @@ export function ProductionsPage() {
 
           {/* Filter tab strip */}
           <div
-            className="flex"
+            className="flex overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
             style={{ borderBottom: '1px solid var(--orbital-border)' }}
           >
             {filterTabs.map(s => {
@@ -174,7 +174,7 @@ export function ProductionsPage() {
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
-                  className="px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-1.5"
+                  className="px-3 py-3 sm:py-2 text-xs font-medium transition-colors whitespace-nowrap flex items-center gap-1.5"
                   style={isActive ? {
                     color: accent,
                     borderBottom: `2px solid ${accent}`,

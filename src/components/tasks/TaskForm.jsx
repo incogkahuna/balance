@@ -89,7 +89,7 @@ export function TaskForm({ productionId, initial, onSubmit, onCancel }) {
               key={p}
               type="button"
               onClick={() => set('priority', p)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-4 py-2.5 lg:py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 form.priority === p
                   ? 'bg-blue-600 text-white'
                   : 'bg-orbital-surface border border-orbital-border text-orbital-subtle hover:text-orbital-text'

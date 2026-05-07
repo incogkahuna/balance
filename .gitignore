@@ -29,3 +29,10 @@ npm-debug.log*
 
 # Vite
 *.local
+
+# TypeScript
+*.tsbuildinfo
+
+# Supabase (project-level — supabase/.gitignore covers the rest)
+supabase/.branches
+supabase/.temp

@@ -99,6 +99,17 @@
     min-height: 100dvh;
   }
 
+  /* iOS Safari zooms in on focus when input font-size < 16px. We use 14px
+     visually on desktop, but bump to 16px on touch-primary devices so the
+     keyboard doesn't trigger a zoom-and-scroll dance on phones. */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
   #root { position: relative; }
 
   /* Scrollbar — thin and minimal */
@@ -161,6 +172,19 @@
   .btn-ghost:hover {
     background: var(--btn-ghost-hover);
     border-color: var(--btn-secondary-border);
+  }
+
+  /* Touch-friendly mobile button heights — desktop stays tight at py-1.5 (26px)
+     so the studio's dense desktop chrome doesn't change. Below 768px every
+     primary action button gains vertical padding for ~40px tall hit area. */
+  @media (max-width: 767px) {
+    .btn-primary,
+    .btn-secondary,
+    .btn-ghost,
+    .btn-danger {
+      padding-top: 0.5rem;
+      padding-bottom: 0.5rem;
+    }
   }
 
   .btn-danger {

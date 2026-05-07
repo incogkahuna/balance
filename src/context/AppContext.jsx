@@ -1,97 +1,379 @@
-import { createContext, useContext, useState, useCallback, useMemo } from 'react'
-import { useLocalStorage } from '../hooks/useLocalStorage.js'
-import { USERS, ROLES, TASK_STATUS } from '../data/models.js'
+import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { USERS } from '../data/models.js'
+import { useAuth } from './AuthContext.tsx'
 import {
-  SAMPLE_PRODUCTIONS as SP,
-  SAMPLE_TASKS as ST,
-  SAMPLE_CONTRACTORS as SC,
-} from '../data/sampleData.js'
+  listProductions as listProductionsApi,
+  createProduction as createProductionApi,
+  updateProduction as updateProductionApi,
+  deleteProduction as deleteProductionApi,
+  subscribeToProductions,
+} from '../lib/data/productions.ts'
+import {
+  listTasks as listTasksApi,
+  createTask as createTaskApi,
+  updateTask as updateTaskApi,
+  deleteTask as deleteTaskApi,
+  createComment as createCommentApi,
+  subscribeToTasks,
+  subscribeToComments,
+} from '../lib/data/tasks.ts'
+import {
+  listContractors as listContractorsApi,
+  createContractor as createContractorApi,
+  updateContractor as updateContractorApi,
+  deleteContractor as deleteContractorApi,
+  subscribeToContractors,
+} from '../lib/data/contractors.ts'
 
 const AppContext = createContext(null)
 
-export function AppProvider({ children }) {
-  const [currentUser, setCurrentUser] = useLocalStorage('balance_current_user', null)
-  const [productions, setProductions] = useLocalStorage('balance_productions', SP)
-  const [_rawTasks, setTasks] = useLocalStorage('balance_tasks', ST)
-  const [contractors, setContractors] = useLocalStorage('balance_contractors', SC)
+const DEV_VIEW_AS_KEY = 'balance_dev_view_as'
 
-  // ─── Task migration ────────────────────────────────────────────────────────
-  // Normalises tasks that pre-date the status workflow feature (stored with
-  // the old reportedComplete/verifiedComplete fields) so every consumer always
-  // receives a task with the current shape. New tasks pass through unchanged.
-  const tasks = useMemo(() => _rawTasks.map(t => {
-    if (t.status && t.comments !== undefined) return t // already current
-    return {
-      ...t,
-      status: t.status || (
-        t.verifiedComplete ? TASK_STATUS.VERIFIED :
-        t.reportedComplete ? TASK_STATUS.COMPLETE :
-        TASK_STATUS.NOT_STARTED
-      ),
-      statusHistory: t.statusHistory || [],
-      blockedReason: t.blockedReason || '',
-      completionPhotos: t.completionPhotos || [],
-      comments: t.comments || [],
+export function AppProvider({ children }) {
+  const { profile, signOut } = useAuth()
+
+  // All entities now live in Postgres. State hydrates on session start and
+  // stays in sync via realtime subscriptions.
+  const [productions, setProductionsState]   = useState([])
+  const [productionsLoading, setProductionsLoading] = useState(true)
+  const [productionsError, setProductionsError]     = useState(null)
+
+  const [tasks, setTasksState]               = useState([])
+  const [tasksLoading, setTasksLoading]      = useState(true)
+  const [tasksError, setTasksError]          = useState(null)
+
+  const [contractors, setContractorsState]           = useState([])
+  const [contractorsLoading, setContractorsLoading]  = useState(true)
+  const [contractorsError, setContractorsError]      = useState(null)
+
+  // ─── Dev profile switcher ──────────────────────────────────────────────────
+  // In dev only, allows overriding `currentUser` to any of the five known
+  // legacy users to test role-gated UI. Stored in localStorage so it survives
+  // refreshes. Reads as null in production builds.
+  const [devViewAs, setDevViewAsState] = useState(() => {
+    if (!import.meta.env.DEV) return null
+    return localStorage.getItem(DEV_VIEW_AS_KEY) || null
+  })
+
+  const setDevViewAs = useCallback((userId) => {
+    if (!import.meta.env.DEV) return
+    if (userId) localStorage.setItem(DEV_VIEW_AS_KEY, userId)
+    else localStorage.removeItem(DEV_VIEW_AS_KEY)
+    setDevViewAsState(userId || null)
+  }, [])
+
+  // ─── Hydrate productions from Supabase + subscribe to realtime ─────────────
+  // On session presence, pull all productions visible to this user (RLS filters
+  // server-side) and subscribe to realtime change events so multi-browser
+  // updates appear within ~500ms.
+  useEffect(() => {
+    if (!profile) {
+      setProductionsState([])
+      setProductionsLoading(false)
+      return
     }
-  }), [_rawTasks])
+
+    let cancelled = false
+    setProductionsLoading(true)
+    setProductionsError(null)
+
+    listProductionsApi()
+      .then((rows) => {
+        if (cancelled) return
+        setProductionsState(rows)
+        setProductionsLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('[AppContext] listProductions failed:', err)
+        setProductionsError(err instanceof Error ? err.message : String(err))
+        setProductionsLoading(false)
+      })
+
+    const unsubscribe = subscribeToProductions((event) => {
+      setProductionsState((prev) => {
+        if (event.type === 'INSERT') {
+          if (prev.some((p) => p.id === event.row.id)) return prev
+          return [event.row, ...prev]
+        }
+        if (event.type === 'UPDATE') {
+          return prev.map((p) => (p.id === event.row.id ? event.row : p))
+        }
+        if (event.type === 'DELETE') {
+          return prev.filter((p) => p.id !== event.id)
+        }
+        return prev
+      })
+    })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [profile])
+
+  // ─── Hydrate tasks from Supabase + subscribe to realtime ───────────────────
+  useEffect(() => {
+    if (!profile) {
+      setTasksState([])
+      setTasksLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setTasksLoading(true)
+    setTasksError(null)
+
+    listTasksApi()
+      .then((rows) => {
+        if (cancelled) return
+        setTasksState(rows)
+        setTasksLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('[AppContext] listTasks failed:', err)
+        setTasksError(err instanceof Error ? err.message : String(err))
+        setTasksLoading(false)
+      })
+
+    const unsubTasks = subscribeToTasks((event) => {
+      setTasksState((prev) => {
+        if (event.type === 'INSERT') {
+          if (prev.some((t) => t.id === event.row.id)) return prev
+          // Preserve existing comments if we already had this task locally;
+          // realtime INSERT only carries the row, not its comments.
+          return [event.row, ...prev]
+        }
+        if (event.type === 'UPDATE') {
+          return prev.map((t) =>
+            t.id === event.row.id
+              ? { ...event.row, comments: t.comments } // keep existing comments
+              : t,
+          )
+        }
+        if (event.type === 'DELETE') {
+          return prev.filter((t) => t.id !== event.id)
+        }
+        return prev
+      })
+    })
+
+    const unsubComments = subscribeToComments((event) => {
+      setTasksState((prev) =>
+        prev.map((t) => {
+          if (event.type === 'INSERT') {
+            if (t.id !== event.row.taskId) return t
+            // Dedupe — optimistic insert may have already added it
+            if ((t.comments || []).some(c => c.id === event.row.id)) return t
+            return { ...t, comments: [...(t.comments || []), event.row] }
+          }
+          if (event.type === 'DELETE') {
+            if (t.id !== event.taskId) return t
+            return { ...t, comments: (t.comments || []).filter(c => c.id !== event.id) }
+          }
+          return t
+        }),
+      )
+    })
+
+    return () => {
+      cancelled = true
+      unsubTasks()
+      unsubComments()
+    }
+  }, [profile])
+
+  // ─── Hydrate contractors from Supabase + subscribe to realtime ─────────────
+  useEffect(() => {
+    if (!profile) {
+      setContractorsState([])
+      setContractorsLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setContractorsLoading(true)
+    setContractorsError(null)
+
+    listContractorsApi()
+      .then((rows) => {
+        if (cancelled) return
+        setContractorsState(rows)
+        setContractorsLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        // RLS rejects crew users on contractors — that's expected, not an error.
+        if (err?.code !== 'PGRST301') {
+          console.error('[AppContext] listContractors failed:', err)
+          setContractorsError(err instanceof Error ? err.message : String(err))
+        }
+        setContractorsLoading(false)
+      })
+
+    const unsub = subscribeToContractors((event) => {
+      setContractorsState((prev) => {
+        if (event.type === 'INSERT') {
+          if (prev.some((c) => c.id === event.row.id)) return prev
+          return [event.row, ...prev].sort((a, b) => a.name.localeCompare(b.name))
+        }
+        if (event.type === 'UPDATE') {
+          return prev.map((c) => (c.id === event.row.id ? event.row : c))
+        }
+        if (event.type === 'DELETE') {
+          return prev.filter((c) => c.id !== event.id)
+        }
+        return prev
+      })
+    })
+
+    return () => {
+      cancelled = true
+      unsub()
+    }
+  }, [profile])
+
+  // ─── mutateProduction — optimistic local + remote ──────────────────────────
+  // All sub-entity mutations (addons, milestones, bible, etc) flow through
+  // this helper. Computes the patch from the current production, applies it
+  // optimistically to local state, then persists to Supabase. Realtime sub
+  // will reconcile any drift.
+  const mutateProduction = useCallback((productionId, patchFn) => {
+    let patchToSend = null
+    setProductionsState((prev) =>
+      prev.map((p) => {
+        if (p.id !== productionId) return p
+        const patch = patchFn(p)
+        patchToSend = patch
+        return { ...p, ...patch, updatedAt: new Date().toISOString() }
+      }),
+    )
+    if (patchToSend) {
+      updateProductionApi(productionId, patchToSend).catch((err) => {
+        console.error('[AppContext] updateProduction failed:', err)
+      })
+    }
+  }, [])
+
+  // ─── currentUser ───────────────────────────────────────────────────────────
+  // Derived from the Supabase profile. For the 5 known team members (Mark, AJ,
+  // Danny, Brian, Wilder) we map back to their legacy 'mark'/'aj'/etc IDs so
+  // the rest of the app — which still references those IDs in localStorage
+  // sample data — keeps working unchanged. Phase 2 migrates that data to UUIDs.
+  //
+  // In dev, an override (set via the topbar "View as..." dropdown) takes
+  // precedence over the real profile. This lets us inspect role-gated UI
+  // without having to sign in as different users.
+  const currentUser = useMemo(() => {
+    if (devViewAs) {
+      const overrideUser = USERS.find(u => u.id === devViewAs)
+      if (overrideUser) {
+        return {
+          ...overrideUser,
+          email: profile?.email || `${overrideUser.id}@dev.local`,
+          profileId: profile?.id,
+          isDevImpersonation: true,
+        }
+      }
+    }
+    if (!profile) return null
+    const legacy = USERS.find(
+      u => u.name.toLowerCase() === profile.name.toLowerCase()
+    )
+    if (legacy) {
+      return {
+        ...legacy,
+        role: profile.role,
+        email: profile.email,
+        profileId: profile.id,
+      }
+    }
+    return {
+      id: profile.id,
+      name: profile.name,
+      role: profile.role,
+      avatar: profile.name.charAt(0).toUpperCase(),
+      color: profile.color,
+      email: profile.email,
+      profileId: profile.id,
+    }
+  }, [profile, devViewAs])
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
-  const login = useCallback((userId) => {
-    const user = USERS.find(u => u.id === userId)
-    if (user) setCurrentUser(user)
-  }, [setCurrentUser])
-
-  const logout = useCallback(() => {
-    setCurrentUser(null)
-  }, [setCurrentUser])
+  // Sign-in is handled directly via AuthContext.signInWithGoogle on LoginPage.
+  // We keep `logout` exposed here for backwards compatibility with existing
+  // Sidebar / TopBar consumers — it just delegates to the Supabase sign-out.
+  const logout = useCallback(async () => {
+    try { await signOut() } catch (e) { console.error('[AppContext] signOut failed', e) }
+  }, [signOut])
 
   // ─── Productions CRUD ──────────────────────────────────────────────────────
+  // All persistence flows through the typed data layer. Local state updates
+  // optimistically, then realtime reconciles. RLS may reject the call
+  // server-side (e.g. crew trying to insert) — we surface those as console
+  // errors for now; UI-level error handling lands in a follow-up.
   const addProduction = useCallback((production) => {
-    setProductions(prev => [production, ...prev])
-  }, [setProductions])
+    setProductionsState(prev => [production, ...prev])
+    createProductionApi(production).catch((err) => {
+      console.error('[AppContext] createProduction failed:', err)
+      // Rollback optimistic insert
+      setProductionsState(prev => prev.filter(p => p.id !== production.id))
+    })
+  }, [])
 
   const updateProduction = useCallback((id, updates) => {
-    setProductions(prev => prev.map(p =>
+    setProductionsState(prev => prev.map(p =>
       p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
     ))
-  }, [setProductions])
+    updateProductionApi(id, updates).catch((err) => {
+      console.error('[AppContext] updateProduction failed:', err)
+    })
+  }, [])
 
   const deleteProduction = useCallback((id) => {
-    setProductions(prev => prev.filter(p => p.id !== id))
-    setTasks(prev => prev.filter(t => t.productionId !== id))
-  }, [setProductions, setTasks])
+    setProductionsState(prev => prev.filter(p => p.id !== id))
+    // Tasks cascade-delete server-side via the FK on production_id, but mirror
+    // it locally for snappy UI.
+    setTasksState(prev => prev.filter(t => t.productionId !== id))
+    deleteProductionApi(id).catch((err) => {
+      console.error('[AppContext] deleteProduction failed:', err)
+    })
+  }, [])
 
   const getProduction = useCallback((id) => {
     return productions.find(p => p.id === id)
   }, [productions])
 
   // ─── Tasks CRUD ────────────────────────────────────────────────────────────
+  // Tasks live in Postgres. The productions.task_ids array is auto-maintained
+  // by a database trigger (sync_production_task_ids), so we don't have to
+  // mirror task membership on the production side anymore.
   const addTask = useCallback((task) => {
-    setTasks(prev => [task, ...prev])
-    setProductions(prev => prev.map(p =>
-      p.id === task.productionId
-        ? { ...p, tasks: [...(p.tasks || []), task.id], updatedAt: new Date().toISOString() }
-        : p
-    ))
-  }, [setTasks, setProductions])
+    // Ensure comments array exists for component compatibility
+    const taskWithComments = { ...task, comments: task.comments || [], statusHistory: task.statusHistory || [] }
+    setTasksState(prev => [taskWithComments, ...prev])
+    createTaskApi(task).catch((err) => {
+      console.error('[AppContext] createTask failed:', err)
+      setTasksState(prev => prev.filter(t => t.id !== task.id))
+    })
+  }, [])
 
   const updateTask = useCallback((id, updates) => {
-    setTasks(prev => prev.map(t =>
+    setTasksState(prev => prev.map(t =>
       t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t
     ))
-  }, [setTasks])
+    updateTaskApi(id, updates).catch((err) => {
+      console.error('[AppContext] updateTask failed:', err)
+    })
+  }, [])
 
   const deleteTask = useCallback((id) => {
-    const task = tasks.find(t => t.id === id)
-    setTasks(prev => prev.filter(t => t.id !== id))
-    if (task) {
-      setProductions(prev => prev.map(p =>
-        p.id === task.productionId
-          ? { ...p, tasks: p.tasks.filter(tid => tid !== id) }
-          : p
-      ))
-    }
-  }, [tasks, setTasks, setProductions])
+    setTasksState(prev => prev.filter(t => t.id !== id))
+    deleteTaskApi(id).catch((err) => {
+      console.error('[AppContext] deleteTask failed:', err)
+    })
+  }, [])
 
   const getTasksForProduction = useCallback((productionId) => {
     return tasks.filter(t => t.productionId === productionId)
@@ -102,63 +384,82 @@ export function AppProvider({ children }) {
   }, [tasks])
 
   const addComment = useCallback((taskId, comment) => {
-    setTasks(prev => prev.map(t =>
+    // Optimistic insert
+    const optimistic = {
+      id: comment.id || crypto.randomUUID(),
+      taskId,
+      authorId: comment.authorId || profile?.id || null,
+      text: comment.text || comment.body || '',
+      createdAt: comment.createdAt || new Date().toISOString(),
+    }
+    setTasksState(prev => prev.map(t =>
       t.id === taskId
-        ? { ...t, comments: [...(t.comments || []), comment], updatedAt: new Date().toISOString() }
+        ? { ...t, comments: [...(t.comments || []), optimistic], updatedAt: new Date().toISOString() }
         : t
     ))
-  }, [setTasks])
+    // Persist — author MUST be the real authenticated user (profile.id) per RLS,
+    // not the dev impersonation id.
+    if (profile?.id) {
+      createCommentApi(taskId, profile.id, optimistic.text).catch((err) => {
+        console.error('[AppContext] createComment failed:', err)
+        // Rollback
+        setTasksState(prev => prev.map(t =>
+          t.id === taskId
+            ? { ...t, comments: (t.comments || []).filter(c => c.id !== optimistic.id) }
+            : t
+        ))
+      })
+    }
+  }, [profile])
 
   // ─── Add-ons ───────────────────────────────────────────────────────────────
   const addAddon = useCallback((productionId, addon) => {
-    setProductions(prev => prev.map(p =>
-      p.id === productionId
-        ? { ...p, addons: [...(p.addons || []), addon], updatedAt: new Date().toISOString() }
-        : p
-    ))
-  }, [setProductions])
+    mutateProduction(productionId, (p) => ({
+      addons: [...(p.addons || []), addon],
+    }))
+  }, [mutateProduction])
 
   const updateAddon = useCallback((productionId, addonId, updates) => {
-    setProductions(prev => prev.map(p =>
-      p.id === productionId
-        ? {
-            ...p,
-            addons: p.addons.map(a => a.id === addonId ? { ...a, ...updates } : a),
-            updatedAt: new Date().toISOString()
-          }
-        : p
-    ))
-  }, [setProductions])
+    mutateProduction(productionId, (p) => ({
+      addons: (p.addons || []).map(a => a.id === addonId ? { ...a, ...updates } : a),
+    }))
+  }, [mutateProduction])
 
   const deleteAddon = useCallback((productionId, addonId) => {
-    setProductions(prev => prev.map(p =>
-      p.id === productionId
-        ? { ...p, addons: p.addons.filter(a => a.id !== addonId), updatedAt: new Date().toISOString() }
-        : p
-    ))
-  }, [setProductions])
+    mutateProduction(productionId, (p) => ({
+      addons: (p.addons || []).filter(a => a.id !== addonId),
+    }))
+  }, [mutateProduction])
 
   // ─── Feedback ──────────────────────────────────────────────────────────────
   const submitFeedback = useCallback((productionId, feedback) => {
-    setProductions(prev => prev.map(p =>
-      p.id === productionId ? { ...p, feedback, updatedAt: new Date().toISOString() } : p
-    ))
-  }, [setProductions])
+    mutateProduction(productionId, () => ({ feedback }))
+  }, [mutateProduction])
 
   // ─── Contractors CRUD ─────────────────────────────────────────────────────
   const addContractor = useCallback((contractor) => {
-    setContractors(prev => [contractor, ...prev])
-  }, [setContractors])
+    setContractorsState(prev => [contractor, ...prev])
+    createContractorApi(contractor).catch((err) => {
+      console.error('[AppContext] createContractor failed:', err)
+      setContractorsState(prev => prev.filter(c => c.id !== contractor.id))
+    })
+  }, [])
 
   const updateContractor = useCallback((id, updates) => {
-    setContractors(prev => prev.map(c =>
+    setContractorsState(prev => prev.map(c =>
       c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
     ))
-  }, [setContractors])
+    updateContractorApi(id, updates).catch((err) => {
+      console.error('[AppContext] updateContractor failed:', err)
+    })
+  }, [])
 
   const deleteContractor = useCallback((id) => {
-    setContractors(prev => prev.filter(c => c.id !== id))
-  }, [setContractors])
+    setContractorsState(prev => prev.filter(c => c.id !== id))
+    deleteContractorApi(id).catch((err) => {
+      console.error('[AppContext] deleteContractor failed:', err)
+    })
+  }, [])
 
   const getContractor = useCallback((id) => {
     return contractors.find(c => c.id === id) || null
@@ -166,38 +467,25 @@ export function AppProvider({ children }) {
 
   // ─── Contractor assignment to productions ─────────────────────────────────
   const setStageManager = useCallback((productionId, contractorId) => {
-    setProductions(prev => prev.map(p =>
-      p.id === productionId
-        ? { ...p, stageManagerId: contractorId, updatedAt: new Date().toISOString() }
-        : p
-    ))
-  }, [setProductions])
+    mutateProduction(productionId, () => ({ stageManagerId: contractorId }))
+  }, [mutateProduction])
 
   const assignContractor = useCallback((productionId, assignment) => {
-    setProductions(prev => prev.map(p => {
-      if (p.id !== productionId) return p
+    mutateProduction(productionId, (p) => {
       const already = (p.assignedContractors || []).some(a => a.contractorId === assignment.contractorId)
-      if (already) return p
+      if (already) return {} // no-op patch
       return {
-        ...p,
         assignedContractors: [...(p.assignedContractors || []), assignment],
-        updatedAt: new Date().toISOString(),
       }
-    }))
-  }, [setProductions])
+    })
+  }, [mutateProduction])
 
   const removeContractor = useCallback((productionId, contractorId) => {
-    setProductions(prev => prev.map(p => {
-      if (p.id !== productionId) return p
-      return {
-        ...p,
-        assignedContractors: (p.assignedContractors || []).filter(a => a.contractorId !== contractorId),
-        // If the removed contractor was the stage manager, clear that slot too
-        stageManagerId: p.stageManagerId === contractorId ? null : p.stageManagerId,
-        updatedAt: new Date().toISOString(),
-      }
+    mutateProduction(productionId, (p) => ({
+      assignedContractors: (p.assignedContractors || []).filter(a => a.contractorId !== contractorId),
+      stageManagerId: p.stageManagerId === contractorId ? null : p.stageManagerId,
     }))
-  }, [setProductions])
+  }, [mutateProduction])
 
   // Returns work history for a contractor by scanning all productions.
   // Checks assignedContractors, stageManagerId, and legacy assignedMembers.
@@ -249,16 +537,15 @@ export function AppProvider({ children }) {
   }, [contractors])
 
   // ─── Roadmap CRUD ─────────────────────────────────────────────────────────
-  // All writes go through the production record's roadmap sub-object.
-  // Architected for Supabase migration — no localStorage logic in components.
+  // All writes go through the production record's roadmap sub-object via the
+  // mutateProduction helper, which persists to Supabase.
 
   const _updateRoadmap = useCallback((productionId, updater) => {
-    setProductions(prev => prev.map(p => {
-      if (p.id !== productionId) return p
+    mutateProduction(productionId, (p) => {
       const roadmap = p.roadmap || { milestones: [], logisticalConcerns: [] }
-      return { ...p, roadmap: updater(roadmap), updatedAt: new Date().toISOString() }
-    }))
-  }, [setProductions])
+      return { roadmap: updater(roadmap) }
+    })
+  }, [mutateProduction])
 
   const addMilestone = useCallback((productionId, milestone) => {
     _updateRoadmap(productionId, r => ({
@@ -303,40 +590,38 @@ export function AppProvider({ children }) {
   }, [_updateRoadmap])
 
   // ─── Production Bible ──────────────────────────────────────────────────────
-  // Single update method — replaces the whole bible object on a production.
-  // Each section passes its full updated array; the parent merges sections.
   const updateBible = useCallback((productionId, bible) => {
-    setProductions(prev => prev.map(p =>
-      p.id === productionId
-        ? { ...p, bible, updatedAt: new Date().toISOString() }
-        : p
-    ))
-  }, [setProductions])
+    mutateProduction(productionId, () => ({ bible }))
+  }, [mutateProduction])
 
   // ─── Instruction Packages ──────────────────────────────────────────────────
   const updateInstructionPackage = useCallback((productionId, pkg) => {
-    setProductions(prev => prev.map(p =>
-      p.id === productionId
-        ? { ...p, instructionPackage: pkg, updatedAt: new Date().toISOString() }
-        : p
-    ))
-  }, [setProductions])
+    mutateProduction(productionId, () => ({ instructionPackage: pkg }))
+  }, [mutateProduction])
 
   const updateTaskInstructionPackage = useCallback((taskId, pkg) => {
-    setTasks(prev => prev.map(t =>
+    setTasksState(prev => prev.map(t =>
       t.id === taskId ? { ...t, instructionPackage: pkg, updatedAt: new Date().toISOString() } : t
     ))
-  }, [setTasks])
+    updateTaskApi(taskId, { instructionPackage: pkg }).catch((err) => {
+      console.error('[AppContext] updateTaskInstructionPackage failed:', err)
+    })
+  }, [])
 
   const value = {
     // Auth
     currentUser,
-    login,
     logout,
     users: USERS,
 
+    // Dev-only profile impersonation
+    devViewAs,
+    setDevViewAs,
+
     // Productions
     productions,
+    productionsLoading,
+    productionsError,
     addProduction,
     updateProduction,
     deleteProduction,
@@ -344,6 +629,8 @@ export function AppProvider({ children }) {
 
     // Tasks
     tasks,
+    tasksLoading,
+    tasksError,
     addTask,
     updateTask,
     deleteTask,
@@ -368,6 +655,8 @@ export function AppProvider({ children }) {
 
     // Contractors
     contractors,
+    contractorsLoading,
+    contractorsError,
     addContractor,
     updateContractor,
     deleteContractor,

@@ -1,5 +1,6 @@
 import { Star, AlertTriangle } from 'lucide-react'
 import { AVAILABILITY_STATUS, CONTRACTOR_FLAG } from '../../data/models.js'
+import { ContractorPhoto } from '../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
 const AVAIL_STYLES = {
@@ -30,10 +31,12 @@ export function ContractorCard({ contractor, onClick, showRates }) {
       <div className="flex items-start gap-3">
         {/* Avatar */}
         <div className="w-10 h-10 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center bg-orbital-muted text-orbital-text font-bold text-sm">
-          {contractor.photoUrl
-            ? <img src={contractor.photoUrl} alt={contractor.name} className="w-full h-full object-cover" />
-            : <span>{contractor.name.charAt(0).toUpperCase()}</span>
-          }
+          <ContractorPhoto
+            photoUrl={contractor.photoUrl}
+            alt={contractor.name}
+            className="w-full h-full object-cover"
+            fallback={<span>{contractor.name.charAt(0).toUpperCase()}</span>}
+          />
         </div>
 
         {/* Body */}

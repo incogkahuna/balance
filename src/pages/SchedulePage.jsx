@@ -12,6 +12,7 @@ import { USERS, PRODUCTION_STATUS } from '../data/models.js'
 import { MILESTONE_TYPE_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
 import { TopBar } from '../components/layout/TopBar.jsx'
+import { ContractorPhoto } from '../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
 const STATUS_COLORS = {
@@ -373,16 +374,19 @@ function GanttChart({ days, rows, mode, today, range, milestones = [], onClickPr
                 className="px-4 py-4 flex-shrink-0 border-b border-orbital-border flex items-center gap-2"
               >
                 {mode === 'team' && (
-                  row.photoUrl ? (
-                    <img src={row.photoUrl} alt={row.label} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
-                  ) : (
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                      style={{ backgroundColor: row.color || '#64748b' }}
-                    >
-                      {row.avatar}
-                    </div>
-                  )
+                  <ContractorPhoto
+                    photoUrl={row.photoUrl}
+                    alt={row.label}
+                    className="w-7 h-7 rounded-full object-cover flex-shrink-0"
+                    fallback={
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                        style={{ backgroundColor: row.color || '#64748b' }}
+                      >
+                        {row.avatar}
+                      </div>
+                    }
+                  />
                 )}
                 {mode === 'stage' && (
                   <div className="w-7 h-7 rounded-full bg-orbital-muted flex items-center justify-center flex-shrink-0">

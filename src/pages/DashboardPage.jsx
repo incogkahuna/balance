@@ -53,7 +53,17 @@ export function DashboardPage() {
   const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
   const myTasks        = tasks.filter(t => t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED)
-  const myPendingTasks = myTasks.filter(t => t.status !== TASK_STATUS.COMPLETE && t.status !== TASK_STATUS.VERIFIED)
+  // Sort by urgency: overdue first, then today/tomorrow, then by due date asc, undated last.
+  // Surfaces the next thing to do at the top of the crew's mobile dashboard.
+  const myPendingTasks = myTasks
+    .filter(t => t.status !== TASK_STATUS.COMPLETE && t.status !== TASK_STATUS.VERIFIED)
+    .slice()
+    .sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0
+      if (!a.dueDate) return 1
+      if (!b.dueDate) return -1
+      return new Date(a.dueDate) - new Date(b.dueDate)
+    })
   const activeProds    = productions.filter(p => p.status === PRODUCTION_STATUS.ACTIVE || p.status === PRODUCTION_STATUS.INCOMING)
 
   const pendingVerification = isAdminOrSup

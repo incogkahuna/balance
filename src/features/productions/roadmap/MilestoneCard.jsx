@@ -3,6 +3,7 @@ import { Edit2, Trash2, AlertTriangle } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { MILESTONE_STATUS } from '../../../data/models.js'
 import { MILESTONE_TYPE_CONFIG, MILESTONE_STATUS_CONFIG } from './roadmapUtils.js'
+import { ContractorPhoto } from '../../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
 export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
@@ -92,10 +93,12 @@ export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
             className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 overflow-hidden"
             style={!owner.photoUrl ? { backgroundColor: owner.color || '#64748b' } : {}}
           >
-            {owner.photoUrl
-              ? <img src={owner.photoUrl} alt={owner.name} className="w-full h-full object-cover" />
-              : owner.avatar
-            }
+            <ContractorPhoto
+              photoUrl={owner.photoUrl}
+              alt={owner.name}
+              className="w-full h-full object-cover"
+              fallback={<>{owner.avatar}</>}
+            />
           </div>
           <span className="text-xs text-orbital-subtle">{owner.name}</span>
         </div>

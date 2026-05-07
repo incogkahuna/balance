@@ -1,18 +1,25 @@
-import { Component } from 'react'
+import { Component, Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import { AppProvider } from './context/AppContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { AppShell } from './components/layout/AppShell.jsx'
-import { LoginPage } from './pages/LoginPage.jsx'
+import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage.jsx'
 import { ProductionsPage } from './pages/ProductionsPage.jsx'
 import { ProductionDetailPage } from './pages/ProductionDetailPage.jsx'
-import { SchedulePage } from './pages/SchedulePage.jsx'
-import { AnalyticsPage } from './pages/AnalyticsPage.jsx'
 import { TasksPage } from './pages/TasksPage.jsx'
 import { ContractorsPage } from './features/contractors/ContractorsPage.jsx'
-import { IntakePage } from './pages/IntakePage.jsx'
-import { PrototypePage } from './pages/PrototypePage.jsx'
+
+// Heavy + role-gated routes lazy-loaded so they're not in the initial bundle:
+//  - AnalyticsPage pulls in Recharts (~150kB gzipped, admin-only)
+//  - SchedulePage pulls in the Gantt rendering paths (admin-flavoured)
+//  - IntakePage will eventually pull in Whisper/Claude clients
+//  - PrototypePage carries the Constellation/River SVG experiments
+const AnalyticsPage  = lazy(() => import('./pages/AnalyticsPage.jsx').then(m => ({ default: m.AnalyticsPage })))
+const SchedulePage   = lazy(() => import('./pages/SchedulePage.jsx').then(m => ({ default: m.SchedulePage })))
+const IntakePage     = lazy(() => import('./pages/IntakePage.jsx').then(m => ({ default: m.IntakePage })))
+const PrototypePage  = lazy(() => import('./pages/PrototypePage.jsx').then(m => ({ default: m.PrototypePage })))
 
 // ── Per-page error boundary — keeps sidebar alive if one page crashes ─────────
 class PageBoundary extends Component {
@@ -48,12 +55,27 @@ class PageBoundary extends Component {
 }
 
 function wrap(el) {
-  return <PageBoundary>{el}</PageBoundary>
+  return (
+    <PageBoundary>
+      <Suspense fallback={<RouteLoading />}>{el}</Suspense>
+    </PageBoundary>
+  )
+}
+
+function RouteLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-[40vh]">
+      <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">
+        LOADING
+      </p>
+    </div>
+  )
 }
 
 export default function App() {
   return (
     <ThemeProvider>
+    <AuthProvider>
     <AppProvider>
       <BrowserRouter>
         <Routes>
@@ -73,6 +95,7 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </AppProvider>
+    </AuthProvider>
     </ThemeProvider>
   )
 }

@@ -1,39 +1,70 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Upload, Mic, MicOff, Play, Pause, FileText, Image, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { uploadFile, signedUrl, BUCKETS, paths } from '../../lib/storage'
 
-export function InstructionPackage({ pkg, onChange, readOnly = false }) {
+/**
+ * Production / task instruction package: notes, file uploads, and voice memos.
+ *
+ * Files now upload to Supabase Storage (Phase 3) — the file record stores
+ * `storage_path` instead of a base64 data URI. Legacy records that still
+ * have `url` are rendered directly as a fallback.
+ *
+ * Voice memos still record locally via the Web Speech API + MediaRecorder.
+ * Phase 4 will pipe them through Whisper for transcription and persist them
+ * to the voice-memos bucket.
+ */
+export function InstructionPackage({ pkg, onChange, readOnly = false, scope }) {
   const fileRef = useRef()
   const mediaRef = useRef(null)
   const [recording, setRecording] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [playingId, setPlayingId] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState(null)
   const audioRefs = useRef({})
   const recognitionRef = useRef(null)
 
   const pkg2 = pkg || { files: [], voiceMemos: [], notes: '' }
+  // scope: { kind: 'production' | 'task', id: string } — required for uploads
+  const productionId = scope?.kind === 'production' ? scope.id : null
+  const taskId = scope?.kind === 'task' ? scope.id : null
 
   const updatePkg = (updates) => {
     onChange({ ...pkg2, ...updates })
   }
 
   // ─── File upload ───────────────────────────────────────────────────────────
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files)
-    files.forEach(file => {
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        const newFile = {
+    if (files.length === 0) return
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const newFiles = []
+      for (const file of files) {
+        const path = productionId
+          ? paths.instructionPackage(productionId, file.name)
+          : paths.instructionPackage(taskId || 'misc', file.name)
+        const result = await uploadFile(BUCKETS.instructionPackages, path, file, {
+          contentType: file.type,
+        })
+        newFiles.push({
           id: crypto.randomUUID(),
           name: file.name,
           type: file.type,
-          url: ev.target.result,
+          storage_path: result.path,
           size: file.size,
           uploadedAt: new Date().toISOString(),
-        }
-        updatePkg({ files: [...pkg2.files, newFile] })
+        })
       }
-      reader.readAsDataURL(file)
-    })
+      updatePkg({ files: [...pkg2.files, ...newFiles] })
+    } catch (err) {
+      console.error('[InstructionPackage] upload failed:', err)
+      setUploadError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
   }
 
   const removeFile = (id) => {
@@ -41,6 +72,8 @@ export function InstructionPackage({ pkg, onChange, readOnly = false }) {
   }
 
   // ─── Voice memo recording ─────────────────────────────────────────────────
+  // Stays client-side for now; Phase 4 will upload to voice-memos bucket
+  // and call Whisper for proper transcription.
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -66,7 +99,6 @@ export function InstructionPackage({ pkg, onChange, readOnly = false }) {
       mediaRef.current.start()
       setRecording(true)
 
-      // Web Speech API transcription
       if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition
         recognitionRef.current = new SR()
@@ -146,14 +178,22 @@ export function InstructionPackage({ pkg, onChange, readOnly = false }) {
               />
               <button
                 type="button"
+                disabled={uploading}
                 onClick={() => fileRef.current?.click()}
-                className="btn-ghost text-xs py-1.5"
+                className="btn-ghost text-xs py-1.5 disabled:opacity-50"
               >
-                <Upload size={14} /> Upload
+                {uploading
+                  ? <span className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">UPLOADING</span>
+                  : <><Upload size={14} /> Upload</>
+                }
               </button>
             </>
           )}
         </div>
+
+        {uploadError && (
+          <p className="text-xs text-red-400 mb-2">{uploadError}</p>
+        )}
 
         {pkg2.files.length === 0 ? (
           <p className="text-xs text-orbital-subtle">No files attached.</p>
@@ -213,10 +253,34 @@ export function InstructionPackage({ pkg, onChange, readOnly = false }) {
   )
 }
 
+/**
+ * Renders one file in the package. Resolves a signed URL from the
+ * storage_path on demand (when expanded). Falls back to legacy `url`
+ * (base64 data URI) for any pre-Phase-3 records.
+ */
 function FileItem({ file, onRemove }) {
   const [expanded, setExpanded] = useState(false)
+  const [resolvedUrl, setResolvedUrl] = useState(file.url || null)
+  const [resolving, setResolving] = useState(false)
   const isImage = file.type?.startsWith('image/')
   const isPDF = file.type === 'application/pdf'
+
+  // Resolve a signed URL the first time the user expands a file backed by
+  // storage_path. Legacy base64 files already have a usable url.
+  useEffect(() => {
+    if (!expanded) return
+    if (resolvedUrl) return
+    if (!file.storage_path) return
+    let cancelled = false
+    setResolving(true)
+    signedUrl(BUCKETS.instructionPackages, file.storage_path)
+      .then(u => { if (!cancelled) setResolvedUrl(u) })
+      .catch(err => {
+        console.error('[InstructionPackage] signedUrl failed:', err)
+      })
+      .finally(() => { if (!cancelled) setResolving(false) })
+    return () => { cancelled = true }
+  }, [expanded, file.storage_path, resolvedUrl])
 
   return (
     <div className="card overflow-hidden">
@@ -252,14 +316,17 @@ function FileItem({ file, onRemove }) {
         </div>
       </div>
 
-      {expanded && isImage && (
+      {expanded && (
         <div className="px-3 pb-3">
-          <img src={file.url} alt={file.name} className="w-full rounded-lg border border-orbital-border max-h-64 object-contain bg-black/20" />
-        </div>
-      )}
-      {expanded && isPDF && (
-        <div className="px-3 pb-3">
-          <iframe src={file.url} className="w-full h-64 rounded-lg border border-orbital-border" title={file.name} />
+          {resolving && (
+            <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">LOADING</p>
+          )}
+          {resolvedUrl && isImage && (
+            <img src={resolvedUrl} alt={file.name} className="w-full rounded-lg border border-orbital-border max-h-64 object-contain bg-black/20" />
+          )}
+          {resolvedUrl && isPDF && (
+            <iframe src={resolvedUrl} className="w-full h-64 rounded-lg border border-orbital-border" title={file.name} />
+          )}
         </div>
       )}
     </div>

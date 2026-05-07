@@ -97,7 +97,8 @@ export function ContractorsPage() {
             {query && (
               <button
                 onClick={() => setParam('q', '')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-orbital-subtle hover:text-orbital-text"
+                aria-label="Clear search"
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-orbital-subtle hover:text-orbital-text"
               >
                 <X size={14} />
               </button>
@@ -111,7 +112,7 @@ export function ContractorsPage() {
                 key={f}
                 onClick={() => setParam('avail', f)}
                 className={clsx(
-                  'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                  'px-3 py-2 lg:py-1 rounded-full text-xs font-medium border transition-colors',
                   avail === f
                     ? 'bg-blue-600/15 border-blue-500/40 text-blue-400'
                     : 'bg-orbital-surface border-orbital-border text-orbital-subtle hover:border-orbital-muted'
@@ -126,7 +127,7 @@ export function ContractorsPage() {
                 key={fVal}
                 onClick={() => setParam('flag', fVal)}
                 className={clsx(
-                  'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                  'px-3 py-2 lg:py-1 rounded-full text-xs font-medium border transition-colors',
                   flag === fVal
                     ? 'bg-blue-600/15 border-blue-500/40 text-blue-400'
                     : 'bg-orbital-surface border-orbital-border text-orbital-subtle hover:border-orbital-muted'

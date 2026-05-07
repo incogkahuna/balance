@@ -1,35 +1,18 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Upload, FileText, Mic, MicOff, X, Image, Plus, ArrowRight, Loader } from 'lucide-react'
+import { Upload, FileText, Mic, X, Image, Plus, ArrowRight, Loader } from 'lucide-react'
 import clsx from 'clsx'
+import { VoiceRecorder } from '../../components/voice/VoiceRecorder.tsx'
 
-// ─── Voice input hook ─────────────────────────────────────────────────────────
-function useVoiceInput(onTranscript) {
-  const [listening, setListening]   = useState(false)
-  const recognitionRef              = useRef(null)
-  const supported = typeof window !== 'undefined' &&
-    !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+const recordingSupported = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined'
 
-  const start = useCallback(() => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
-    const r  = new SR()
-    r.lang              = 'en-US'
-    r.interimResults    = false
-    r.maxAlternatives   = 1
-    r.onresult  = e => { onTranscript(e.results[0][0].transcript); setListening(false) }
-    r.onerror   = ()  => setListening(false)
-    r.onend     = ()  => setListening(false)
-    recognitionRef.current = r
-    r.start()
-    setListening(true)
-  }, [onTranscript])
-
-  const stop = useCallback(() => {
-    recognitionRef.current?.stop()
-    setListening(false)
-  }, [])
-
-  return { supported, listening, start, stop }
-}
+// Whisper prompt that biases the decoder toward Orbital studio vocabulary so
+// names of crew, gear, and clients survive transcription. Worth growing as new
+// recurring vocabulary surfaces — every term added here improves accuracy on
+// future recordings without retraining anything.
+const STUDIO_VOCAB_PROMPT =
+  'Orbital Studios, LED volume, Brompton Tessera, ROE Visual, Mo-Sys, Disguise, ' +
+  'Unreal Engine, virtual production, stage manager, mobile build, Mark, AJ, ' +
+  'Danny, Brian, Wilder.'
 
 // ─── InputStage ───────────────────────────────────────────────────────────────
 export function InputStage({ onNext }) {
@@ -40,8 +23,9 @@ export function InputStage({ onNext }) {
   const fileInputRef                = useRef(null)
   const textareaRef                 = useRef(null)
 
-  const { supported: voiceSupported, listening, start: startVoice, stop: stopVoice } =
-    useVoiceInput(transcript => setVoiceText(prev => prev ? prev + ' ' + transcript : transcript))
+  const handleTranscript = useCallback((transcript) => {
+    setVoiceText(prev => prev ? `${prev} ${transcript}` : transcript)
+  }, [])
 
   // Add a text input from textarea or voice
   const addTextInput = useCallback((text) => {
@@ -219,55 +203,47 @@ export function InputStage({ onNext }) {
         </div>
       </div>
 
-      {/* Voice input */}
-      {voiceSupported && (
+      {/* Voice input — record → Whisper transcription via the `transcribe`
+          Edge Function. If the function isn't deployed yet, the recorder
+          surfaces the error inline. */}
+      {recordingSupported && (
         <div className="rounded-xl border border-orbital-border/50 bg-white/[0.02] overflow-hidden">
           <div className="px-4 py-2.5 border-b border-orbital-border/40 flex items-center gap-2">
             <Mic size={14} className="text-orbital-subtle" />
-            <span className="text-xs font-medium text-orbital-subtle uppercase tracking-wider">Voice summary</span>
-            <span className="text-xs text-orbital-subtle/60 ml-auto">speak a quick briefing</span>
+            <span className="text-xs font-medium text-orbital-subtle uppercase tracking-wider">Voice briefing</span>
+            <span className="text-xs text-orbital-subtle/60 ml-auto">transcribed by Whisper</span>
           </div>
           <div className="px-4 py-4 flex flex-col gap-3">
             {voiceText ? (
-              <p className="text-sm text-orbital-text bg-white/5 rounded-lg px-3 py-2.5 leading-relaxed">
-                "{voiceText}"
-              </p>
+              <textarea
+                value={voiceText}
+                onChange={e => setVoiceText(e.target.value)}
+                rows={3}
+                className="w-full bg-white/5 rounded-lg px-3 py-2.5 text-sm text-orbital-text leading-relaxed focus:outline-none focus:bg-white/[0.07] resize-y"
+              />
             ) : (
               <p className="text-xs text-orbital-subtle italic">
-                {listening ? 'Listening… speak now' : 'Tap the mic and describe this production'}
+                Tap record and describe this production. Whisper transcribes when you stop; you can edit before adding.
               </p>
             )}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={listening ? stopVoice : startVoice}
-                className={clsx(
-                  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                  listening
-                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse'
-                    : 'bg-white/5 text-orbital-text border border-orbital-border/50 hover:bg-white/10'
-                )}
-              >
-                {listening ? <MicOff size={14} /> : <Mic size={14} />}
-                {listening ? 'Stop' : 'Record'}
-              </button>
-              {voiceText && (
-                <>
-                  <button
-                    onClick={addVoiceText}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/15 text-blue-400 text-xs font-medium hover:bg-blue-500/25 transition-colors"
-                  >
-                    <Plus size={12} />
-                    Add
-                  </button>
-                  <button
-                    onClick={() => setVoiceText('')}
-                    className="text-xs text-orbital-subtle hover:text-orbital-text"
-                  >
-                    Clear
-                  </button>
-                </>
-              )}
-            </div>
+            <VoiceRecorder onTranscript={handleTranscript} prompt={STUDIO_VOCAB_PROMPT} />
+            {voiceText && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={addVoiceText}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/15 text-blue-400 text-xs font-medium hover:bg-blue-500/25 transition-colors"
+                >
+                  <Plus size={12} />
+                  Add to inputs
+                </button>
+                <button
+                  onClick={() => setVoiceText('')}
+                  className="text-xs text-orbital-subtle hover:text-orbital-text"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

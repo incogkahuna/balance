@@ -3,6 +3,7 @@ import { LayoutDashboard, Film, Calendar, BarChart3, Users, LogOut, Sun, Moon, S
 import { useApp } from '../../context/AppContext.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { ROLES } from '../../data/models.js'
+import { DevProfileSwitcher } from '../dev/DevProfileSwitcher.jsx'
 
 const NAV_ITEMS = [
   { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard'   },
@@ -80,6 +81,16 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* ── Dev profile switcher (DEV ONLY) ── */}
+      {import.meta.env.DEV && (
+        <div
+          className="px-3 py-2 flex-shrink-0"
+          style={{ borderTop: '1px solid var(--orbital-sidebar-border)' }}
+        >
+          <DevProfileSwitcher />
+        </div>
+      )}
 
       {/* ── Theme toggle ── */}
       <div

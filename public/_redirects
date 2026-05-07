@@ -1,0 +1,4 @@
+# Cloudflare Pages SPA fallback — every non-asset path returns index.html
+# so React Router can handle the route on the client. Without this, a
+# direct hit or refresh on /dashboard, /productions/:id, etc. 404s.
+/*    /index.html   200
