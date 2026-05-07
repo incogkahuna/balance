@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect, Fragment } from 'react'
 import { format } from 'date-fns'
-import { AlertTriangle, RotateCcw, Home, ArrowLeft } from 'lucide-react'
+import { AlertTriangle, RotateCcw, Home, ArrowLeft, Filter } from 'lucide-react'
 import {
   PRODUCTIONS, RESOURCES, COMMITMENTS,
   WINDOW_DAYS, dateAtDayIndex, dayIndex,
@@ -15,8 +15,9 @@ const HOME_RADIUS = 110
 const PLANET_RADIUS = 58
 const ORBIT_R_PEOPLE = 95
 const ORBIT_R_GEAR   = 132
-const HOME_R_PEOPLE  = HOME_RADIUS + 10
-const HOME_R_GEAR    = HOME_RADIUS + 30
+// Home icons sit INSIDE the planet body, on a single arc per kind.
+// Top hemisphere = people, bottom hemisphere = gear.
+const HOME_INSIDE_R  = 72
 
 const SMOOTH_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
@@ -64,12 +65,27 @@ function shortLocationLabel(loc) {
 }
 
 // ── Position helpers ─────────────────────────────────────────────────────
+// Home icons sit inside the planet, split horizontally:
+//  - people  → upper hemisphere (sin(angle) < 0)
+//  - gear    → lower hemisphere (sin(angle) > 0)
+// Centered on each arc, leaving 12° padding from the equator on each side.
 function homeSurfacePosition(idx, total, kind) {
-  const radius = kind === 'gear' ? HOME_R_GEAR : HOME_R_PEOPLE
-  const angle = (idx / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2
+  const n = Math.max(1, total)
+  const padding = (12 / 180) * Math.PI       // 12° gap from the equator
+  const span = Math.PI - padding * 2
+  // For 1 item we want it centered; for n items we space evenly across the arc.
+  const t = n === 1 ? 0.5 : idx / (n - 1)
+  let angle
+  if (kind === 'gear') {
+    // Bottom semicircle, going right → bottom → left
+    angle = padding + t * span
+  } else {
+    // Top semicircle, going left → top → right (so reading order matches L-to-R)
+    angle = -Math.PI + padding + t * span
+  }
   return {
-    x: CENTER.x + Math.cos(angle) * radius,
-    y: CENTER.y + Math.sin(angle) * radius,
+    x: CENTER.x + Math.cos(angle) * HOME_INSIDE_R,
+    y: CENTER.y + Math.sin(angle) * HOME_INSIDE_R,
   }
 }
 
@@ -93,34 +109,101 @@ function midpointPosition(planets, phase, t) {
   }
 }
 
-// ── Scene state for one orbiter at scrubber time ────────────────────────
-function computeResourceState(resource, scrubDate) {
-  const active = COMMITMENTS.filter(c =>
-    c.resourceId === resource.id && c.start <= scrubDate && scrubDate <= c.end
-  ).map(c => c.productionId)
-  if (active.length === 0) return { mode: 'home', activeProds: [] }
-  if (active.length === 1) return { mode: 'orbit', activeProds: active }
-  return { mode: 'conflict', activeProds: active }
+// ── Scene state for one orbiter across [rangeStart, rangeEnd] ──────────
+// In day mode, rangeStart === rangeEnd. The "active" set is every commitment
+// that intersects the range. Mode is:
+//   home     → no commitments touch the range
+//   orbit    → exactly one production touched
+//   multi    → multiple productions, but their date ranges don't overlap
+//              within the window (sequential work, not torn)
+//   conflict → at least two commitments overlap each other in the window
+function computeResourceState(resource, rangeStart, rangeEnd) {
+  const matches = COMMITMENTS.filter(c =>
+    c.resourceId === resource.id && c.start <= rangeEnd && rangeStart <= c.end
+  )
+  const productions = [...new Set(matches.map(c => c.productionId))]
+  if (productions.length === 0) return { mode: 'home', activeProds: [] }
+  if (productions.length === 1) return { mode: 'orbit', activeProds: productions }
+  // Check whether any pair of intersecting commitments themselves overlap
+  for (let i = 0; i < matches.length; i++) {
+    for (let j = i + 1; j < matches.length; j++) {
+      if (matches[i].productionId === matches[j].productionId) continue
+      if (matches[i].start <= matches[j].end && matches[j].start <= matches[i].end) {
+        return { mode: 'conflict', activeProds: productions }
+      }
+    }
+  }
+  return { mode: 'multi', activeProds: productions }
 }
+
+const FILTER_OPTIONS = [
+  { id: 'all',       label: 'ALL'       },
+  { id: 'people',    label: 'PEOPLE'    },
+  { id: 'gear',      label: 'GEAR'      },
+  { id: 'locations', label: 'LOCATIONS' },
+]
 
 // ══════════════════════════════════════════════════════════════════════════
 // Component
 // ══════════════════════════════════════════════════════════════════════════
 export function Constellation() {
+  const [scrubMode, setScrubMode] = useState('day')           // 'day' | 'range'
   const [scrubDay, setScrubDay] = useState(7)
+  const [scrubRange, setScrubRange] = useState({ start: 4, end: 18 })
   const [hoveredPersonId, setHoveredPersonId] = useState(null)
   const [selectedPlanet, setSelectedPlanet] = useState(null)
   const [selectedPerson, setSelectedPerson] = useState(null)
+  const [filter, setFilter] = useState('all')
+  // Manual assignments override the scheduled commitments for the session.
+  // Map<resourceId, productionId | 'home'>. When real data is wired later,
+  // dragging should call into the commitments API instead of setting state here
+  // (e.g. addCommitment(resourceId, productionId, scrubStart, scrubEnd)) so
+  // the production card reflects the new assignment.
+  const [manualAssignments, setManualAssignments] = useState({})
+  const [draggingId, setDraggingId] = useState(null)         // visible-during-drag flag for re-render
+  const [dragHoverPlanet, setDragHoverPlanet] = useState(null)
 
-  const scrubDate = dateAtDayIndex(scrubDay)
+  // Resolved date range — same value for start/end in day mode.
+  const scrubStartDay = scrubMode === 'day' ? scrubDay : scrubRange.start
+  const scrubEndDay   = scrubMode === 'day' ? scrubDay : scrubRange.end
+  const scrubStart = dateAtDayIndex(scrubStartDay)
+  const scrubEnd   = dateAtDayIndex(scrubEndDay)
+
+  // Toggle that re-centers the other state so the view stays anchored where
+  // the user was just looking.
+  const switchScrubMode = useCallback((next) => {
+    if (next === scrubMode) return
+    if (next === 'range') {
+      const span = scrubRange.end - scrubRange.start
+      const half = Math.floor(span / 2)
+      let start = Math.max(0, scrubDay - half)
+      let end = Math.min(WINDOW_DAYS, start + span)
+      if (end - start < span) start = Math.max(0, end - span)
+      setScrubRange({ start, end })
+    } else {
+      setScrubDay(Math.round((scrubRange.start + scrubRange.end) / 2))
+    }
+    setScrubMode(next)
+  }, [scrubMode, scrubDay, scrubRange.start, scrubRange.end])
 
   // ── Derive per-orbiter state (people + gear) ─────────────────────────
+  // Manual assignments take priority — once a user drags someone to a planet,
+  // they stay there until dragged elsewhere or the view is reset.
   const orbiterStates = useMemo(() => {
-    return ORBITERS.map(resource => ({
-      resource,
-      ...computeResourceState(resource, scrubDate),
-    }))
-  }, [scrubDate])
+    return ORBITERS.map(resource => {
+      const manual = manualAssignments[resource.id]
+      let state
+      if (manual === 'home') {
+        state = { mode: 'home', activeProds: [], manual: true }
+      } else if (manual) {
+        state = { mode: 'orbit', activeProds: [manual], manual: true }
+      } else {
+        state = { ...computeResourceState(resource, scrubStart, scrubEnd), manual: false }
+      }
+      return { resource, ...state }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrubStartDay, scrubEndDay, manualAssignments])
 
   // Index into the home-surface ring, separate per kind so people and
   // gear sit on their own concentric rings
@@ -170,6 +253,107 @@ export function Constellation() {
   const orbiterPositions = useRef({})     // id -> {x, y}
   const orbitTimeRef = useRef(0)
 
+  // ── Drag-and-drop refs ─────────────────────────────────────────────
+  const cameraRef = useRef(null)          // SVG <g> wrapper for camera
+  const pendingDragRef = useRef(null)     // { resourceId, startX, startY, hasDragged }
+  const dragRef = useRef(null)            // { resourceId, x, y } (in user-space) while dragging
+  const justDraggedRef = useRef(false)    // suppresses canvas click after a drag-drop
+
+  // Convert a mouse/touch event's client coords into the camera's local
+  // (user-space) coords — accounts for SVG viewBox AND the camera transform.
+  const toLocalPoint = useCallback((e) => {
+    const camera = cameraRef.current
+    if (!camera) return { x: CENTER.x, y: CENTER.y }
+    const svg = camera.ownerSVGElement
+    if (!svg) return { x: CENTER.x, y: CENTER.y }
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX ?? e.touches?.[0]?.clientX
+    pt.y = e.clientY ?? e.touches?.[0]?.clientY
+    const ctm = camera.getScreenCTM()
+    if (!ctm) return { x: CENTER.x, y: CENTER.y }
+    return pt.matrixTransform(ctm.inverse())
+  }, [])
+
+  // Find the closest valid drop target for a given local-space point.
+  // Returns 'home', a production id, or null.
+  const findDropTarget = useCallback((x, y) => {
+    let best = null
+    let bestDist = Infinity
+    // Production planets — buffer a little outside the body for forgiving drops
+    for (const p of PRODUCTIONS) {
+      const pos = PLANET_POS[p.id]
+      const d = Math.hypot(pos.x - x, pos.y - y)
+      if (d < PLANET_RADIUS + 60 && d < bestDist) { best = p.id; bestDist = d }
+    }
+    // Home planet (larger, but lower priority — only counts if cursor is well inside)
+    const dHome = Math.hypot(CENTER.x - x, CENTER.y - y)
+    if (dHome < HOME_RADIUS + 30 && dHome < bestDist) { best = 'home'; bestDist = dHome }
+    return best
+  }, [])
+
+  // Window-level mousemove/mouseup handlers for drag-and-drop
+  useEffect(() => {
+    const onMove = (e) => {
+      const pending = pendingDragRef.current
+      if (!pending) return
+      const cx = e.clientX ?? e.touches?.[0]?.clientX
+      const cy = e.clientY ?? e.touches?.[0]?.clientY
+      // Promote to active drag once movement exceeds the threshold
+      if (!pending.hasDragged) {
+        const dx = cx - pending.startClientX
+        const dy = cy - pending.startClientY
+        if (Math.hypot(dx, dy) > 5) {
+          pending.hasDragged = true
+          setDraggingId(pending.resourceId)
+        } else {
+          return
+        }
+      }
+      const local = toLocalPoint(e)
+      dragRef.current = { resourceId: pending.resourceId, x: local.x, y: local.y }
+      const target = findDropTarget(local.x, local.y)
+      setDragHoverPlanet(target)
+    }
+    const onUp = (e) => {
+      const pending = pendingDragRef.current
+      if (!pending) return
+      if (pending.hasDragged) {
+        const local = toLocalPoint(e)
+        const target = findDropTarget(local.x, local.y)
+        if (target) {
+          setManualAssignments(prev => {
+            const next = { ...prev }
+            // 'home' keeps icon at home; productionId pins to that planet.
+            // FUTURE: when wired to real data, this should call into the
+            // commitments API instead, e.g.:
+            //   addCommitment({
+            //     resourceId: pending.resourceId,
+            //     productionId: target,         // or remove all if 'home'
+            //     start: scrubStart, end: scrubEnd,
+            //   })
+            next[pending.resourceId] = target
+            return next
+          })
+        }
+        justDraggedRef.current = true
+      }
+      pendingDragRef.current = null
+      dragRef.current = null
+      setDraggingId(null)
+      setDragHoverPlanet(null)
+    }
+    globalThis.addEventListener('mousemove', onMove)
+    globalThis.addEventListener('mouseup', onUp)
+    globalThis.addEventListener('touchmove', onMove)
+    globalThis.addEventListener('touchend', onUp)
+    return () => {
+      globalThis.removeEventListener('mousemove', onMove)
+      globalThis.removeEventListener('mouseup', onUp)
+      globalThis.removeEventListener('touchmove', onMove)
+      globalThis.removeEventListener('touchend', onUp)
+    }
+  }, [toLocalPoint, findDropTarget])
+
   const computeTarget = useCallback((resource) => {
     const states = orbiterStatesRef.current
     const state = states.find(s => s.resource.id === resource.id)
@@ -205,7 +389,15 @@ export function Constellation() {
       orbitTimeRef.current += dt * 0.08    // ~78s full orbit
 
       const lerp = 0.13
+      const drag = dragRef.current
       ORBITERS.forEach(resource => {
+        // While dragging, snap directly to cursor position — feels instant.
+        if (drag && drag.resourceId === resource.id) {
+          orbiterPositions.current[resource.id] = { x: drag.x, y: drag.y }
+          const el = orbiterRefs.current[resource.id]
+          if (el) el.setAttribute('transform', `translate(${drag.x} ${drag.y})`)
+          return
+        }
         const target = computeTarget(resource)
         const cur = orbiterPositions.current[resource.id] ?? target
         const dx = target.x - cur.x
@@ -222,14 +414,16 @@ export function Constellation() {
     return () => cancelAnimationFrame(raf)
   }, [computeTarget])
 
-  // ── Production "currently active" status at scrubber time ────────────
+  // ── Production "currently active" status — its date range intersects
+  //    the scrubber window (single day in DAY mode, the full window in RANGE).
   const productionActive = useMemo(() => {
     const out = {}
     PRODUCTIONS.forEach(p => {
-      out[p.id] = scrubDate >= p.start && scrubDate <= p.end
+      out[p.id] = p.start <= scrubEnd && scrubStart <= p.end
     })
     return out
-  }, [scrubDate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrubStartDay, scrubEndDay])
 
   // ── Camera — focal point + zoom level driven by selectedPlanet ───────
   const camera = useMemo(() => {
@@ -269,8 +463,15 @@ export function Constellation() {
   const resetView = () => {
     setSelectedPlanet(null)
     setSelectedPerson(null)
+    setScrubMode('day')
     setScrubDay(7)
+    setScrubRange({ start: 4, end: 18 })
+    setFilter('all')
+    setManualAssignments({})
   }
+
+  // Resource currently being dragged (for the banner UI)
+  const draggingResource = draggingId ? RESOURCES.find(r => r.id === draggingId) : null
 
   // ── Render ───────────────────────────────────────────────────────────
   return (
@@ -279,10 +480,16 @@ export function Constellation() {
 
       <div className="card-elevated mt-4 overflow-hidden">
         <Toolbar
-          scrubDay={scrubDay}
+          scrubMode={scrubMode}
+          scrubStart={scrubStart}
+          scrubEnd={scrubEnd}
+          scrubStartDay={scrubStartDay}
+          scrubEndDay={scrubEndDay}
           orbiterStates={orbiterStates}
           conflictPairs={conflictPairs}
           onReset={resetView}
+          filter={filter}
+          setFilter={setFilter}
         />
 
         <div
@@ -290,8 +497,12 @@ export function Constellation() {
           style={{
             background: 'radial-gradient(ellipse at center, #0a0e1f 0%, #050608 70%)',
             height: 720,
+            cursor: draggingId ? 'grabbing' : undefined,
           }}
-          onClick={() => { setSelectedPlanet(null); setSelectedPerson(null) }}
+          onClick={() => {
+            if (justDraggedRef.current) { justDraggedRef.current = false; return }
+            setSelectedPlanet(null); setSelectedPerson(null)
+          }}
         >
           <Starfield />
           <NebulaBackground />
@@ -304,11 +515,13 @@ export function Constellation() {
             <PlanetDefs />
 
             {/* ── Camera wrapper: smooth zoom + pan to focused planet ── */}
-            <g style={{
-              transform: cameraTransform,
-              transition: `transform 1100ms ${SMOOTH_EASE}`,
-              transformOrigin: '0 0',
-            }}>
+            <g
+              ref={cameraRef}
+              style={{
+                transform: cameraTransform,
+                transition: `transform 1100ms ${SMOOTH_EASE}`,
+                transformOrigin: '0 0',
+              }}>
 
             {/* ── Conflict filaments — drawn beneath planets ──────── */}
             {conflictPairs.map(({ a, b, count }) => {
@@ -369,6 +582,8 @@ export function Constellation() {
                 isSelected={selectedPlanet === p.id}
                 isDimmed={isPlanetDimmed(p.id)}
                 location={PRODUCTION_LOCATION[p.id]}
+                highlightLocation={filter === 'locations'}
+                dropTargeted={dragHoverPlanet === p.id}
                 activeCount={orbiterStates.filter(s =>
                   s.activeProds.includes(p.id)
                 ).length}
@@ -387,6 +602,8 @@ export function Constellation() {
               onStation={orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'people').length}
               gearOnStation={orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'gear').length}
               isSelected={selectedPlanet === 'home'}
+              highlightLocation={filter === 'locations'}
+              dropTargeted={dragHoverPlanet === 'home'}
               onClick={(e) => {
                 e.stopPropagation()
                 setSelectedPlanet(s => s === 'home' ? null : 'home')
@@ -395,30 +612,67 @@ export function Constellation() {
             />
 
             {/* ── Orbiters: people + gear (positions driven by rAF) ── */}
-            {orbiterStates.map(({ resource, mode }) => (
-              <g
-                key={resource.id}
-                ref={el => { if (el) orbiterRefs.current[resource.id] = el }}
-                style={{
-                  cursor: 'pointer',
-                  opacity: isOrbiterDimmed(resource.id) ? 0.2 : 1,
-                  transition: `opacity 350ms ${SMOOTH_EASE}`,
-                }}
-                onMouseEnter={() => setHoveredPersonId(resource.id)}
-                onMouseLeave={() => setHoveredPersonId(null)}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setSelectedPerson(s => s === resource.id ? null : resource.id)
-                }}
-              >
-                <ResourceGlyph resource={resource} mode={mode} />
-              </g>
-            ))}
+            {orbiterStates.map(({ resource, mode, manual }) => {
+              const visibleByFilter =
+                filter === 'all' ||
+                (filter === 'people' && resource.kind === 'people') ||
+                (filter === 'gear'   && resource.kind === 'gear')
+              const isBeingDragged = draggingId === resource.id
+              return (
+                <g
+                  key={resource.id}
+                  ref={el => { if (el) orbiterRefs.current[resource.id] = el }}
+                  style={{
+                    cursor: !visibleByFilter ? 'default' : (isBeingDragged ? 'grabbing' : 'grab'),
+                    opacity: !visibleByFilter ? 0
+                      : isBeingDragged ? 1
+                      : (isOrbiterDimmed(resource.id) ? 0.2 : 1),
+                    pointerEvents: visibleByFilter ? 'auto' : 'none',
+                    transition: `opacity 350ms ${SMOOTH_EASE}`,
+                  }}
+                  onMouseDown={(e) => {
+                    if (!visibleByFilter) return
+                    e.stopPropagation()
+                    pendingDragRef.current = {
+                      resourceId: resource.id,
+                      startClientX: e.clientX,
+                      startClientY: e.clientY,
+                      hasDragged: false,
+                    }
+                  }}
+                  onTouchStart={(e) => {
+                    if (!visibleByFilter) return
+                    e.stopPropagation()
+                    const t = e.touches?.[0]
+                    if (!t) return
+                    pendingDragRef.current = {
+                      resourceId: resource.id,
+                      startClientX: t.clientX,
+                      startClientY: t.clientY,
+                      hasDragged: false,
+                    }
+                  }}
+                  onMouseEnter={() => setHoveredPersonId(resource.id)}
+                  onMouseLeave={() => setHoveredPersonId(null)}
+                  onClick={(e) => {
+                    if (justDraggedRef.current) {
+                      justDraggedRef.current = false
+                      e.stopPropagation()
+                      return
+                    }
+                    e.stopPropagation()
+                    setSelectedPerson(s => s === resource.id ? null : resource.id)
+                  }}
+                >
+                  <ResourceGlyph resource={resource} mode={mode} dragging={isBeingDragged} manual={manual} />
+                </g>
+              )
+            })}
             </g>{/* end camera wrapper */}
           </svg>
 
           {/* ── Focus lock HUD (when a planet is selected) ─────────── */}
-          {selectedPlanet && (
+          {selectedPlanet && !draggingResource && (
             <FocusLock
               focusedProduction={focusedProduction}
               isHome={selectedPlanet === 'home'}
@@ -426,17 +680,34 @@ export function Constellation() {
             />
           )}
 
+          {/* ── Drag banner (during drag) ────────────────────────── */}
+          {draggingResource && (
+            <DragBanner
+              resource={draggingResource}
+              targetId={dragHoverPlanet}
+            />
+          )}
+
           {/* ── Hovered orbiter tooltip ─────────────────────────────── */}
           <ResourceTooltip
             resourceId={selectedPerson || hoveredPersonId}
             states={orbiterStates}
-            scrubDate={scrubDate}
+            scrubMode={scrubMode}
+            scrubStart={scrubStart}
+            scrubEnd={scrubEnd}
           />
 
           <SceneStats orbiterStates={orbiterStates} conflictPairs={conflictPairs} />
         </div>
 
-        <TimeScrubber day={scrubDay} setDay={setScrubDay} />
+        <TimeScrubber
+          mode={scrubMode}
+          setMode={switchScrubMode}
+          day={scrubDay}
+          setDay={setScrubDay}
+          range={scrubRange}
+          setRange={setScrubRange}
+        />
       </div>
     </div>
   )
@@ -459,39 +730,97 @@ function Header() {
   )
 }
 
-function Toolbar({ scrubDay, orbiterStates, conflictPairs, onReset }) {
-  const date = dateAtDayIndex(scrubDay)
+function Toolbar({ scrubMode, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, orbiterStates, conflictPairs, onReset, filter, setFilter }) {
   const conflictCount = orbiterStates.filter(s => s.mode === 'conflict').length
+  const multiCount    = orbiterStates.filter(s => s.mode === 'multi').length
+  const orbitCount    = orbiterStates.filter(s => s.mode === 'orbit').length
   return (
-    <div
-      className="flex items-center justify-between px-4 py-2.5 gap-4"
-      style={{ borderBottom: '1px solid var(--orbital-border)' }}
-    >
-      <div className="flex items-center gap-3">
-        <span className="hud-label">PLAYHEAD</span>
-        <span className="font-telemetry text-[12px] text-orbital-text tracking-wider">
-          {format(date, 'EEE · MMM d, yyyy').toUpperCase()}
-        </span>
+    <div style={{ borderBottom: '1px solid var(--orbital-border)' }}>
+      {/* Row 1 — playhead/window + status badges + reset */}
+      <div className="flex items-center justify-between px-4 py-2.5 gap-4">
+        <div className="flex items-center gap-3">
+          {scrubMode === 'day' ? (
+            <>
+              <span className="hud-label">PLAYHEAD</span>
+              <span className="font-telemetry text-[12px] text-orbital-text tracking-wider">
+                {format(scrubStart, 'EEE · MMM d, yyyy').toUpperCase()}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="hud-label">WINDOW</span>
+              <span className="font-telemetry text-[12px] text-orbital-text tracking-wider">
+                {format(scrubStart, 'MMM d').toUpperCase()} → {format(scrubEnd, 'MMM d').toUpperCase()}
+              </span>
+              <span className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.18em]">
+                · {scrubEndDay - scrubStartDay} DAYS
+              </span>
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <BadgeStat label="ON STATION" value={orbiterStates.filter(s => s.mode === 'home').length}
+            color="#60a5fa" />
+          <BadgeStat label="DEPLOYED" value={orbitCount}
+            color="#34d399" />
+          {scrubMode === 'range' && (
+            <BadgeStat label="MULTI" value={multiCount}
+              color={multiCount > 0 ? '#fbbf24' : '#71717a'} />
+          )}
+          <BadgeStat label="TORN" value={conflictCount}
+            color={conflictCount > 0 ? '#ef4444' : '#71717a'} pulse={conflictCount > 0} />
+          <button onClick={onReset}
+            className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest font-telemetry transition-colors"
+            style={{
+              color: 'var(--orbital-subtle)',
+              border: '1px solid var(--orbital-border)',
+              background: 'transparent',
+            }}>
+            <RotateCcw size={10} /> RESET
+          </button>
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <BadgeStat label="ON STATION" value={orbiterStates.filter(s => s.mode === 'home').length}
-          color="#60a5fa" />
-        <BadgeStat label="DEPLOYED" value={orbiterStates.filter(s => s.mode === 'orbit').length}
-          color="#34d399" />
-        <BadgeStat label="TORN" value={conflictCount}
-          color={conflictCount > 0 ? '#ef4444' : '#71717a'} pulse={conflictCount > 0} />
-        <button onClick={onReset}
-          className="ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] tracking-widest font-telemetry transition-colors"
-          style={{
-            color: 'var(--orbital-subtle)',
-            border: '1px solid var(--orbital-border)',
-            background: 'transparent',
-          }}>
-          <RotateCcw size={10} /> RESET
-        </button>
+      {/* Row 2 — filter pills */}
+      <div className="flex items-center gap-2 px-4 py-2"
+        style={{ borderTop: '1px dashed var(--orbital-border)' }}>
+        <Filter size={11} className="text-orbital-subtle" />
+        <span className="hud-label">FILTER</span>
+        <div className="flex items-center gap-1 ml-1">
+          {FILTER_OPTIONS.map(opt => (
+            <FilterPill key={opt.id}
+              active={filter === opt.id}
+              onClick={() => setFilter(opt.id)}>
+              {opt.label}
+            </FilterPill>
+          ))}
+        </div>
+        <span className="ml-auto font-telemetry text-[9px] text-orbital-dim tracking-[0.18em]">
+          {filter === 'all' && 'ALL RESOURCES VISIBLE'}
+          {filter === 'people' && 'SHOWING PEOPLE ONLY'}
+          {filter === 'gear' && 'SHOWING GEAR ONLY'}
+          {filter === 'locations' && 'SHOWING PLANET LOCATIONS'}
+        </span>
       </div>
     </div>
+  )
+}
+
+function FilterPill({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-2.5 py-1 text-[10px] font-medium tracking-[0.15em] transition-all"
+      style={{
+        background: active ? 'rgba(59,130,246,0.15)' : 'transparent',
+        border: '1px solid',
+        borderColor: active ? 'rgba(59,130,246,0.5)' : 'var(--orbital-border)',
+        color: active ? '#60a5fa' : 'var(--orbital-subtle)',
+        boxShadow: active ? '0 0 10px rgba(59,130,246,0.25)' : 'none',
+      }}>
+      {children}
+    </button>
   )
 }
 
@@ -585,7 +914,7 @@ function PlanetDefs() {
   )
 }
 
-function HomePlanet({ pos, radius, onStation, gearOnStation, isSelected, onClick }) {
+function HomePlanet({ pos, radius, onStation, gearOnStation, isSelected, highlightLocation, dropTargeted, onClick }) {
   return (
     <g transform={`translate(${pos.x} ${pos.y})`}
       onClick={onClick}
@@ -639,25 +968,78 @@ function HomePlanet({ pos, radius, onStation, gearOnStation, isSelected, onClick
 
       {/* Body outline ring */}
       <circle r={radius} fill="none"
-        stroke={isSelected ? '#7ec1e0' : 'rgba(125,180,210,0.35)'}
-        strokeWidth={isSelected ? 1.2 : 0.6} />
+        stroke={dropTargeted ? '#fbbf24' : (isSelected ? '#7ec1e0' : 'rgba(125,180,210,0.35)')}
+        strokeWidth={dropTargeted ? 2 : (isSelected ? 1.2 : 0.6)}
+        style={{
+          filter: dropTargeted ? 'drop-shadow(0 0 14px rgba(251,191,36,0.7))' : undefined,
+          transition: 'all 220ms ease-out',
+        }} />
+
+      {/* Drop-target pulse ring */}
+      {dropTargeted && (
+        <circle r={radius + 8} fill="none" stroke="#fbbf24" strokeOpacity={0.7} strokeWidth={1}>
+          <animate attributeName="r" values={`${radius + 4};${radius + 18};${radius + 4}`}
+            dur="1s" repeatCount="indefinite" />
+          <animate attributeName="stroke-opacity" values="0.7;0.1;0.7"
+            dur="1s" repeatCount="indefinite" />
+        </circle>
+      )}
+
+      {/* ── Hemisphere divider — splits PPL (top) from GEAR (bottom) ── */}
+      <g clipPath="url(#clip-home)">
+        {/* Subtle filled band that sells the segmentation */}
+        <rect x={-radius} y={-1.5} width={radius * 2} height={3}
+          fill="rgba(126,193,224,0.18)" />
+        {/* Sharp dashed equator line */}
+        <line x1={-radius} y1={0} x2={radius} y2={0}
+          stroke="rgba(180,225,245,0.65)" strokeWidth={0.8}
+          strokeDasharray="3 4"
+          style={{ filter: 'drop-shadow(0 0 3px rgba(126,193,224,0.7))' }} />
+      </g>
+
+      {/* Section labels — small chevrons just inside the rim */}
+      <g pointerEvents="none">
+        <text x={-radius * 0.9} y={-radius * 0.78}
+          fontFamily="'Space Mono', monospace"
+          fontSize={8.5} letterSpacing={2}
+          fill="rgba(205,233,245,0.85)"
+          style={{ filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.6))' }}>
+          ▲ PPL · {onStation}
+        </text>
+        <text x={-radius * 0.9} y={radius * 0.85}
+          fontFamily="'Space Mono', monospace"
+          fontSize={8.5} letterSpacing={2}
+          fill="rgba(205,233,245,0.85)"
+          style={{ filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.6))' }}>
+          ▼ GEAR · {gearOnStation}
+        </text>
+      </g>
 
       {/* Label */}
       <g transform={`translate(0 ${radius + 32})`}>
-        <text textAnchor="middle" fill="#fff"
-          fontSize={14} fontWeight={600} letterSpacing={0.5}>
+        <text textAnchor="middle"
+          fill={highlightLocation ? '#cde9f5' : '#fff'}
+          fontSize={highlightLocation ? 16 : 14}
+          fontWeight={600}
+          letterSpacing={highlightLocation ? 1.5 : 0.5}
+          style={{
+            filter: highlightLocation ? 'drop-shadow(0 0 10px rgba(126,193,224,0.7))' : undefined,
+            transition: 'all 350ms ease-out',
+          }}>
           ORBITAL STUDIO
         </text>
-        <text textAnchor="middle" y={16} fill="#5a8aa8"
-          fontFamily="'Space Mono', monospace" fontSize={9} letterSpacing={2}>
-          HOME · {onStation} PPL · {gearOnStation} GEAR
+        <text textAnchor="middle" y={16}
+          fill={highlightLocation ? '#7ec1e0' : '#5a8aa8'}
+          fontFamily="'Space Mono', monospace" fontSize={9} letterSpacing={2}
+          style={{ transition: 'fill 350ms ease-out' }}>
+          {highlightLocation ? '◈ HOME BASE · IN-HOUSE LOCATION' : `HOME · ${onStation} PPL · ${gearOnStation} GEAR`}
         </text>
       </g>
     </g>
   )
 }
 
-function ProjectPlanet({ production, pos, radius, isActive, isSelected, isDimmed, location, activeCount, onClick }) {
+function ProjectPlanet({ production, pos, radius, isActive, isSelected, isDimmed, location, highlightLocation, dropTargeted, activeCount, onClick }) {
   const p = production
   const opacity = isDimmed ? 0.35 : 1
   const desat = !isActive ? 'saturate(0.55) brightness(0.7)' : 'none'
@@ -717,8 +1099,22 @@ function ProjectPlanet({ production, pos, radius, isActive, isSelected, isDimmed
 
       {/* Outline ring */}
       <circle r={radius} fill="none"
-        stroke={isSelected ? p.color : `${p.color}55`}
-        strokeWidth={isSelected ? 1.5 : 0.7} />
+        stroke={dropTargeted ? '#fbbf24' : (isSelected ? p.color : `${p.color}55`)}
+        strokeWidth={dropTargeted ? 2 : (isSelected ? 1.5 : 0.7)}
+        style={{
+          filter: dropTargeted ? 'drop-shadow(0 0 14px rgba(251,191,36,0.7))' : undefined,
+          transition: 'all 220ms ease-out',
+        }} />
+
+      {/* Drop-target pulse ring */}
+      {dropTargeted && (
+        <circle r={radius + 6} fill="none" stroke="#fbbf24" strokeOpacity={0.7} strokeWidth={1}>
+          <animate attributeName="r" values={`${radius + 2};${radius + 16};${radius + 2}`}
+            dur="1s" repeatCount="indefinite" />
+          <animate attributeName="stroke-opacity" values="0.7;0.1;0.7"
+            dur="1s" repeatCount="indefinite" />
+        </circle>
+      )}
 
       {/* Label */}
       <g transform={`translate(0 ${radius + 26})`}>
@@ -732,8 +1128,16 @@ function ProjectPlanet({ production, pos, radius, isActive, isSelected, isDimmed
           {p.code} · {activeCount} ACTIVE
         </text>
         {location && (
-          <text textAnchor="middle" y={28} fill="#6e6f78"
-            fontFamily="'Space Mono', monospace" fontSize={8.5} letterSpacing={1.5}>
+          <text textAnchor="middle" y={28}
+            fill={highlightLocation ? '#fff' : '#6e6f78'}
+            fontFamily="'Space Mono', monospace"
+            fontSize={highlightLocation ? 11 : 8.5}
+            fontWeight={highlightLocation ? 700 : 400}
+            letterSpacing={highlightLocation ? 2 : 1.5}
+            style={{
+              filter: highlightLocation ? `drop-shadow(0 0 8px ${p.color})` : undefined,
+              transition: 'all 350ms ease-out',
+            }}>
             ◈ {shortLocationLabel(location)}
           </text>
         )}
@@ -745,11 +1149,31 @@ function ProjectPlanet({ production, pos, radius, isActive, isSelected, isDimmed
 // ══════════════════════════════════════════════════════════════════════════
 // Resource glyph — circle for people, hexagon for gear
 // ══════════════════════════════════════════════════════════════════════════
-function ResourceGlyph({ resource, mode }) {
+function ResourceGlyph({ resource, mode, dragging, manual }) {
   const conflict = mode === 'conflict'
   const isGear = resource.kind === 'gear'
+  // The PARENT <g> (set up in the orbiterStates.map) has its `transform`
+  // attribute managed by rAF. This inner <g> uses a CSS transform so its
+  // scale composes with the parent's translate without fighting it.
   return (
-    <g>
+    <g
+      style={{
+        transform: dragging ? 'scale(1.25)' : 'scale(1)',
+        transformOrigin: '0 0',
+        transition: 'transform 180ms ease-out',
+      }}
+    >
+      {/* Halo when dragging */}
+      {dragging && (
+        <circle r={22} fill="rgba(126,193,224,0.18)" stroke="rgba(126,193,224,0.5)" strokeWidth={1}>
+          <animate attributeName="r" values="18;28;18" dur="1.1s" repeatCount="indefinite" />
+        </circle>
+      )}
+      {/* Pin marker when this orbiter has a manual assignment */}
+      {manual && !dragging && (
+        <circle r={14} fill="none" stroke="#fbbf24" strokeWidth={1} strokeOpacity={0.7}
+          strokeDasharray="2 3" />
+      )}
       {/* Conflict glow halo */}
       {conflict && (
         <>
@@ -791,11 +1215,14 @@ function ResourceGlyph({ resource, mode }) {
         </g>
       )}
 
-      {/* Name label below */}
-      <text textAnchor="middle" y={22} fill="#d6d8dd"
-        fontSize={9.5} fontWeight={500}>
-        {resource.name}
-      </text>
+      {/* Name label below — hidden when at home (would crowd inside the planet);
+          tooltip still surfaces the full name on hover */}
+      {mode !== 'home' && (
+        <text textAnchor="middle" y={22} fill="#d6d8dd"
+          fontSize={9.5} fontWeight={500}>
+          {resource.name}
+        </text>
+      )}
     </g>
   )
 }
@@ -868,15 +1295,57 @@ function FocusLock({ focusedProduction, isHome, onReturn }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// Drag banner — shown while a resource is being dragged
+// ══════════════════════════════════════════════════════════════════════════
+function DragBanner({ resource, targetId }) {
+  const targetProd = targetId && targetId !== 'home'
+    ? PRODUCTIONS.find(p => p.id === targetId)
+    : null
+  const isHome = targetId === 'home'
+  const accent = isHome ? '#7ec1e0' : (targetProd?.color ?? '#fbbf24')
+  const glow = isHome ? 'rgba(126,193,224,0.6)' : (targetProd?.glow ?? 'rgba(251,191,36,0.6)')
+  const label = !targetId
+    ? 'HOVER A PLANET TO DEPLOY · DROP IN SPACE TO CANCEL'
+    : isHome
+      ? `RELEASE TO SEND TO HOME BASE`
+      : `RELEASE TO DEPLOY TO ${targetProd.name.toUpperCase()}`
+  return (
+    <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 animate-hud-in pointer-events-none">
+      <div className="inline-flex items-center gap-2 px-3 py-1.5"
+        style={{
+          background: 'rgba(15,17,22,0.92)',
+          backdropFilter: 'blur(6px)',
+          border: `1px solid ${accent}66`,
+          boxShadow: `0 0 14px ${glow}`,
+        }}>
+        <span className="w-1.5 h-1.5 rounded-full"
+          style={{ background: resource.color, boxShadow: `0 0 6px ${resource.color}` }} />
+        <span className="font-telemetry text-[10px] tracking-[0.18em] text-orbital-text">
+          ASSIGNING · {resource.name.toUpperCase()}
+        </span>
+        <span className="w-px h-3" style={{ background: 'rgba(255,255,255,0.15)' }} />
+        <span className="font-telemetry text-[9px] tracking-[0.22em] animate-indicator-pulse"
+          style={{ color: accent, textShadow: `0 0 4px ${glow}` }}>
+          {label}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // Tooltip
 // ══════════════════════════════════════════════════════════════════════════
-function ResourceTooltip({ resourceId, states, scrubDate }) {
+function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd }) {
   if (!resourceId) return null
   const state = states.find(s => s.resource.id === resourceId)
   if (!state) return null
   const r = state.resource
   const allProds = productionsForResource(resourceId)
   const homeLabel = r.kind === 'gear' ? 'IN STORAGE' : 'ON STATION'
+  const headerLabel = scrubMode === 'day'
+    ? `ASSIGNMENTS · ${format(scrubStart, 'MMM d').toUpperCase()}`
+    : `ASSIGNMENTS · ${format(scrubStart, 'MMM d').toUpperCase()} → ${format(scrubEnd, 'MMM d').toUpperCase()}`
   return (
     <div
       className="absolute pointer-events-none"
@@ -908,6 +1377,16 @@ function ResourceTooltip({ resourceId, states, scrubDate }) {
             <span className="font-telemetry text-[8px] tracking-widest">TORN</span>
           </span>
         )}
+        {state.mode === 'multi' && (
+          <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5"
+            style={{
+              background: 'rgba(251,191,36,0.13)',
+              border: '1px solid rgba(251,191,36,0.4)',
+              color: '#fcd34d',
+            }}>
+            <span className="font-telemetry text-[8px] tracking-widest">MULTI</span>
+          </span>
+        )}
         {state.mode === 'home' && (
           <span className="ml-auto inline-flex items-center gap-1 px-1.5 py-0.5"
             style={{
@@ -927,7 +1406,7 @@ function ResourceTooltip({ resourceId, states, scrubDate }) {
         )}
       </p>
       <p className="font-telemetry text-[8px] text-orbital-subtle tracking-[0.2em] mb-1.5">
-        ASSIGNMENTS · {format(scrubDate, 'MMM d').toUpperCase()}
+        {headerLabel}
       </p>
       <div className="space-y-1">
         {allProds.map(p => {
@@ -1004,9 +1483,12 @@ function Stat({ label, value, color }) {
 // ══════════════════════════════════════════════════════════════════════════
 // Time scrubber
 // ══════════════════════════════════════════════════════════════════════════
-function TimeScrubber({ day, setDay }) {
+const MIN_RANGE_SPAN = 1
+
+function TimeScrubber({ mode, setMode, day, setDay, range, setRange }) {
   const trackRef = useRef(null)
-  const dragging = useRef(false)
+  const dragRef = useRef(null)        // 'day' | 'start' | 'end' | 'span' | null
+  const spanDragOrigin = useRef(null) // { startX, startWindow } for span drag
 
   const dayFromX = useCallback((cx) => {
     const box = trackRef.current.getBoundingClientRect()
@@ -1015,18 +1497,69 @@ function TimeScrubber({ day, setDay }) {
     return Math.round(ratio * WINDOW_DAYS)
   }, [])
 
-  const onDown = (e) => {
-    dragging.current = true
+  // ── Day mode handlers ────────────────────────────────────────────────
+  const onDayDown = (e) => {
+    if (mode !== 'day') return
+    dragRef.current = 'day'
     const cx = e.clientX ?? e.touches?.[0]?.clientX
     setDay(dayFromX(cx))
   }
+
+  // ── Range mode handlers ──────────────────────────────────────────────
+  const onHandleDown = (which) => (e) => {
+    e.stopPropagation()
+    dragRef.current = which
+  }
+
+  const onSpanDown = (e) => {
+    e.stopPropagation()
+    dragRef.current = 'span'
+    const cx = e.clientX ?? e.touches?.[0]?.clientX
+    spanDragOrigin.current = { startX: cx, startWindow: { ...range } }
+  }
+
+  // Click on empty track in range mode jumps the nearest handle
+  const onRangeTrackDown = (e) => {
+    if (mode !== 'range') return
+    const cx = e.clientX ?? e.touches?.[0]?.clientX
+    const d = dayFromX(cx)
+    if (Math.abs(d - range.start) < Math.abs(d - range.end)) {
+      const next = Math.min(d, range.end - MIN_RANGE_SPAN)
+      setRange({ start: Math.max(0, next), end: range.end })
+      dragRef.current = 'start'
+    } else {
+      const next = Math.max(d, range.start + MIN_RANGE_SPAN)
+      setRange({ start: range.start, end: Math.min(WINDOW_DAYS, next) })
+      dragRef.current = 'end'
+    }
+  }
+
   useEffect(() => {
     const onMove = (e) => {
-      if (!dragging.current) return
+      if (!dragRef.current) return
       const cx = e.clientX ?? e.touches?.[0]?.clientX
-      setDay(dayFromX(cx))
+      if (dragRef.current === 'day') {
+        setDay(dayFromX(cx))
+      } else if (dragRef.current === 'start') {
+        const d = Math.min(dayFromX(cx), range.end - MIN_RANGE_SPAN)
+        setRange({ start: Math.max(0, d), end: range.end })
+      } else if (dragRef.current === 'end') {
+        const d = Math.max(dayFromX(cx), range.start + MIN_RANGE_SPAN)
+        setRange({ start: range.start, end: Math.min(WINDOW_DAYS, d) })
+      } else if (dragRef.current === 'span' && spanDragOrigin.current) {
+        const trackWidth = trackRef.current.getBoundingClientRect().width
+        const dx = cx - spanDragOrigin.current.startX
+        const ddays = Math.round((dx / trackWidth) * WINDOW_DAYS)
+        const w0 = spanDragOrigin.current.startWindow
+        const length = w0.end - w0.start
+        let start = Math.max(0, Math.min(WINDOW_DAYS - length, w0.start + ddays))
+        setRange({ start, end: start + length })
+      }
     }
-    const onUp = () => { dragging.current = false }
+    const onUp = () => {
+      dragRef.current = null
+      spanDragOrigin.current = null
+    }
     globalThis.addEventListener('mousemove', onMove)
     globalThis.addEventListener('mouseup', onUp)
     globalThis.addEventListener('touchmove', onMove)
@@ -1037,28 +1570,64 @@ function TimeScrubber({ day, setDay }) {
       globalThis.removeEventListener('touchmove', onMove)
       globalThis.removeEventListener('touchend', onUp)
     }
-  }, [dayFromX, setDay])
+  }, [dayFromX, setDay, setRange, range.start, range.end])
 
   const weeks = Array.from({ length: 7 }, (_, i) => i)
+  const dayPct   = (day / WINDOW_DAYS) * 100
+  const startPct = (range.start / WINDOW_DAYS) * 100
+  const endPct   = (range.end / WINDOW_DAYS) * 100
 
   return (
     <div className="px-6 pt-4 pb-5"
       style={{ borderTop: '1px solid var(--orbital-border)' }}>
       <div className="flex items-center justify-between mb-2">
-        <span className="hud-label">TIMELINE</span>
+        <div className="flex items-center gap-3">
+          <span className="hud-label">TIMELINE</span>
+          {/* DAY / RANGE toggle */}
+          <div className="inline-flex"
+            style={{
+              border: '1px solid var(--orbital-border)',
+              background: 'var(--orbital-muted)',
+            }}>
+            <button onClick={() => setMode('day')}
+              className="px-2.5 py-1 text-[10px] font-medium tracking-[0.18em] transition-all"
+              style={{
+                background: mode === 'day' ? 'rgba(59,130,246,0.18)' : 'transparent',
+                color: mode === 'day' ? '#60a5fa' : 'var(--orbital-subtle)',
+                boxShadow: mode === 'day' ? 'inset 0 0 8px rgba(59,130,246,0.25)' : 'none',
+              }}>
+              DAY
+            </button>
+            <button onClick={() => setMode('range')}
+              className="px-2.5 py-1 text-[10px] font-medium tracking-[0.18em] transition-all"
+              style={{
+                background: mode === 'range' ? 'rgba(232,121,249,0.18)' : 'transparent',
+                color: mode === 'range' ? '#e879f9' : 'var(--orbital-subtle)',
+                boxShadow: mode === 'range' ? 'inset 0 0 8px rgba(232,121,249,0.25)' : 'none',
+              }}>
+              RANGE
+            </button>
+          </div>
+        </div>
         <span className="font-telemetry text-[10px] text-orbital-subtle tracking-wider">
-          DAY {String(day).padStart(2, '0')} / {WINDOW_DAYS}
+          {mode === 'day'
+            ? `DAY ${String(day).padStart(2, '0')} / ${WINDOW_DAYS}`
+            : `${range.end - range.start} DAYS · ${String(range.start).padStart(2, '0')}–${String(range.end).padStart(2, '0')}`}
         </span>
       </div>
+
       <div
         ref={trackRef}
-        onMouseDown={onDown}
-        onTouchStart={onDown}
+        onMouseDown={mode === 'day' ? onDayDown : onRangeTrackDown}
+        onTouchStart={mode === 'day' ? onDayDown : onRangeTrackDown}
         className="relative cursor-pointer select-none"
         style={{ height: 36 }}
       >
+        {/* Base track */}
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2"
           style={{ height: 2, background: 'var(--orbital-border)' }} />
+
+        {/* Week tick marks */}
         {weeks.map(i => (
           <div key={i}
             className="absolute top-1/2 -translate-y-1/2"
@@ -1067,6 +1636,8 @@ function TimeScrubber({ day, setDay }) {
               width: 1, height: 8, background: 'var(--orbital-chrome)',
             }} />
         ))}
+
+        {/* Date labels */}
         {weeks.map(i => (
           <span key={i}
             className="absolute -bottom-1 -translate-x-1/2 font-telemetry text-[9px] text-orbital-subtle tracking-wider"
@@ -1074,19 +1645,65 @@ function TimeScrubber({ day, setDay }) {
             {format(dateAtDayIndex(i * 7), 'MMM d')}
           </span>
         ))}
-        <div className="absolute top-1/2 -translate-y-1/2"
-          style={{
-            left: 0, width: `${(day / WINDOW_DAYS) * 100}%`, height: 2,
-            background: 'linear-gradient(90deg, rgba(59,130,246,0.6), rgba(232,121,249,0.6))',
-            boxShadow: '0 0 10px rgba(59,130,246,0.7)',
-          }} />
-        <div className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-          style={{
-            left: `${(day / WINDOW_DAYS) * 100}%`,
-            width: 14, height: 18,
-            background: '#fff',
-            boxShadow: '0 0 14px rgba(255,255,255,0.7), 0 0 0 1px rgba(59,130,246,0.5) inset',
-          }} />
+
+        {mode === 'day' ? (
+          <>
+            {/* Filled portion 0 → playhead */}
+            <div className="absolute top-1/2 -translate-y-1/2"
+              style={{
+                left: 0, width: `${dayPct}%`, height: 2,
+                background: 'linear-gradient(90deg, rgba(59,130,246,0.6), rgba(232,121,249,0.6))',
+                boxShadow: '0 0 10px rgba(59,130,246,0.7)',
+                transition: dragRef.current === 'day' ? 'none' : 'width 200ms ease-out',
+              }} />
+            {/* Playhead handle */}
+            <div className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+              style={{
+                left: `${dayPct}%`,
+                width: 14, height: 18,
+                background: '#fff',
+                boxShadow: '0 0 14px rgba(255,255,255,0.7), 0 0 0 1px rgba(59,130,246,0.5) inset',
+                transition: dragRef.current === 'day' ? 'none' : 'left 200ms ease-out',
+              }} />
+          </>
+        ) : (
+          <>
+            {/* Filled span between handles — also a drag handle for the whole window */}
+            <div
+              onMouseDown={onSpanDown}
+              onTouchStart={onSpanDown}
+              className="absolute top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing"
+              style={{
+                left: `${startPct}%`,
+                width: `${endPct - startPct}%`,
+                height: 6,
+                background: 'linear-gradient(90deg, rgba(59,130,246,0.55), rgba(232,121,249,0.55))',
+                boxShadow: '0 0 12px rgba(155,130,240,0.5), inset 0 0 0 1px rgba(255,255,255,0.12)',
+              }} />
+            {/* Start handle */}
+            <div
+              onMouseDown={onHandleDown('start')}
+              onTouchStart={onHandleDown('start')}
+              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize"
+              style={{
+                left: `${startPct}%`,
+                width: 12, height: 18,
+                background: '#60a5fa',
+                boxShadow: '0 0 12px rgba(96,165,250,0.8), 0 0 0 1px rgba(255,255,255,0.4) inset',
+              }} />
+            {/* End handle */}
+            <div
+              onMouseDown={onHandleDown('end')}
+              onTouchStart={onHandleDown('end')}
+              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize"
+              style={{
+                left: `${endPct}%`,
+                width: 12, height: 18,
+                background: '#e879f9',
+                boxShadow: '0 0 12px rgba(232,121,249,0.8), 0 0 0 1px rgba(255,255,255,0.4) inset',
+              }} />
+          </>
+        )}
       </div>
     </div>
   )
