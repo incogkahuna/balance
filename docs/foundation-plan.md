@@ -11,8 +11,8 @@ multi-user production-management tool, with each phase gated by a verifiable che
 | Tier | Free tier for dev, Pro for production (studio-billed) |
 | Setup path | Path A — studio Pro org created in parallel; dev runs against free-tier project under personal account; point at Pro project once available |
 | Auth | Google OAuth (Orbital uses Google Workspace), magic link as fallback |
-| Hosting | Cloudflare Pages — unlimited bandwidth, predictable cost, fast edge |
-| Domain | Deferred to Phase 6 (run on `*.pages.dev` until launch) |
+| Hosting | Vercel — fastest path for a Vite SPA; revisit Cloudflare Pages later if bandwidth costs justify the swap |
+| Domain | Deferred to Phase 6 (run on `*.vercel.app` until launch) |
 | Edge functions | Supabase Edge Functions (Deno) for Whisper / Claude / email parsing |
 | TypeScript | Incremental migration, `allowJs: true`, `strict: true` |
 | Migrations | Supabase CLI + raw SQL files in `supabase/migrations/` |
@@ -194,17 +194,17 @@ Full notes in `supabase/functions/README.md`.
 
 **Goal:** Real URL. Real users. Real data.
 
-1. ⏳ Cloudflare Pages project linked to GitHub repo
-2. ⏳ Environment variables in Cloudflare dashboard (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
+1. ⏳ Vercel project linked to GitHub repo (auto-detects Vite — `npm run build` → `dist/`)
+2. ⏳ Environment variables in Vercel dashboard (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`)
 3. ⏳ Production Supabase project (separate from dev — point hosting at it)
 4. ⏳ Custom domain (e.g. `balance.<orbital-domain>`)
 5. ⏳ Sentry or similar for error tracking — replaces silent PageBoundary failures
 6. ⏳ Initial real user accounts seeded
 
 **Repo-level deploy prep that's already in place:**
-- ✅ `public/_redirects` with the SPA fallback rule (`/* /index.html 200`) so direct hits and refreshes on client routes don't 404
-- ✅ `public/_headers` — long cache for `/assets/*` (Vite hashes filenames), no-cache for `index.html`, baseline security headers (`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`)
-- ✅ Bundle code-split: `AnalyticsPage` (Recharts, ~108kB gzip), `SchedulePage`, and `IntakePage` are lazy-loaded — initial JS dropped from ~296kB gzip to ~172kB
+- ✅ `vercel.json` — SPA rewrite (`/(.*) → /index.html`), long cache for `/assets/*`, no-cache for `index.html`, baseline security headers (`X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`)
+- ✅ `public/_redirects` and `public/_headers` retained for portability — unused on Vercel but ready if we swap to Cloudflare Pages later
+- ✅ Bundle code-split: `AnalyticsPage` (Recharts, ~108kB gzip), `SchedulePage`, `IntakePage`, `PrototypePage` are lazy-loaded — initial JS dropped from ~296kB gzip to ~172kB
 - ✅ `PageBoundary` already wraps every route in `App.jsx` so a render error in one page doesn't take down the shell
 
 **✅ Check-in:** Studio team can log in at the real domain on the device they'll use day-to-day. Watch them use it for 15 minutes, triage issues.
