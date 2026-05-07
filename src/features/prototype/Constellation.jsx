@@ -64,6 +64,28 @@ function shortLocationLabel(loc) {
   return loc.name.toUpperCase().replace(' STAGE ', ' ')
 }
 
+// Mock skill profiles (used by the expanded tooltip). When real data lands,
+// these would come from the people/contractors records.
+const ROLE_SKILLS = {
+  'Producer':       ['BUDGET', 'SCHEDULING', 'LOGISTICS', 'CLIENT REL.'],
+  'Stage Manager':  ['CREW MGMT', 'SAFETY LEAD', 'LOAD-IN', 'EQUIPMENT'],
+  'DP':             ['LIGHTING', 'CAMERA OPS', 'COLOR SCI.', 'LENS PKG'],
+  'LED Tech':       ['PIXEL MAP', 'DISGUISE VX', 'CALIBRATION', 'ROE BP2'],
+  'LED Operator':   ['DISGUISE', 'NOTCH', 'UNREAL 5', 'COLOR PIPE'],
+  'DIT':            ['COLOR MGMT', 'DATA WRANGLE', 'ON-SET QC', 'CODEX VAULT'],
+}
+
+// Extra gear telemetry shown in the expanded tooltip.
+const GEAR_DETAILS = {
+  g1: { Dim: '24ft × 14ft', Pitch: '2.84 mm', Acquired: '2024' },
+  g2: { Dim: '16ft × 9ft',  Pitch: '2.84 mm', Acquired: '2024' },
+  g3: { Mount: 'Mo-Sys L40', Payload: '40 kg', Acquired: '2024' },
+  g4: { Type: 'vx 4+', Outputs: '8× 12G-SDI', Acquired: '2023' },
+  g5: { Type: 'vx 4+', Outputs: '8× 12G-SDI', Acquired: '2024' },
+  g6: { Reach: '32 ft', Capacity: '500 lb', Acquired: '2022' },
+  g7: { Length: '20 ft', Boxes: '12', Acquired: '2023' },
+}
+
 // ── Position helpers ─────────────────────────────────────────────────────
 // Home icons sit inside the planet, split horizontally:
 //  - people  → upper hemisphere (sin(angle) < 0)
@@ -711,6 +733,8 @@ export function Constellation() {
             scrubEnd={scrubEnd}
             scrubStartDay={scrubStartDay}
             scrubEndDay={scrubEndDay}
+            expanded={!!selectedPerson}
+            onClose={() => setSelectedPerson(null)}
           />
 
           <SceneStats orbiterStates={orbiterStates} conflictPairs={conflictPairs} />
@@ -1371,7 +1395,7 @@ function DragBanner({ resource, targetId }) {
 // ══════════════════════════════════════════════════════════════════════════
 // Tooltip
 // ══════════════════════════════════════════════════════════════════════════
-function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd, scrubStartDay, scrubEndDay }) {
+function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, expanded, onClose }) {
   if (!resourceId) return null
   const state = states.find(s => s.resource.id === resourceId)
   if (!state) return null
@@ -1384,16 +1408,20 @@ function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd, 
   )
   return (
     <div
-      className="absolute pointer-events-none"
+      className={expanded ? '' : 'pointer-events-none'}
       style={{
+        position: 'absolute',
         left: 16, bottom: 56,
-        padding: '20px 24px',
-        minWidth: 420,
-        maxWidth: 480,
+        padding: expanded ? '22px 26px 24px' : '20px 24px',
+        minWidth: expanded ? 580 : 420,
+        maxWidth: expanded ? 640 : 480,
+        maxHeight: expanded ? 'min(620px, calc(100% - 80px))' : 'auto',
+        overflowY: expanded ? 'auto' : 'visible',
         background: 'rgba(11,13,18,0.96)',
         backdropFilter: 'blur(12px)',
         border: '1px solid rgba(255,255,255,0.08)',
         boxShadow: '0 12px 48px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.03) inset',
+        transition: 'min-width 320ms ease-out, max-width 320ms ease-out, padding 320ms ease-out',
       }}
     >
       {/* ── Header — name + kind + mode badge ─────────────────────── */}
