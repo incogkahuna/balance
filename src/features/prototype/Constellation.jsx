@@ -500,6 +500,38 @@ export function Constellation() {
     setManualAssignments({})
   }
 
+  // ── Keyboard shortcuts ───────────────────────────────────────────────
+  // ESC clears any selection. ←/→ scrub by 1 day (Shift = 5 days). Skipped
+  // when the user is typing in an input, so this never fights form fields
+  // if the prototype later embeds inside one.
+  useEffect(() => {
+    const onKey = (e) => {
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+
+      if (e.key === 'Escape') {
+        setSelectedPlanet(null)
+        setSelectedPerson(null)
+        return
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const delta = (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 5 : 1)
+        if (scrubMode === 'day') {
+          setScrubDay(d => Math.max(0, Math.min(WINDOW_DAYS, d + delta)))
+        } else {
+          setScrubRange(r => {
+            const span = r.end - r.start
+            const start = Math.max(0, Math.min(WINDOW_DAYS - span, r.start + delta))
+            return { start, end: start + span }
+          })
+        }
+        e.preventDefault()
+      }
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => globalThis.removeEventListener('keydown', onKey)
+  }, [scrubMode])
+
   // Resource currently being dragged (for the banner UI)
   const draggingResource = draggingId ? RESOURCES.find(r => r.id === draggingId) : null
 
