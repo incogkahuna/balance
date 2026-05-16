@@ -114,7 +114,7 @@ export function ProductionsPage() {
   return (
     <div>
       <TopBar />
-      <div className="max-w-5xl mx-auto px-4 lg:px-6 py-5">
+      <div className="max-w-7xl mx-auto px-4 lg:px-6 py-5">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between mb-5">
@@ -219,7 +219,7 @@ export function ProductionsPage() {
             )}
           />
         ) : (
-          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2">
+          <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-4">
             {sortedFiltered.map(prod => (
               <ProductionCard
                 key={prod.id}
@@ -383,19 +383,19 @@ function ProductionCard({
       <button
         onClick={onClick}
         className="card text-left w-full hover:bg-orbital-panel transition-colors overflow-hidden"
-        style={{ borderLeft: `2px solid ${borderColor}` }}
+        style={{ borderLeft: `3px solid ${borderColor}` }}
       >
-        {/* Row 1: type pill + name + status badge */}
-        <div className="px-3 pt-2.5 pb-0 flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0 pr-10">
-            <p className="text-sm font-semibold text-orbital-text leading-snug truncate">{prod.name}</p>
-            <p className="text-[11px] text-orbital-subtle truncate mt-0.5">{prod.client}</p>
+        {/* Row 1: name + status badge */}
+        <div className="px-5 pt-4 pb-0 flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0 pr-12">
+            <p className="text-lg font-semibold text-orbital-text leading-tight truncate">{prod.name}</p>
+            <p className="text-sm text-orbital-subtle truncate mt-1">{prod.client}</p>
           </div>
-          <div className="flex-shrink-0 flex flex-col items-end gap-1 mt-0.5">
+          <div className="flex-shrink-0 flex flex-col items-end gap-1.5 mt-0.5">
             <StatusBadge status={prod.status} />
             {health !== 'On Track' && HEALTH_CONFIG[health] && (
               <span
-                className="text-[10px] font-medium px-1.5 py-px"
+                className="text-[11px] font-medium px-2 py-0.5"
                 style={{
                   color: '#fb923c',
                   background: 'rgba(251,146,60,0.1)',
@@ -409,20 +409,20 @@ function ProductionCard({
         </div>
 
         {/* Row 2: metadata — location, dates, stage manager */}
-        <div className="px-3 pt-2 pb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="flex items-center gap-1 text-[11px] text-orbital-subtle">
-            <MapPin size={10} className="flex-shrink-0" />
-            <span className="truncate max-w-[120px]">{locationLabel}</span>
+        <div className="px-5 pt-3 pb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <span className="flex items-center gap-1.5 text-xs text-orbital-subtle">
+            <MapPin size={12} className="flex-shrink-0" />
+            <span className="truncate max-w-[180px]">{locationLabel}</span>
           </span>
           {prod.startDate && (
-            <span className="flex items-center gap-1 text-[11px] text-orbital-subtle font-mono">
-              <Calendar size={10} className="flex-shrink-0" />
+            <span className="flex items-center gap-1.5 text-xs text-orbital-subtle font-mono">
+              <Calendar size={12} className="flex-shrink-0" />
               {format(parseISO(prod.startDate), 'MMM d')}
               {prod.endDate && ` – ${format(parseISO(prod.endDate), 'MMM d')}`}
             </span>
           )}
           {stageManager && (
-            <span className="text-[11px] text-orbital-subtle truncate">
+            <span className="text-xs text-orbital-subtle truncate">
               SM: {stageManager.name}
             </span>
           )}
@@ -430,24 +430,24 @@ function ProductionCard({
 
         {/* Row 3: avatars + task progress */}
         <div
-          className="px-3 py-2 flex items-center justify-between"
+          className="px-5 py-3 flex items-center justify-between"
           style={{ borderTop: '1px solid var(--orbital-border)' }}
         >
-          <AvatarGroup userIds={memberIds} size="sm" />
+          <AvatarGroup userIds={memberIds} size="md" />
           {prodTasks.length > 0 ? (
-            <div className="flex items-center gap-2">
-              <div className="w-20 h-0.5" style={{ background: 'var(--orbital-border)' }}>
+            <div className="flex items-center gap-2.5">
+              <div className="w-28 h-1" style={{ background: 'var(--orbital-border)' }}>
                 <div
                   className="h-full transition-all duration-300"
                   style={{ width: `${pct}%`, background: borderColor }}
                 />
               </div>
-              <span className="text-[11px] text-orbital-subtle font-mono tabular-nums">
+              <span className="text-xs text-orbital-subtle font-mono tabular-nums">
                 {completedTasks}/{prodTasks.length}
               </span>
             </div>
           ) : (
-            <span className="text-[11px] text-orbital-dim">No tasks</span>
+            <span className="text-xs text-orbital-dim">No tasks</span>
           )}
         </div>
       </button>
