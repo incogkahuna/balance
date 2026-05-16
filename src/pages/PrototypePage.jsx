@@ -3,12 +3,12 @@ import { ResourceRiver } from '../features/prototype/ResourceRiver.jsx'
 import { Constellation } from '../features/prototype/Constellation.jsx'
 
 const VIEWS = [
-  { id: 'river',     label: 'Resource River' },
   { id: 'constellation', label: 'Constellation' },
+  { id: 'river',     label: 'Resource River' },
 ]
 
 export function PrototypePage() {
-  const [view, setView] = useState('river')
+  const [view, setView] = useState('constellation')
 
   return (
     <div className="min-h-screen pb-12">

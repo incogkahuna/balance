@@ -691,6 +691,10 @@ export function Constellation() {
                       return
                     }
                     e.stopPropagation()
+                    // Selecting a person closes any active planet card so the
+                    // expanded resource tooltip doesn't collide with it at the
+                    // same bottom-left position.
+                    setSelectedPlanet(null)
                     setSelectedPerson(s => s === resource.id ? null : resource.id)
                   }}
                 >
@@ -2135,17 +2139,6 @@ function ProductionTimelineStrip({ production, scrubStartDay, scrubEndDay, scrub
         TIMELINE · 6 WEEK WINDOW
       </p>
       <svg width={W} height={H + 14} className="block overflow-visible">
-        {/* Window highlight */}
-        <rect
-          x={(scrubStartDay / total) * W}
-          y={0}
-          width={Math.max(3, ((scrubEndDay - scrubStartDay + (scrubMode === 'day' ? 0 : 0)) / total) * W)}
-          height={H}
-          fill="rgba(255,255,255,0.08)"
-          stroke="rgba(255,255,255,0.4)"
-          strokeWidth={0.7}
-          strokeDasharray="3 3"
-        />
         {/* Track */}
         <rect x={0} y={H/2 - 1} width={W} height={2} fill="rgba(255,255,255,0.05)" />
         {/* Production bar */}
@@ -2160,6 +2153,27 @@ function ProductionTimelineStrip({ production, scrubStartDay, scrubEndDay, scrub
           fontWeight={700}>
           {production.code}
         </text>
+        {/* Scrubber position: a window box in range mode, a playhead line in day mode */}
+        {scrubMode === 'day' ? (
+          <line
+            x1={(scrubStartDay / total) * W} y1={-2}
+            x2={(scrubStartDay / total) * W} y2={H + 2}
+            stroke="rgba(255,255,255,0.9)"
+            strokeWidth={1.2}
+            strokeDasharray="2 2"
+          />
+        ) : (
+          <rect
+            x={(scrubStartDay / total) * W}
+            y={0}
+            width={Math.max(3, ((scrubEndDay - scrubStartDay) / total) * W)}
+            height={H}
+            fill="rgba(255,255,255,0.08)"
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth={0.7}
+            strokeDasharray="3 3"
+          />
+        )}
         {/* Week tick marks */}
         {Array.from({ length: 7 }, (_, i) => i).map(i => (
           <line key={i}
