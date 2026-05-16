@@ -725,8 +725,11 @@ export function Constellation() {
           )}
 
           {/* ── Hovered orbiter tooltip ─────────────────────────────── */}
+          {/* Suppress hover-preview when a planet is selected — the
+              production card takes that space. Click-pinned resource
+              tooltip still shows. */}
           <ResourceTooltip
-            resourceId={selectedPerson || hoveredPersonId}
+            resourceId={selectedPerson || (selectedPlanet ? null : hoveredPersonId)}
             states={orbiterStates}
             scrubMode={scrubMode}
             scrubStart={scrubStart}
@@ -736,6 +739,20 @@ export function Constellation() {
             expanded={!!selectedPerson}
             onClose={() => setSelectedPerson(null)}
           />
+
+          {/* ── Production card ─────────────────────────────────────── */}
+          {selectedPlanet && (
+            <ProductionCard
+              planetId={selectedPlanet}
+              orbiterStates={orbiterStates}
+              scrubStart={scrubStart}
+              scrubEnd={scrubEnd}
+              scrubStartDay={scrubStartDay}
+              scrubEndDay={scrubEndDay}
+              scrubMode={scrubMode}
+              onClose={() => setSelectedPlanet(null)}
+            />
+          )}
 
           <SceneStats orbiterStates={orbiterStates} conflictPairs={conflictPairs} />
         </div>
@@ -1789,11 +1806,12 @@ function ModeBadge({ accent, bg, border, color, children }) {
   )
 }
 
-function TipStat({ label, value }) {
+function TipStat({ label, value, color }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="font-telemetry text-[9px] text-orbital-subtle tracking-[0.2em]">{label}</span>
-      <span className="font-telemetry text-[15px] text-orbital-text tracking-wider">{value}</span>
+      <span className="font-telemetry text-[15px] tracking-wider"
+        style={{ color: color ?? 'var(--orbital-text)' }}>{value}</span>
     </div>
   )
 }
@@ -1933,6 +1951,436 @@ function PeersSection({ resourceId, activeProds }) {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Production card — shown when a planet is selected
+// ══════════════════════════════════════════════════════════════════════════
+function ProductionCard({ planetId, orbiterStates, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, scrubMode, onClose }) {
+  if (planetId === 'home') {
+    return (
+      <HomeBaseCard
+        orbiterStates={orbiterStates}
+        scrubStart={scrubStart}
+        scrubEnd={scrubEnd}
+        scrubStartDay={scrubStartDay}
+        scrubEndDay={scrubEndDay}
+        scrubMode={scrubMode}
+        onClose={onClose}
+      />
+    )
+  }
+  const production = PRODUCTIONS.find(p => p.id === planetId)
+  if (!production) return null
+
+  // Status: ACTIVE / UPCOMING / WRAPPED relative to scrub time
+  const isActive = production.start <= scrubEnd && scrubStart <= production.end
+  const isPast   = production.end < scrubStart
+  const status = isActive ? 'ACTIVE' : isPast ? 'WRAPPED' : 'UPCOMING'
+  const statusColor = isActive ? '#34d399' : isPast ? '#71717a' : '#60a5fa'
+
+  // Roster on this production
+  const committedIds = new Set(
+    COMMITMENTS.filter(c => c.productionId === production.id).map(c => c.resourceId)
+  )
+  const people   = RESOURCES.filter(r => r.kind === 'people'   && committedIds.has(r.id))
+  const gear     = RESOURCES.filter(r => r.kind === 'gear'     && committedIds.has(r.id))
+  const location = PRODUCTION_LOCATION[production.id]
+
+  // Total person/gear days
+  const totalPersonDays = COMMITMENTS
+    .filter(c => c.productionId === production.id)
+    .filter(c => RESOURCES.find(r => r.id === c.resourceId)?.kind === 'people')
+    .reduce((s, c) => s + (Math.round((c.end - c.start) / 86400000) + 1), 0)
+
+  // Conflicts ON this production: any of its committed resources who are TORN
+  // because they have an overlapping commitment to another production.
+  const productionConflicts = []
+  for (const c of COMMITMENTS.filter(c => c.productionId === production.id)) {
+    const overlapping = COMMITMENTS.filter(other =>
+      other.resourceId === c.resourceId &&
+      other.productionId !== production.id &&
+      other.start <= c.end && c.start <= other.end
+    )
+    if (overlapping.length > 0) {
+      productionConflicts.push({ commitment: c, overlapping })
+    }
+  }
+
+  // Derive a "right now" headcount at scrub time
+  const nowCount = orbiterStates.filter(s => s.activeProds.includes(production.id)).length
+
+  const duration = Math.round((production.end - production.start) / 86400000) + 1
+
+  return (
+    <div
+      className=""
+      style={{
+        position: 'absolute',
+        left: 16, bottom: 56,
+        padding: '22px 26px 24px',
+        minWidth: 580,
+        maxWidth: 640,
+        maxHeight: 'min(620px, calc(100% - 80px))',
+        overflowY: 'auto',
+        background: 'rgba(11,13,18,0.96)',
+        backdropFilter: 'blur(12px)',
+        border: `1px solid ${production.color}55`,
+        boxShadow: `0 12px 48px rgba(0,0,0,0.65), 0 0 24px ${production.glow}, 0 0 0 1px rgba(255,255,255,0.03) inset`,
+      }}
+    >
+      {/* ── Header ───────────────────────────────────────────── */}
+      <div className="flex items-center gap-2.5 mb-1.5">
+        <span className="w-2.5 h-2.5"
+          style={{ background: production.color, boxShadow: `0 0 8px ${production.glow}` }} />
+        <span className="font-telemetry text-[11px] tracking-[0.22em]"
+          style={{ color: production.color, textShadow: `0 0 6px ${production.glow}` }}>
+          {production.code}
+        </span>
+        <span className="text-[18px] font-semibold text-orbital-text tracking-tight">
+          {production.name}
+        </span>
+        <span className="ml-auto inline-flex items-center gap-1.5 px-2 py-1"
+          style={{
+            background: `${statusColor}22`,
+            border: `1px solid ${statusColor}66`,
+            color: statusColor,
+          }}>
+          <span className="w-1.5 h-1.5 rounded-full"
+            style={{ background: statusColor, boxShadow: `0 0 5px ${statusColor}` }} />
+          <span className="font-telemetry text-[10px] tracking-[0.18em]">{status}</span>
+        </span>
+      </div>
+
+      {/* ── Subhead — dates + summary ────────────────────────── */}
+      <p className="font-telemetry text-[11px] text-orbital-subtle tracking-wider mb-1">
+        {format(production.start, 'MMM d').toUpperCase()} → {format(production.end, 'MMM d, yyyy').toUpperCase()}
+        <span className="ml-2 text-orbital-dim">· {duration} DAYS</span>
+      </p>
+      <p className="text-[13px] text-orbital-subtle leading-snug mb-3">
+        {production.summary}
+        {location && (
+          <span className="ml-2 font-telemetry text-[10px] text-orbital-dim tracking-widest">
+            · ◈ {shortLocationLabel(location)}
+          </span>
+        )}
+      </p>
+
+      {/* ── Stats row ──────────────────────────────────────── */}
+      <div className="flex items-center gap-6 pb-3 mb-3"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <TipStat label="PEOPLE"  value={people.length} />
+        <TipStat label="GEAR"    value={gear.length} />
+        <TipStat label={scrubMode === 'day' ? 'NOW' : 'IN WINDOW'} value={nowCount} />
+        <TipStat label="P-DAYS"  value={totalPersonDays} />
+        <TipStat label="CONFLICTS"
+          value={productionConflicts.length}
+          color={productionConflicts.length > 0 ? '#fca5a5' : undefined} />
+      </div>
+
+      {/* ── Mini-Gantt — show this production's range against the window ─ */}
+      <ProductionTimelineStrip production={production}
+        scrubStartDay={scrubStartDay} scrubEndDay={scrubEndDay} scrubMode={scrubMode} />
+
+      <SectionDivider />
+
+      {/* ── Roster ───────────────────────────────────────── */}
+      <RosterSection title="PEOPLE" resources={people} active={nowCount > 0
+        ? new Set(orbiterStates.filter(s => s.activeProds.includes(production.id) && s.resource.kind === 'people').map(s => s.resource.id))
+        : new Set()} />
+
+      <SectionDivider />
+
+      <RosterSection title="GEAR" resources={gear} active={
+        new Set(orbiterStates.filter(s => s.activeProds.includes(production.id) && s.resource.kind === 'gear').map(s => s.resource.id))
+      } />
+
+      {/* ── Conflicts on this production ─────────────────── */}
+      {productionConflicts.length > 0 && (
+        <>
+          <SectionDivider />
+          <ProductionConflictsBlock production={production} conflicts={productionConflicts} />
+        </>
+      )}
+
+      {/* ── Close button ─────────────────────────────────── */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose?.() }}
+        className="absolute top-3 right-3 inline-flex items-center justify-center transition-colors"
+        style={{
+          width: 22, height: 22,
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          color: 'var(--orbital-subtle)',
+        }}
+        title="Close"
+      >
+        <span className="text-[12px] leading-none">×</span>
+      </button>
+    </div>
+  )
+}
+
+function ProductionTimelineStrip({ production, scrubStartDay, scrubEndDay, scrubMode }) {
+  const W = 530
+  const H = 22
+  const total = WINDOW_DAYS
+  const startPx = (dayIndex(production.start) / total) * W
+  const endPx   = ((dayIndex(production.end) + 1) / total) * W
+  return (
+    <div className="mb-1">
+      <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+        TIMELINE · 6 WEEK WINDOW
+      </p>
+      <svg width={W} height={H + 14} className="block overflow-visible">
+        {/* Window highlight */}
+        <rect
+          x={(scrubStartDay / total) * W}
+          y={0}
+          width={Math.max(3, ((scrubEndDay - scrubStartDay + (scrubMode === 'day' ? 0 : 0)) / total) * W)}
+          height={H}
+          fill="rgba(255,255,255,0.08)"
+          stroke="rgba(255,255,255,0.4)"
+          strokeWidth={0.7}
+          strokeDasharray="3 3"
+        />
+        {/* Track */}
+        <rect x={0} y={H/2 - 1} width={W} height={2} fill="rgba(255,255,255,0.05)" />
+        {/* Production bar */}
+        <rect x={startPx} y={H/2 - 6} width={Math.max(3, endPx - startPx)} height={12}
+          fill={production.color} opacity={0.85}
+          style={{ filter: `drop-shadow(0 0 6px ${production.glow})` }} />
+        <text x={startPx + 5} y={H/2 + 3.5}
+          fontFamily="'Space Mono', monospace"
+          fontSize={9.5}
+          letterSpacing={1}
+          fill="rgba(0,0,0,0.78)"
+          fontWeight={700}>
+          {production.code}
+        </text>
+        {/* Week tick marks */}
+        {Array.from({ length: 7 }, (_, i) => i).map(i => (
+          <line key={i}
+            x1={(i / 6) * W} y1={H}
+            x2={(i / 6) * W} y2={H + 5}
+            stroke="rgba(255,255,255,0.25)" strokeWidth={0.7} />
+        ))}
+      </svg>
+      <div className="flex justify-between font-telemetry text-[9px] text-orbital-dim tracking-wider mt-1">
+        <span>{format(dateAtDayIndex(0), 'MMM d').toUpperCase()}</span>
+        <span>{format(dateAtDayIndex(WINDOW_DAYS), 'MMM d').toUpperCase()}</span>
+      </div>
+    </div>
+  )
+}
+
+// Roster grid: avatar chips for everyone committed, with a glow on those
+// currently active at the playhead.
+function RosterSection({ title, resources, active }) {
+  if (resources.length === 0) {
+    return (
+      <div>
+        <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+          {title}
+        </p>
+        <p className="font-telemetry text-[10px] text-orbital-dim tracking-widest">— NONE —</p>
+      </div>
+    )
+  }
+  return (
+    <div>
+      <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+        {title} · {resources.length}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {resources.map(r => {
+          const isActiveNow = active.has(r.id)
+          return (
+            <div key={r.id}
+              className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1"
+              style={{
+                background: isActiveNow ? `${r.color}1c` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${isActiveNow ? r.color + '77' : 'rgba(255,255,255,0.08)'}`,
+                opacity: isActiveNow ? 1 : 0.65,
+                boxShadow: isActiveNow ? `0 0 8px ${r.color}55` : 'none',
+              }}>
+              <span className="inline-flex items-center justify-center font-telemetry font-bold"
+                style={{
+                  width: 18, height: 16,
+                  fontSize: r.kind === 'gear' ? 8 : 10,
+                  background: r.color,
+                  color: '#0a0c10',
+                  clipPath: r.kind === 'gear'
+                    ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)'
+                    : undefined,
+                  borderRadius: r.kind === 'people' ? '50%' : 0,
+                }}>
+                {r.initial}
+              </span>
+              <div className="flex flex-col leading-tight">
+                <span className="text-[11px] text-orbital-text">{r.name}</span>
+                <span className="font-telemetry text-[8px] text-orbital-dim tracking-widest">{r.role}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ProductionConflictsBlock({ production, conflicts }) {
+  return (
+    <div>
+      <p className="font-telemetry text-[10px] tracking-[0.22em] mb-2"
+        style={{ color: '#fca5a5' }}>
+        ⚠ CONTESTED RESOURCES · {conflicts.length}
+      </p>
+      <div className="space-y-2">
+        {conflicts.map((c, i) => {
+          const r = RESOURCES.find(x => x.id === c.commitment.resourceId)
+          return (
+            <div key={i} className="px-2.5 py-2"
+              style={{
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.25)',
+              }}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="inline-flex items-center justify-center font-telemetry font-bold"
+                  style={{
+                    width: 16, height: 14,
+                    fontSize: r.kind === 'gear' ? 8 : 9.5,
+                    background: r?.color, color: '#0a0c10',
+                    clipPath: r?.kind === 'gear'
+                      ? 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)'
+                      : undefined,
+                    borderRadius: r?.kind === 'people' ? '50%' : 0,
+                  }}>
+                  {r?.initial}
+                </span>
+                <span className="text-[11px] font-medium text-orbital-text">{r?.name}</span>
+                <span className="font-telemetry text-[9px] text-orbital-dim tracking-widest">
+                  {r?.role}
+                </span>
+              </div>
+              <p className="font-telemetry text-[10px] text-orbital-subtle tracking-wider">
+                Also booked on{' '}
+                {c.overlapping.map((o, oi) => {
+                  const op = PRODUCTIONS.find(x => x.id === o.productionId)
+                  return (
+                    <span key={oi}>
+                      <span style={{ color: op?.color }}>{op?.code}</span>
+                      {oi < c.overlapping.length - 1 ? ', ' : ''}
+                    </span>
+                  )
+                })}
+              </p>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Home base card — shown when the home planet is selected
+// ══════════════════════════════════════════════════════════════════════════
+function HomeBaseCard({ orbiterStates, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, scrubMode, onClose }) {
+  const onStation     = orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'people')
+  const inStorage     = orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'gear')
+  const peopleDeployed = orbiterStates.filter(s => s.mode !== 'home' && s.resource.kind === 'people').length
+  const gearDeployed   = orbiterStates.filter(s => s.mode !== 'home' && s.resource.kind === 'gear').length
+  // Productions hosted in-house (location = Orbital Studio)
+  const inHouseProds = PRODUCTIONS.filter(p => PRODUCTION_LOCATION[p.id]?.id === 'l1')
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: 16, bottom: 56,
+        padding: '22px 26px 24px',
+        minWidth: 580,
+        maxWidth: 640,
+        maxHeight: 'min(620px, calc(100% - 80px))',
+        overflowY: 'auto',
+        background: 'rgba(11,13,18,0.96)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(126,193,224,0.4)',
+        boxShadow: '0 12px 48px rgba(0,0,0,0.65), 0 0 24px rgba(126,193,224,0.4), 0 0 0 1px rgba(255,255,255,0.03) inset',
+      }}
+    >
+      <div className="flex items-center gap-2.5 mb-1.5">
+        <span className="w-2.5 h-2.5"
+          style={{ background: '#7ec1e0', boxShadow: '0 0 8px rgba(126,193,224,0.7)' }} />
+        <span className="font-telemetry text-[11px] tracking-[0.22em]"
+          style={{ color: '#7ec1e0', textShadow: '0 0 6px rgba(126,193,224,0.6)' }}>
+          HOME · IN-HOUSE
+        </span>
+        <span className="text-[18px] font-semibold text-orbital-text tracking-tight">
+          Orbital Studio
+        </span>
+      </div>
+      <p className="text-[13px] text-orbital-subtle leading-snug mb-3">
+        Home base · LA virtual production stage · {inHouseProds.length} production{inHouseProds.length === 1 ? '' : 's'} hosted in-house
+      </p>
+
+      <div className="flex items-center gap-6 pb-3 mb-3"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <TipStat label="ON STATION"  value={onStation.length} />
+        <TipStat label="IN STORAGE"  value={inStorage.length} />
+        <TipStat label="DEPLOYED" value={peopleDeployed + gearDeployed} />
+        <TipStat label="HOSTING"  value={inHouseProds.length} />
+      </div>
+
+      <RosterSection title="PEOPLE ON STATION" resources={onStation.map(s => s.resource)} active={new Set()} />
+      <SectionDivider />
+      <RosterSection title="GEAR IN STORAGE" resources={inStorage.map(s => s.resource)} active={new Set()} />
+
+      {inHouseProds.length > 0 && (
+        <>
+          <SectionDivider />
+          <div>
+            <p className="font-telemetry text-[10px] text-orbital-subtle tracking-[0.22em] mb-2">
+              IN-HOUSE PRODUCTIONS · {inHouseProds.length}
+            </p>
+            <div className="space-y-2">
+              {inHouseProds.map(p => {
+                const isActive = p.start <= scrubEnd && scrubStart <= p.end
+                return (
+                  <div key={p.id} className="flex items-center gap-2"
+                    style={{ paddingLeft: 8, borderLeft: `2px solid ${p.color}` }}>
+                    <span className="font-telemetry text-[10px] tracking-[0.18em]" style={{ color: p.color }}>
+                      {p.code}
+                    </span>
+                    <span className="text-[12px] font-medium text-orbital-text">{p.name}</span>
+                    <span className="ml-auto font-telemetry text-[9px] tracking-widest"
+                      style={{ color: isActive ? '#34d399' : 'var(--orbital-subtle)' }}>
+                      {isActive ? 'ACTIVE' : `${format(p.start, 'MMM d').toUpperCase()} → ${format(p.end, 'MMM d').toUpperCase()}`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      <button
+        onClick={(e) => { e.stopPropagation(); onClose?.() }}
+        className="absolute top-3 right-3 inline-flex items-center justify-center transition-colors"
+        style={{
+          width: 22, height: 22,
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          color: 'var(--orbital-subtle)',
+        }}
+        title="Close"
+      >
+        <span className="text-[12px] leading-none">×</span>
+      </button>
     </div>
   )
 }
