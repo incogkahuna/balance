@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw } from 'lucide-react'
+import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, Maximize2 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
@@ -285,6 +285,69 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
   )
 }
 
+// ── Per-card size: 1 / 2 / 3 grid spans, scaled internals ────────────────────
+// Stored in localStorage per production id so it persists per-browser without
+// requiring a Supabase migration. UI-only preference.
+const CARD_SIZE_KEY = (id) => `balance_card_size_${id}`
+
+const SIZE_STYLES = {
+  1: { padX: 'px-5', padTop: 'pt-4', padBot: 'pb-4', name: 'text-lg',  client: 'text-sm',  meta: 'text-xs', icon: 12, avatar: 'md', barW: 'w-28', rowPadY: 'py-3' },
+  2: { padX: 'px-6', padTop: 'pt-5', padBot: 'pb-5', name: 'text-2xl', client: 'text-base', meta: 'text-sm', icon: 14, avatar: 'md', barW: 'w-40', rowPadY: 'py-4' },
+  3: { padX: 'px-8', padTop: 'pt-7', padBot: 'pb-7', name: 'text-3xl', client: 'text-lg',  meta: 'text-base', icon: 16, avatar: 'md', barW: 'w-56', rowPadY: 'py-5' },
+}
+
+function useCardSize(prodId) {
+  const [size, setSizeState] = useState(() => {
+    if (typeof window === 'undefined') return 1
+    const raw = window.localStorage.getItem(CARD_SIZE_KEY(prodId))
+    const n = raw ? parseInt(raw, 10) : 1
+    return Math.max(1, Math.min(3, n || 1))
+  })
+  const setSize = useCallback((n) => {
+    const clamped = Math.max(1, Math.min(3, n))
+    window.localStorage.setItem(CARD_SIZE_KEY(prodId), String(clamped))
+    setSizeState(clamped)
+  }, [prodId])
+  return [size, setSize]
+}
+
+// ── Size slider popover ──────────────────────────────────────────────────────
+function SizeSlider({ value, onChange, onClose }) {
+  useEffect(() => {
+    const handler = () => onClose()
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [onClose])
+
+  return (
+    <div
+      className="absolute top-full right-0 mt-1 z-50 p-3 min-w-[160px]"
+      style={{
+        background: 'var(--orbital-surface)',
+        border: '1px solid var(--orbital-border)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+      }}
+      onClick={e => e.stopPropagation()}
+    >
+      <p className="text-[10px] text-orbital-subtle mb-2 font-telemetry tracking-wider">CARD SIZE</p>
+      <input
+        type="range"
+        min={1}
+        max={3}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
+        className="w-full accent-blue-500"
+      />
+      <div className="flex justify-between text-[9px] text-orbital-dim mt-1 font-telemetry tracking-wider">
+        <span style={{ color: value === 1 ? 'var(--orbital-text)' : undefined }}>S</span>
+        <span style={{ color: value === 2 ? 'var(--orbital-text)' : undefined }}>M</span>
+        <span style={{ color: value === 3 ? 'var(--orbital-text)' : undefined }}>L</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Production card ───────────────────────────────────────────────────────────
 function ProductionCard({
   production: prod,
@@ -298,6 +361,9 @@ function ProductionCard({
 }) {
   const { tasks, getContractor, currentUser, updateProduction } = useApp()
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [sizeOpen, setSizeOpen] = useState(false)
+  const [cardSize, setCardSize] = useCardSize(prod.id)
+  const sz = SIZE_STYLES[cardSize]
 
   const prodTasks      = tasks.filter(t => t.productionId === prod.id)
   const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
@@ -330,6 +396,7 @@ function ProductionCard({
         isDragging && 'opacity-40 scale-[0.97]',
         isDragOver && !isDragging && 'scale-[1.01]',
       )}
+      style={{ gridColumn: `span ${cardSize} / span ${cardSize}` }}
     >
       {/* Drop target outline */}
       {isDragOver && !isDragging && (
@@ -339,12 +406,33 @@ function ProductionCard({
         />
       )}
 
-      {/* Hover controls: drag handle + color picker */}
+      {/* Hover controls: size slider + colour picker + drag handle */}
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); setSizeOpen(o => !o); setPickerOpen(false) }}
+            className="p-1 transition-colors"
+            style={{
+              background: 'var(--orbital-surface)',
+              border: '1px solid var(--orbital-border)',
+              color: cardSize > 1 ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
+            }}
+            title="Card size"
+          >
+            <Maximize2 size={11} />
+          </button>
+          {sizeOpen && (
+            <SizeSlider
+              value={cardSize}
+              onChange={setCardSize}
+              onClose={() => setSizeOpen(false)}
+            />
+          )}
+        </div>
         {canCustomize && (
           <div className="relative">
             <button
-              onClick={(e) => { e.stopPropagation(); setPickerOpen(o => !o) }}
+              onClick={(e) => { e.stopPropagation(); setPickerOpen(o => !o); setSizeOpen(false) }}
               className="p-1 transition-colors"
               style={{
                 background: 'var(--orbital-surface)',
@@ -386,10 +474,10 @@ function ProductionCard({
         style={{ borderLeft: `3px solid ${borderColor}` }}
       >
         {/* Row 1: name + status badge */}
-        <div className="px-5 pt-4 pb-0 flex items-start justify-between gap-3">
+        <div className={clsx('flex items-start justify-between gap-3 pb-0', sz.padX, sz.padTop)}>
           <div className="flex-1 min-w-0 pr-12">
-            <p className="text-lg font-semibold text-orbital-text leading-tight truncate">{prod.name}</p>
-            <p className="text-sm text-orbital-subtle truncate mt-1">{prod.client}</p>
+            <p className={clsx('font-semibold text-orbital-text leading-tight truncate', sz.name)}>{prod.name}</p>
+            <p className={clsx('text-orbital-subtle truncate mt-1', sz.client)}>{prod.client}</p>
           </div>
           <div className="flex-shrink-0 flex flex-col items-end gap-1.5 mt-0.5">
             <StatusBadge status={prod.status} />
@@ -409,20 +497,20 @@ function ProductionCard({
         </div>
 
         {/* Row 2: metadata — location, dates, stage manager */}
-        <div className="px-5 pt-3 pb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          <span className="flex items-center gap-1.5 text-xs text-orbital-subtle">
-            <MapPin size={12} className="flex-shrink-0" />
-            <span className="truncate max-w-[180px]">{locationLabel}</span>
+        <div className={clsx('flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-3', sz.padX, sz.padBot)}>
+          <span className={clsx('flex items-center gap-1.5 text-orbital-subtle', sz.meta)}>
+            <MapPin size={sz.icon} className="flex-shrink-0" />
+            <span className="truncate max-w-[220px]">{locationLabel}</span>
           </span>
           {prod.startDate && (
-            <span className="flex items-center gap-1.5 text-xs text-orbital-subtle font-mono">
-              <Calendar size={12} className="flex-shrink-0" />
+            <span className={clsx('flex items-center gap-1.5 text-orbital-subtle font-mono', sz.meta)}>
+              <Calendar size={sz.icon} className="flex-shrink-0" />
               {format(parseISO(prod.startDate), 'MMM d')}
               {prod.endDate && ` – ${format(parseISO(prod.endDate), 'MMM d')}`}
             </span>
           )}
           {stageManager && (
-            <span className="text-xs text-orbital-subtle truncate">
+            <span className={clsx('text-orbital-subtle truncate', sz.meta)}>
               SM: {stageManager.name}
             </span>
           )}
@@ -430,24 +518,24 @@ function ProductionCard({
 
         {/* Row 3: avatars + task progress */}
         <div
-          className="px-5 py-3 flex items-center justify-between"
+          className={clsx('flex items-center justify-between', sz.padX, sz.rowPadY)}
           style={{ borderTop: '1px solid var(--orbital-border)' }}
         >
-          <AvatarGroup userIds={memberIds} size="md" />
+          <AvatarGroup userIds={memberIds} size={sz.avatar} />
           {prodTasks.length > 0 ? (
             <div className="flex items-center gap-2.5">
-              <div className="w-28 h-1" style={{ background: 'var(--orbital-border)' }}>
+              <div className={clsx('h-1', sz.barW)} style={{ background: 'var(--orbital-border)' }}>
                 <div
                   className="h-full transition-all duration-300"
                   style={{ width: `${pct}%`, background: borderColor }}
                 />
               </div>
-              <span className="text-xs text-orbital-subtle font-mono tabular-nums">
+              <span className={clsx('text-orbital-subtle font-mono tabular-nums', sz.meta)}>
                 {completedTasks}/{prodTasks.length}
               </span>
             </div>
           ) : (
-            <span className="text-xs text-orbital-dim">No tasks</span>
+            <span className={clsx('text-orbital-dim', sz.meta)}>No tasks</span>
           )}
         </div>
       </button>
