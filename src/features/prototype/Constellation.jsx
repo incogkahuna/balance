@@ -2601,11 +2601,25 @@ function TimeScrubber({ mode, setMode, day, setDay, range, setRange }) {
             </button>
           </div>
         </div>
-        <span className="font-telemetry text-[10px] text-orbital-subtle tracking-wider">
-          {mode === 'day'
-            ? `DAY ${String(day).padStart(2, '0')} / ${WINDOW_DAYS}`
-            : `${range.end - range.start} DAYS · ${String(range.start).padStart(2, '0')}–${String(range.end).padStart(2, '0')}`}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="font-telemetry text-[9px] text-orbital-dim tracking-[0.18em] hidden md:inline">
+            <kbd className="px-1 py-px"
+              style={{ border: '1px solid var(--orbital-border)', color: 'var(--orbital-subtle)' }}>←</kbd>
+            <kbd className="px-1 py-px ml-0.5"
+              style={{ border: '1px solid var(--orbital-border)', color: 'var(--orbital-subtle)' }}>→</kbd>
+            <span className="ml-1.5">SCRUB</span>
+            <span className="ml-2.5"
+              style={{ color: 'var(--orbital-chrome)' }}>·</span>
+            <kbd className="px-1 py-px ml-2.5"
+              style={{ border: '1px solid var(--orbital-border)', color: 'var(--orbital-subtle)' }}>ESC</kbd>
+            <span className="ml-1.5">CLEAR</span>
+          </span>
+          <span className="font-telemetry text-[10px] text-orbital-subtle tracking-wider">
+            {mode === 'day'
+              ? `DAY ${String(day).padStart(2, '0')} / ${WINDOW_DAYS}`
+              : `${range.end - range.start} DAYS · ${String(range.start).padStart(2, '0')}–${String(range.end).padStart(2, '0')}`}
+          </span>
+        </div>
       </div>
 
       <div
