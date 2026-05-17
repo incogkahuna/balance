@@ -285,17 +285,28 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
   )
 }
 
-// ── Per-card size: 1 / 2 / 3 grid spans, scaled internals ────────────────────
+// ── Per-card size: 5 stops (XS/S/M/L/XL), scaled internals only ──────────────
 // Stored in localStorage per production id so it persists per-browser without
 // requiring a Supabase migration. UI-only preference.
 const CARD_SIZE_KEY = (id) => `balance_card_size_${id}`
 
+// Migrate the older numeric keys (1/2/3) that earlier versions of this UI
+// stored. Returns a canonical size string ('XS'|'S'|'M'|'L'|'XL').
+function normalizeSize(raw) {
+  if (!raw) return 'S'
+  const map = { '1': 'S', '2': 'M', '3': 'L' }
+  const v = map[raw] || raw
+  return ['XS', 'S', 'M', 'L', 'XL'].includes(v) ? v : 'S'
+}
+
 // All sizes occupy a single grid column (no horizontal span) — scaling is
 // purely internal so the card grows in place rather than stretching wider.
 const SIZE_STYLES = {
-  1: { padX: 'px-5', padTop: 'pt-4', padBot: 'pb-4', name: 'text-lg',  client: 'text-sm',  meta: 'text-xs',   pill: 'text-[10px] px-2 py-0.5', countdown: 'text-base', detailLabel: 'text-[9px]', detail: 'text-xs',  icon: 12, avatar: 'sm', barW: 'w-24', rowPadY: 'py-3', sectionPadY: 'py-2.5' },
-  2: { padX: 'px-6', padTop: 'pt-5', padBot: 'pb-5', name: 'text-xl',  client: 'text-base', meta: 'text-sm',   pill: 'text-xs px-2.5 py-1',     countdown: 'text-xl',   detailLabel: 'text-[10px]', detail: 'text-sm', icon: 14, avatar: 'md', barW: 'w-32', rowPadY: 'py-4', sectionPadY: 'py-3.5' },
-  3: { padX: 'px-7', padTop: 'pt-6', padBot: 'pb-6', name: 'text-2xl', client: 'text-lg',   meta: 'text-base', pill: 'text-sm px-3 py-1',       countdown: 'text-3xl',  detailLabel: 'text-xs', detail: 'text-base', icon: 16, avatar: 'md', barW: 'w-44', rowPadY: 'py-5', sectionPadY: 'py-4.5' },
+  XS: { padX: 'px-3', padTop: 'pt-2.5', padBot: 'pb-2.5', name: 'text-sm',   client: 'text-[11px]', meta: 'text-[10px]', pill: 'text-[9px] px-1.5 py-px',   countdown: 'text-xs',  detailLabel: 'text-[8px]',  detail: 'text-[10px]', icon: 10, avatar: 'xs', barW: 'w-16', rowPadY: 'py-2',   sectionPadY: 'py-1.5' },
+  S:  { padX: 'px-5', padTop: 'pt-4',   padBot: 'pb-4',   name: 'text-lg',   client: 'text-sm',     meta: 'text-xs',     pill: 'text-[10px] px-2 py-0.5',   countdown: 'text-base', detailLabel: 'text-[9px]',  detail: 'text-xs',     icon: 12, avatar: 'sm', barW: 'w-24', rowPadY: 'py-3',   sectionPadY: 'py-2.5' },
+  M:  { padX: 'px-6', padTop: 'pt-5',   padBot: 'pb-5',   name: 'text-xl',   client: 'text-base',   meta: 'text-sm',     pill: 'text-xs px-2.5 py-1',       countdown: 'text-xl',   detailLabel: 'text-[10px]', detail: 'text-sm',    icon: 14, avatar: 'md', barW: 'w-32', rowPadY: 'py-4',   sectionPadY: 'py-3.5' },
+  L:  { padX: 'px-7', padTop: 'pt-6',   padBot: 'pb-6',   name: 'text-2xl',  client: 'text-lg',     meta: 'text-base',   pill: 'text-sm px-3 py-1',         countdown: 'text-3xl',  detailLabel: 'text-xs',     detail: 'text-base',  icon: 16, avatar: 'md', barW: 'w-44', rowPadY: 'py-5',   sectionPadY: 'py-4.5' },
+  XL: { padX: 'px-9', padTop: 'pt-8',   padBot: 'pb-8',   name: 'text-3xl',  client: 'text-xl',     meta: 'text-base',   pill: 'text-base px-3.5 py-1.5',   countdown: 'text-4xl',  detailLabel: 'text-xs',     detail: 'text-lg',    icon: 18, avatar: 'md', barW: 'w-56', rowPadY: 'py-6',   sectionPadY: 'py-5' },
 }
 
 // ── Card detail helpers ──────────────────────────────────────────────────────
@@ -335,24 +346,24 @@ function getNextMilestone(roadmap) {
 
 function useCardSize(prodId) {
   const [size, setSizeState] = useState(() => {
-    if (typeof window === 'undefined') return 1
-    const raw = window.localStorage.getItem(CARD_SIZE_KEY(prodId))
-    const n = raw ? parseInt(raw, 10) : 1
-    return Math.max(1, Math.min(3, n || 1))
+    if (typeof window === 'undefined') return 'S'
+    return normalizeSize(window.localStorage.getItem(CARD_SIZE_KEY(prodId)))
   })
-  const setSize = useCallback((n) => {
-    const clamped = Math.max(1, Math.min(3, n))
-    window.localStorage.setItem(CARD_SIZE_KEY(prodId), String(clamped))
-    setSizeState(clamped)
+  const setSize = useCallback((next) => {
+    const v = normalizeSize(next)
+    window.localStorage.setItem(CARD_SIZE_KEY(prodId), v)
+    setSizeState(v)
   }, [prodId])
   return [size, setSize]
 }
 
 // ── Size slider popover — segmented control with visual previews ────────────
 const SIZE_OPTIONS = [
-  { value: 1, label: 'S', name: 'SMALL',  box: 10 },
-  { value: 2, label: 'M', name: 'MEDIUM', box: 14 },
-  { value: 3, label: 'L', name: 'LARGE',  box: 18 },
+  { value: 'XS', label: 'XS', name: 'EXTRA SMALL', box: 6  },
+  { value: 'S',  label: 'S',  name: 'SMALL',       box: 10 },
+  { value: 'M',  label: 'M',  name: 'MEDIUM',      box: 14 },
+  { value: 'L',  label: 'L',  name: 'LARGE',       box: 18 },
+  { value: 'XL', label: 'XL', name: 'EXTRA LARGE', box: 22 },
 ]
 
 function SizeSlider({ value, onChange, onClose }) {
@@ -366,7 +377,7 @@ function SizeSlider({ value, onChange, onClose }) {
 
   return (
     <div
-      className="absolute top-full right-0 mt-1 z-50 p-3 min-w-[200px]"
+      className="absolute top-full right-0 mt-1 z-50 p-3 min-w-[280px]"
       style={{
         background: 'var(--orbital-surface)',
         border: '1px solid var(--orbital-border)',
@@ -379,7 +390,7 @@ function SizeSlider({ value, onChange, onClose }) {
         <p className="text-[10px] text-orbital-text font-telemetry tracking-wider">{current.name}</p>
       </div>
       <div
-        className="grid grid-cols-3 gap-0.5 p-0.5"
+        className="grid grid-cols-5 gap-0.5 p-0.5"
         style={{ background: 'var(--orbital-bg)', border: '1px solid var(--orbital-border)' }}
       >
         {SIZE_OPTIONS.map((opt) => {
@@ -454,7 +465,7 @@ function ProductionCard({
   const addonCount   = prod.addons?.length || 0
   const damageCount  = prod.addons?.filter(a => a.damageFlag).length || 0
   const concernCount = prod.bible?.concerns?.length || 0
-  const showDetailSection = cardSize >= 2 && (nextMile || addonCount > 0 || concernCount > 0)
+  const showDetailSection = ['M', 'L', 'XL'].includes(cardSize) && (nextMile || addonCount > 0 || concernCount > 0)
 
   const locationLabel = prod.locationType === 'In-House (Orbital Studios)'
     ? 'Orbital Studios'
@@ -494,7 +505,7 @@ function ProductionCard({
             style={{
               background: 'var(--orbital-surface)',
               border: '1px solid var(--orbital-border)',
-              color: cardSize > 1 ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
+              color: cardSize !== 'S' ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
             }}
             title="Card size"
           >
