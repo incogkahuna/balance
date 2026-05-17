@@ -348,7 +348,13 @@ function useCardSize(prodId) {
   return [size, setSize]
 }
 
-// ── Size slider popover ──────────────────────────────────────────────────────
+// ── Size slider popover — segmented control with visual previews ────────────
+const SIZE_OPTIONS = [
+  { value: 1, label: 'S', name: 'SMALL',  box: 10 },
+  { value: 2, label: 'M', name: 'MEDIUM', box: 14 },
+  { value: 3, label: 'L', name: 'LARGE',  box: 18 },
+]
+
 function SizeSlider({ value, onChange, onClose }) {
   useEffect(() => {
     const handler = () => onClose()
@@ -356,30 +362,58 @@ function SizeSlider({ value, onChange, onClose }) {
     return () => document.removeEventListener('click', handler)
   }, [onClose])
 
+  const current = SIZE_OPTIONS.find(o => o.value === value) || SIZE_OPTIONS[0]
+
   return (
     <div
-      className="absolute top-full right-0 mt-1 z-50 p-3 min-w-[160px]"
+      className="absolute top-full right-0 mt-1 z-50 p-3 min-w-[200px]"
       style={{
         background: 'var(--orbital-surface)',
         border: '1px solid var(--orbital-border)',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.45)',
       }}
       onClick={e => e.stopPropagation()}
     >
-      <p className="text-[10px] text-orbital-subtle mb-2 font-telemetry tracking-wider">CARD SIZE</p>
-      <input
-        type="range"
-        min={1}
-        max={3}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(parseInt(e.target.value, 10))}
-        className="w-full accent-blue-500"
-      />
-      <div className="flex justify-between text-[9px] text-orbital-dim mt-1 font-telemetry tracking-wider">
-        <span style={{ color: value === 1 ? 'var(--orbital-text)' : undefined }}>S</span>
-        <span style={{ color: value === 2 ? 'var(--orbital-text)' : undefined }}>M</span>
-        <span style={{ color: value === 3 ? 'var(--orbital-text)' : undefined }}>L</span>
+      <div className="flex items-baseline justify-between mb-2">
+        <p className="text-[10px] text-orbital-subtle font-telemetry tracking-wider">CARD SIZE</p>
+        <p className="text-[10px] text-orbital-text font-telemetry tracking-wider">{current.name}</p>
+      </div>
+      <div
+        className="grid grid-cols-3 gap-0.5 p-0.5"
+        style={{ background: 'var(--orbital-bg)', border: '1px solid var(--orbital-border)' }}
+      >
+        {SIZE_OPTIONS.map((opt) => {
+          const active = value === opt.value
+          return (
+            <button
+              key={opt.value}
+              onClick={() => onChange(opt.value)}
+              className="flex flex-col items-center justify-center gap-1.5 py-2.5 transition-colors"
+              style={{
+                background: active ? 'rgba(59,130,246,0.18)' : 'transparent',
+                border: active ? '1px solid rgba(59,130,246,0.55)' : '1px solid transparent',
+                cursor: active ? 'default' : 'pointer',
+              }}
+              title={opt.name.toLowerCase()}
+            >
+              <span
+                className="block transition-all"
+                style={{
+                  width: opt.box,
+                  height: opt.box,
+                  background: active ? '#60a5fa' : 'var(--orbital-subtle)',
+                  opacity: active ? 0.95 : 0.45,
+                }}
+              />
+              <span
+                className="font-telemetry text-[10px] tracking-wider"
+                style={{ color: active ? '#60a5fa' : 'var(--orbital-subtle)' }}
+              >
+                {opt.label}
+              </span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
