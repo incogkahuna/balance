@@ -209,6 +209,41 @@
     box-shadow: 0 0 0 2px rgba(59,130,246,0.08);
   }
 
+  /* ── Date / time inputs ─────────────────────────────────────────────────────
+     The native calendar picker icon (and the picker popover itself) is
+     rendered by the browser using the page's color-scheme. Setting this per
+     theme makes Chromium/Firefox use a white icon on dark backgrounds and a
+     dark icon on light backgrounds. The ::-webkit-calendar-picker-indicator
+     filter is a belt-and-braces fallback for browsers that ignore
+     color-scheme on input elements specifically. */
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"],
+  input[type="month"],
+  input[type="week"] {
+    color-scheme: light;
+  }
+  .dark input[type="date"],
+  .dark input[type="datetime-local"],
+  .dark input[type="time"],
+  .dark input[type="month"],
+  .dark input[type="week"] {
+    color-scheme: dark;
+  }
+  .dark input[type="date"]::-webkit-calendar-picker-indicator,
+  .dark input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  .dark input[type="time"]::-webkit-calendar-picker-indicator,
+  .dark input[type="month"]::-webkit-calendar-picker-indicator,
+  .dark input[type="week"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(1.2);
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  .dark input[type="date"]::-webkit-calendar-picker-indicator:hover,
+  .dark input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
   .select {
     @apply w-full px-2.5 py-1.5 text-sm text-orbital-text transition-colors appearance-none;
     background: var(--input-bg);
