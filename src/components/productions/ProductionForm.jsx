@@ -1,12 +1,20 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { format } from 'date-fns'
+import { Check, Loader2, AlertCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useAutoSave } from '../../hooks/useAutoSave.js'
 import {
   PRODUCTION_STATUS, PRODUCTION_TYPE, LOCATION_TYPE, ROLES,
   createProduction, USERS
 } from '../../data/models.js'
 
-export function ProductionForm({ initial, onSubmit, onCancel }) {
+export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }) {
   const { currentUser } = useApp()
+  const isEdit = Boolean(initial?.id)
+  // Auto-save only when we have an existing record (something to update) AND
+  // the parent has opted in. Create mode keeps the explicit submit button so
+  // users don't end up with half-typed productions persisted as drafts.
+  const autoSaveEnabled = autoSave && isEdit
 
   const [form, setForm] = useState({
     name: initial?.name || '',
@@ -38,30 +46,48 @@ export function ProductionForm({ initial, onSubmit, onCancel }) {
     ))
   }
 
+  // Single source of truth: turn current form state into a production object.
+  // Both the submit handler and the auto-save effect consume this.
+  const buildProd = () => createProduction({
+    ...(initial || {}),
+    name: form.name,
+    client: form.client,
+    locationType: form.locationType,
+    locationAddress: form.locationAddress,
+    productionType: form.productionType,
+    status: form.status,
+    startDate: form.startDate,
+    endDate: form.endDate,
+    assignedMembers: form.assignedMembers,
+    instructionPackage: {
+      ...(initial?.instructionPackage || { files: [], voiceMemos: [] }),
+      notes: form.instructionNotes,
+    },
+    createdBy: initial?.createdBy || currentUser?.id,
+  })
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    const prod = createProduction({
-      ...(initial || {}),
-      name: form.name,
-      client: form.client,
-      locationType: form.locationType,
-      locationAddress: form.locationAddress,
-      productionType: form.productionType,
-      status: form.status,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      assignedMembers: form.assignedMembers,
-      instructionPackage: {
-        ...(initial?.instructionPackage || { files: [], voiceMemos: [] }),
-        notes: form.instructionNotes,
-      },
-      createdBy: initial?.createdBy || currentUser?.id,
-    })
-    onSubmit(prod)
+    onSubmit(buildProd())
   }
+
+  // ── Auto-save ──────────────────────────────────────────────────────────────
+  // Memoise the value we hand to the hook so its JSON.stringify diff is stable.
+  // The hook debounces by 600ms — fast enough to feel instant, slow enough that
+  // a burst of typing doesn't fire a save per keystroke.
+  const autoSaveValue = useMemo(() => form, [form])
+  const { status: saveStatus, lastSavedAt, error: saveError } = useAutoSave(
+    autoSaveValue,
+    () => onSubmit(buildProd()),
+    { enabled: autoSaveEnabled, delay: 600 }
+  )
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {autoSaveEnabled && (
+        <SaveStatus status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} />
+      )}
+
       <div>
         <label className="label">Production Name *</label>
         <input
@@ -188,11 +214,58 @@ export function ProductionForm({ initial, onSubmit, onCancel }) {
       </div>
 
       <div className="flex gap-3 pt-2">
-        <button type="button" onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
-        <button type="submit" className="btn-primary flex-1">
-          {initial?.id ? 'Save Changes' : 'Create Production'}
-        </button>
+        {autoSaveEnabled ? (
+          <button type="button" onClick={onCancel} className="btn-primary flex-1">
+            Done
+          </button>
+        ) : (
+          <>
+            <button type="button" onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" className="btn-primary flex-1">
+              {initial?.id ? 'Save Changes' : 'Create Production'}
+            </button>
+          </>
+        )}
       </div>
     </form>
+  )
+}
+
+// ── Save status pill — shown at the top of the form in auto-save mode ──────
+function SaveStatus({ status, lastSavedAt, error }) {
+  let icon, label, color, bg, border
+  if (status === 'saving') {
+    icon = <Loader2 size={11} className="animate-spin" />
+    label = 'SAVING'
+    color = '#fbbf24'
+    bg = 'rgba(251,191,36,0.1)'
+    border = 'rgba(251,191,36,0.3)'
+  } else if (status === 'error') {
+    icon = <AlertCircle size={11} />
+    label = `SAVE FAILED · ${error || 'unknown error'}`.toUpperCase().slice(0, 80)
+    color = '#ef4444'
+    bg = 'rgba(239,68,68,0.1)'
+    border = 'rgba(239,68,68,0.3)'
+  } else if (status === 'saved' && lastSavedAt) {
+    icon = <Check size={11} />
+    label = `SAVED · ${format(lastSavedAt, 'HH:mm:ss')}`
+    color = '#34d399'
+    bg = 'rgba(52,211,153,0.1)'
+    border = 'rgba(52,211,153,0.3)'
+  } else {
+    icon = <Check size={11} className="opacity-40" />
+    label = 'AUTO-SAVE ENABLED'
+    color = 'var(--orbital-subtle)'
+    bg = 'transparent'
+    border = 'var(--orbital-border)'
+  }
+  return (
+    <div
+      className="inline-flex items-center gap-2 px-2.5 py-1 font-telemetry text-[10px] tracking-wider"
+      style={{ color, background: bg, border: `1px solid ${border}` }}
+    >
+      {icon}
+      <span>{label}</span>
+    </div>
   )
 }

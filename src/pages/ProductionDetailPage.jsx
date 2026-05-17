@@ -316,14 +316,12 @@ export function ProductionDetailPage() {
         )}
       </div>
 
-      {/* Edit production */}
+      {/* Edit production — auto-saves on type, "Done" just closes the modal */}
       <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Production" size="lg">
         <ProductionForm
           initial={production}
-          onSubmit={(updated) => {
-            updateProduction(id, updated)
-            setShowEdit(false)
-          }}
+          autoSave
+          onSubmit={(updated) => updateProduction(id, updated)}
           onCancel={() => setShowEdit(false)}
         />
       </Modal>
