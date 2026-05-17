@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, differenceInCalendarDays } from 'date-fns'
 import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, Maximize2 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
@@ -290,10 +290,47 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
 // requiring a Supabase migration. UI-only preference.
 const CARD_SIZE_KEY = (id) => `balance_card_size_${id}`
 
+// All sizes occupy a single grid column (no horizontal span) — scaling is
+// purely internal so the card grows in place rather than stretching wider.
 const SIZE_STYLES = {
-  1: { padX: 'px-5', padTop: 'pt-4', padBot: 'pb-4', name: 'text-lg',  client: 'text-sm',  meta: 'text-xs', icon: 12, avatar: 'md', barW: 'w-28', rowPadY: 'py-3' },
-  2: { padX: 'px-6', padTop: 'pt-5', padBot: 'pb-5', name: 'text-2xl', client: 'text-base', meta: 'text-sm', icon: 14, avatar: 'md', barW: 'w-40', rowPadY: 'py-4' },
-  3: { padX: 'px-8', padTop: 'pt-7', padBot: 'pb-7', name: 'text-3xl', client: 'text-lg',  meta: 'text-base', icon: 16, avatar: 'md', barW: 'w-56', rowPadY: 'py-5' },
+  1: { padX: 'px-5', padTop: 'pt-4', padBot: 'pb-4', name: 'text-lg',  client: 'text-sm',  meta: 'text-xs',   pill: 'text-[10px] px-2 py-0.5', countdown: 'text-base', detailLabel: 'text-[9px]', detail: 'text-xs',  icon: 12, avatar: 'sm', barW: 'w-24', rowPadY: 'py-3', sectionPadY: 'py-2.5' },
+  2: { padX: 'px-6', padTop: 'pt-5', padBot: 'pb-5', name: 'text-xl',  client: 'text-base', meta: 'text-sm',   pill: 'text-xs px-2.5 py-1',     countdown: 'text-xl',   detailLabel: 'text-[10px]', detail: 'text-sm', icon: 14, avatar: 'md', barW: 'w-32', rowPadY: 'py-4', sectionPadY: 'py-3.5' },
+  3: { padX: 'px-7', padTop: 'pt-6', padBot: 'pb-6', name: 'text-2xl', client: 'text-lg',   meta: 'text-base', pill: 'text-sm px-3 py-1',       countdown: 'text-3xl',  detailLabel: 'text-xs', detail: 'text-base', icon: 16, avatar: 'md', barW: 'w-44', rowPadY: 'py-5', sectionPadY: 'py-4.5' },
+}
+
+// ── Card detail helpers ──────────────────────────────────────────────────────
+const PROD_TYPE_TINT = {
+  'LED Volume':   { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  text: '#60a5fa' },
+  'Mobile Build': { bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
+  'Other':        { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.35)', text: '#94a3b8' },
+}
+
+// Returns { label, accent } describing the production's temporal state
+// relative to today, for the countdown badge.
+function computeCountdown(prod) {
+  if (!prod.startDate) return null
+  const today = new Date()
+  const start = parseISO(prod.startDate)
+  const end   = prod.endDate ? parseISO(prod.endDate) : start
+  const daysToStart = differenceInCalendarDays(start, today)
+  const daysSinceEnd = differenceInCalendarDays(today, end)
+
+  if (daysToStart > 0) {
+    return { label: `T-${daysToStart}`, sub: daysToStart === 1 ? 'DAY' : 'DAYS', accent: '#60a5fa' }
+  }
+  if (daysSinceEnd > 0) {
+    return { label: `+${daysSinceEnd}`, sub: daysSinceEnd === 1 ? 'DAY AGO' : 'DAYS AGO', accent: '#71717a' }
+  }
+  // Inside the production window
+  const totalDays = differenceInCalendarDays(end, start) + 1
+  const dayNum = differenceInCalendarDays(today, start) + 1
+  return { label: `DAY ${dayNum}`, sub: `OF ${totalDays}`, accent: '#34d399' }
+}
+
+// Pull the next non-complete milestone from the roadmap
+function getNextMilestone(roadmap) {
+  if (!roadmap?.milestones?.length) return null
+  return roadmap.milestones.find(m => m.status !== 'Complete') || null
 }
 
 function useCardSize(prodId) {
@@ -376,6 +413,15 @@ function ProductionCard({
   const borderColor = accent || STATUS_COLOR[prod.status] || '#52525b'
   const pct         = prodTasks.length > 0 ? (completedTasks / prodTasks.length) * 100 : 0
 
+  // ── Card detail derivations ──
+  const typeTint     = PROD_TYPE_TINT[prod.productionType] || PROD_TYPE_TINT['Other']
+  const countdown    = computeCountdown(prod)
+  const nextMile     = getNextMilestone(prod.roadmap)
+  const addonCount   = prod.addons?.length || 0
+  const damageCount  = prod.addons?.filter(a => a.damageFlag).length || 0
+  const concernCount = prod.bible?.concerns?.length || 0
+  const showDetailSection = cardSize >= 2 && (nextMile || addonCount > 0 || concernCount > 0)
+
   const locationLabel = prod.locationType === 'In-House (Orbital Studios)'
     ? 'Orbital Studios'
     : prod.locationAddress || 'Mobile'
@@ -396,7 +442,6 @@ function ProductionCard({
         isDragging && 'opacity-40 scale-[0.97]',
         isDragOver && !isDragging && 'scale-[1.01]',
       )}
-      style={{ gridColumn: `span ${cardSize} / span ${cardSize}` }}
     >
       {/* Drop target outline */}
       {isDragOver && !isDragging && (
@@ -496,7 +541,31 @@ function ProductionCard({
           </div>
         </div>
 
-        {/* Row 2: metadata — location, dates, stage manager */}
+        {/* Row 2: type pill + countdown — always shown, scales with card size */}
+        <div className={clsx('flex items-center justify-between gap-3 pt-3', sz.padX)}>
+          <span
+            className={clsx('font-telemetry tracking-wider uppercase whitespace-nowrap', sz.pill)}
+            style={{
+              background: typeTint.bg,
+              border: `1px solid ${typeTint.border}`,
+              color: typeTint.text,
+            }}
+          >
+            {prod.productionType}
+          </span>
+          {countdown && (
+            <div className="flex items-baseline gap-1.5 font-telemetry">
+              <span className={clsx('font-semibold tabular-nums', sz.countdown)} style={{ color: countdown.accent }}>
+                {countdown.label}
+              </span>
+              <span className={clsx('tracking-wider', sz.detailLabel)} style={{ color: 'var(--orbital-subtle)' }}>
+                {countdown.sub}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Row 3: metadata — location, dates, stage manager */}
         <div className={clsx('flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-3', sz.padX, sz.padBot)}>
           <span className={clsx('flex items-center gap-1.5 text-orbital-subtle', sz.meta)}>
             <MapPin size={sz.icon} className="flex-shrink-0" />
@@ -515,6 +584,53 @@ function ProductionCard({
             </span>
           )}
         </div>
+
+        {/* Detail section — only at M+ if there's something to show */}
+        {showDetailSection && (
+          <div
+            className={clsx('flex flex-col gap-2', sz.padX, sz.sectionPadY)}
+            style={{ borderTop: '1px solid var(--orbital-border)' }}
+          >
+            {nextMile && (
+              <div className="flex items-baseline justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className={clsx('font-telemetry tracking-wider text-orbital-dim', sz.detailLabel)}>NEXT MILESTONE</p>
+                  <p className={clsx('text-orbital-text truncate mt-0.5', sz.detail)}>{nextMile.title}</p>
+                </div>
+                {nextMile.date && (
+                  <span className={clsx('font-mono text-orbital-subtle whitespace-nowrap', sz.detail)}>
+                    {format(parseISO(nextMile.date), 'MMM d')}
+                  </span>
+                )}
+              </div>
+            )}
+            {(addonCount > 0 || concernCount > 0) && (
+              <div className="flex items-center gap-4">
+                {addonCount > 0 && (
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={clsx('font-telemetry tabular-nums font-semibold', sz.detail)} style={{ color: damageCount > 0 ? '#fb923c' : 'var(--orbital-text)' }}>
+                      {addonCount}
+                    </span>
+                    <span className={clsx('font-telemetry tracking-wider text-orbital-subtle', sz.detailLabel)}>
+                      ADD-ON{addonCount === 1 ? '' : 'S'}
+                      {damageCount > 0 && ` · ${damageCount} DMG`}
+                    </span>
+                  </div>
+                )}
+                {concernCount > 0 && (
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={clsx('font-telemetry tabular-nums font-semibold', sz.detail)} style={{ color: '#fb923c' }}>
+                      {concernCount}
+                    </span>
+                    <span className={clsx('font-telemetry tracking-wider text-orbital-subtle', sz.detailLabel)}>
+                      CONCERN{concernCount === 1 ? '' : 'S'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Row 3: avatars + task progress */}
         <div
