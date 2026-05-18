@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, BarChart3, Users, LogOut, Sun, Moon, Sparkles } from 'lucide-react'
+import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, LogOut, Sun, Moon, Sparkles } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { ROLES } from '../../data/models.js'
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard'   },
   { to: '/productions', icon: Film,             label: 'Productions' },
   { to: '/schedule',    icon: Calendar,         label: 'Schedule'    },
+  { to: '/team',        icon: UserSquare2,      label: 'Team'        },
   { to: '/contractors', icon: Users,            label: 'Contractors', adminOrSup: true },
   { to: '/analytics',   icon: BarChart3,        label: 'Analytics',   adminOnly: true  },
   { to: '/prototype/resources', icon: Sparkles, label: 'Prototype'   },
