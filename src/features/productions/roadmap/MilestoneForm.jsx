@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { format } from 'date-fns'
-import { X, Check, Loader2, AlertCircle } from 'lucide-react'
+import { X, Check, Loader2, AlertCircle, Users as UsersIcon } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { useAutoSave } from '../../../hooks/useAutoSave.js'
 import {
-  MILESTONE_TYPE, MILESTONE_STATUS, createMilestone, USERS
+  MILESTONE_TYPE, MILESTONE_STATUS, TASK_PRIORITY, TASK_STATUS,
+  createMilestone, createTask, USERS,
 } from '../../../data/models.js'
 
 // Collects all team members (staff + contractors) for a production into one list
@@ -26,7 +27,7 @@ function useProductionTeam(production) {
 }
 
 export function MilestoneForm({ production, initial, onClose }) {
-  const { currentUser, addMilestone, updateMilestone, deleteMilestone } = useApp()
+  const { currentUser, addMilestone, updateMilestone, deleteMilestone, addTask } = useApp()
   const team = useProductionTeam(production)
 
   // Eager-create flow: if there's no `initial`, we create a placeholder
@@ -56,15 +57,28 @@ export function MilestoneForm({ production, initial, onClose }) {
   }, [])
 
   const [form, setForm] = useState({
-    title:       initial?.title || '',
-    date:        initial?.date  || '',
-    type:        initial?.type  || MILESTONE_TYPE.PRE_PRODUCTION,
-    description: initial?.description || '',
-    ownerId:     initial?.ownerId || '',
-    status:      initial?.status || MILESTONE_STATUS.UPCOMING,
+    title:          initial?.title || '',
+    date:           initial?.date  || '',
+    type:           initial?.type  || MILESTONE_TYPE.PRE_PRODUCTION,
+    description:    initial?.description || '',
+    ownerId:        initial?.ownerId || '',
+    participantIds: initial?.participantIds || [],
+    status:         initial?.status || MILESTONE_STATUS.UPCOMING,
   })
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const toggleParticipant = (id) => {
+    setForm(f => {
+      const has = f.participantIds.includes(id)
+      return {
+        ...f,
+        participantIds: has
+          ? f.participantIds.filter(x => x !== id)
+          : [...f.participantIds, id],
+      }
+    })
+  }
 
   // ── Auto-save ─────────────────────────────────────────────────────────────
   // 600ms debounce. Each save targets workingIdRef.current via updateMilestone.
@@ -81,6 +95,41 @@ export function MilestoneForm({ production, initial, onClose }) {
     },
     { enabled, delay: 600 }
   )
+
+  // ── Auto-create tasks when team members get assigned ──────────────────────
+  // Track who's already had a task created during this form session so we
+  // don't double-create on every keystroke. Initial assignees (loaded with
+  // an existing milestone) are seeded in so we don't generate retroactive
+  // tasks for people already on the record.
+  const assigneesWithTasksRef = useRef(new Set([
+    ...(initial?.ownerId ? [initial.ownerId] : []),
+    ...(initial?.participantIds || []),
+  ]))
+
+  useEffect(() => {
+    if (!workingIdRef.current) return
+    const assigned = [form.ownerId, ...form.participantIds].filter(Boolean)
+    for (const personId of assigned) {
+      if (assigneesWithTasksRef.current.has(personId)) continue
+      assigneesWithTasksRef.current.add(personId)
+      const person = team.find(p => p.id === personId)
+      const milestoneLabel = form.title.trim() || 'Untitled milestone'
+      const task = createTask({
+        productionId: production.id,
+        title:        `Milestone: ${milestoneLabel}`,
+        description:  person
+          ? `Auto-created when ${person.name} was assigned to the milestone.`
+          : 'Auto-created from milestone assignment.',
+        assigneeId:   personId,
+        assignedBy:   currentUser?.id || '',
+        dueDate:      form.date ? form.date.slice(0, 10) : '',
+        priority:     TASK_PRIORITY.MEDIUM,
+        status:       TASK_STATUS.NOT_STARTED,
+      })
+      addTask(task)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.ownerId, form.participantIds, form.title, form.date])
 
   // ── Close behaviour ───────────────────────────────────────────────────────
   // If the user closes without ever typing a title AND we created the
@@ -168,6 +217,61 @@ export function MilestoneForm({ production, initial, onClose }) {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Participants — multi-select chips */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="label mb-0 inline-flex items-center gap-1.5">
+                <UsersIcon size={11} className="text-orbital-subtle" />
+                Participants
+              </label>
+              {form.participantIds.length > 0 && (
+                <span className="font-telemetry text-[9px] tracking-wider text-orbital-dim">
+                  {form.participantIds.length} SELECTED
+                </span>
+              )}
+            </div>
+            {team.length === 0 ? (
+              <p className="text-xs text-orbital-dim">
+                No one is assigned to this production yet — add team members on the production edit screen first.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {team.map(person => {
+                  const isOwner = person.id === form.ownerId
+                  const selected = form.participantIds.includes(person.id)
+                  return (
+                    <button
+                      key={person.id}
+                      type="button"
+                      onClick={() => toggleParticipant(person.id)}
+                      disabled={isOwner}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 transition-colors"
+                      style={{
+                        background: selected ? 'rgba(59,130,246,0.18)' : 'transparent',
+                        border: `1px solid ${selected ? 'rgba(59,130,246,0.5)' : 'var(--orbital-border)'}`,
+                        color: selected ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
+                        opacity: isOwner ? 0.4 : 1,
+                        cursor: isOwner ? 'not-allowed' : 'pointer',
+                      }}
+                      title={isOwner ? `${person.name} is the owner` : (selected ? 'Click to remove' : 'Click to add')}
+                    >
+                      <span
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-semibold flex-shrink-0"
+                        style={{ background: person.color || '#6b7280' }}
+                      >
+                        {person.avatar || person.name?.charAt(0)?.toUpperCase()}
+                      </span>
+                      <span className="text-xs">{person.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            <p className="text-[11px] text-orbital-dim mt-2">
+              Owners and participants each get a task auto-created when first added — visible on their Team page.
+            </p>
           </div>
 
           <div>

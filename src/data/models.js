@@ -170,7 +170,8 @@ export function createMilestone(overrides = {}) {
     date: '',                           // datetime-local string e.g. "2024-06-12T09:00"
     type: MILESTONE_TYPE.PRE_PRODUCTION,
     description: '',
-    ownerId: '',                        // userId or contractorId
+    ownerId: '',                        // userId or contractorId (primary owner)
+    participantIds: [],                 // additional people involved (each also gets a task)
     status: MILESTONE_STATUS.UPCOMING,
     dependencies: [],                   // array of milestone IDs
     createdAt: new Date().toISOString(),
