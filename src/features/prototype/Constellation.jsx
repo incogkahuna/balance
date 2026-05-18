@@ -1,11 +1,7 @@
-import { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect, Fragment } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect, Fragment, createContext, useContext } from 'react'
 import { format } from 'date-fns'
 import { AlertTriangle, RotateCcw, Home, ArrowLeft, Filter } from 'lucide-react'
-import {
-  PRODUCTIONS, RESOURCES, COMMITMENTS,
-  WINDOW_DAYS, dateAtDayIndex, dayIndex,
-  productionsForResource, hasConflict, commitmentLoad,
-} from './sampleData.js'
+import { usePrototypeData } from './dataSource.js'
 
 // ── Layout constants ──────────────────────────────────────────────────────
 const VIEW_W = 1280
@@ -18,45 +14,34 @@ const ORBIT_R_GEAR   = 132
 // Home icons sit INSIDE the planet body, on a single arc per kind.
 // Top hemisphere = people, bottom hemisphere = gear.
 const HOME_INSIDE_R  = 72
+// Distance from CENTER to each production planet's center.
+const PLANET_ORBIT_R = 215
 
 const SMOOTH_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
-// ── Production planet positions — compass corners ────────────────────────
-const PLANET_POS = {
-  apex:    { x: CENTER.x - 215, y: CENTER.y - 215 },  // NW
-  lunar:   { x: CENTER.x + 215, y: CENTER.y - 215 },  // NE
-  neon:    { x: CENTER.x + 215, y: CENTER.y + 215 },  // SE
-  halcyon: { x: CENTER.x - 215, y: CENTER.y + 215 },  // SW
+// ── File-scope context for the live data + derived layout maps ───────────
+// Every sub-component below that needs PRODUCTIONS / RESOURCES / COMMITMENTS
+// / PLANET_POS / etc. reads from this context. The provider lives at the
+// top of <Constellation>.
+const ConstellationCtx = createContext(null)
+const useConstellation = () => useContext(ConstellationCtx)
+
+// Lay N production planets evenly around the CENTER on a circle of
+// PLANET_ORBIT_R, starting at the top (12 o'clock) and going clockwise.
+// For N=1, single planet directly above center.
+function computePlanetPos(productions) {
+  const out = {}
+  const N = productions.length
+  if (N === 0) return out
+  productions.forEach((p, i) => {
+    const angle = -Math.PI / 2 + (i / N) * 2 * Math.PI
+    out[p.id] = {
+      x: CENTER.x + Math.cos(angle) * PLANET_ORBIT_R,
+      y: CENTER.y + Math.sin(angle) * PLANET_ORBIT_R,
+    }
+  })
+  return out
 }
-
-// People + gear orbit. Locations are shown as labels on planets, not as orbiters.
-const ORBITERS = RESOURCES.filter(r => r.kind === 'people' || r.kind === 'gear')
-
-// Stable per-orbiter phase offset so siblings don't pile on top of each other.
-const ORBITER_PHASE = (() => {
-  const out = {}
-  ORBITERS.forEach((r, i) => {
-    out[r.id] = (i / ORBITERS.length) * Math.PI * 2
-  })
-  return out
-})()
-
-// Locations indexed by id → resource (used for planet labels)
-const LOCATIONS_BY_ID = Object.fromEntries(
-  RESOURCES.filter(r => r.kind === 'locations').map(r => [r.id, r])
-)
-
-// Each production has at most one location commitment. Resolve it once.
-const PRODUCTION_LOCATION = (() => {
-  const out = {}
-  PRODUCTIONS.forEach(p => {
-    const c = COMMITMENTS.find(c =>
-      c.productionId === p.id && LOCATIONS_BY_ID[c.resourceId]
-    )
-    if (c) out[p.id] = LOCATIONS_BY_ID[c.resourceId]
-  })
-  return out
-})()
 
 function shortLocationLabel(loc) {
   if (!loc) return null
@@ -139,8 +124,8 @@ function midpointPosition(planets, phase, t) {
 //   multi    → multiple productions, but their date ranges don't overlap
 //              within the window (sequential work, not torn)
 //   conflict → at least two commitments overlap each other in the window
-function computeResourceState(resource, rangeStart, rangeEnd) {
-  const matches = COMMITMENTS.filter(c =>
+function computeResourceState(resource, rangeStart, rangeEnd, commitments) {
+  const matches = commitments.filter(c =>
     c.resourceId === resource.id && c.start <= rangeEnd && rangeStart <= c.end
   )
   const productions = [...new Set(matches.map(c => c.productionId))]
@@ -169,9 +154,60 @@ const FILTER_OPTIONS = [
 // Component
 // ══════════════════════════════════════════════════════════════════════════
 export function Constellation() {
+  // ── Live data + derived layout maps ─────────────────────────────────────
+  const data = usePrototypeData()
+  const PRODUCTIONS = data.productions
+  const RESOURCES   = data.resources
+  const COMMITMENTS = data.commitments
+  const WINDOW_DAYS = data.windowDays
+  const dayIndex    = data.dayIndex
+  const dateAtDayIndex = data.dateAtDayIndex
+  const productionsForResource = data.productionsForResource
+  const hasConflict   = data.hasConflict
+  const commitmentLoad = data.commitmentLoad
+
+  // Production planet positions — dynamically computed each render so
+  // adding / removing real productions just works.
+  const PLANET_POS = useMemo(() => computePlanetPos(PRODUCTIONS), [PRODUCTIONS])
+
+  // People + gear orbit. Locations are shown as labels on planets, not as orbiters.
+  const ORBITERS = useMemo(
+    () => RESOURCES.filter(r => r.kind === 'people' || r.kind === 'gear'),
+    [RESOURCES]
+  )
+
+  // Stable per-orbiter phase offset so siblings don't pile on top of each other.
+  const ORBITER_PHASE = useMemo(() => {
+    const out = {}
+    ORBITERS.forEach((r, i) => {
+      out[r.id] = (i / Math.max(1, ORBITERS.length)) * Math.PI * 2
+    })
+    return out
+  }, [ORBITERS])
+
+  // Locations indexed by id → resource (used for planet labels)
+  const LOCATIONS_BY_ID = useMemo(
+    () => Object.fromEntries(
+      RESOURCES.filter(r => r.kind === 'locations').map(r => [r.id, r])
+    ),
+    [RESOURCES]
+  )
+
+  // Each production has at most one location commitment. Resolve it once.
+  const PRODUCTION_LOCATION = useMemo(() => {
+    const out = {}
+    PRODUCTIONS.forEach(p => {
+      const c = COMMITMENTS.find(c =>
+        c.productionId === p.id && LOCATIONS_BY_ID[c.resourceId]
+      )
+      if (c) out[p.id] = LOCATIONS_BY_ID[c.resourceId]
+    })
+    return out
+  }, [PRODUCTIONS, COMMITMENTS, LOCATIONS_BY_ID])
+
   const [scrubMode, setScrubMode] = useState('day')           // 'day' | 'range'
-  const [scrubDay, setScrubDay] = useState(7)
-  const [scrubRange, setScrubRange] = useState({ start: 4, end: 18 })
+  const [scrubDay, setScrubDay] = useState(0)
+  const [scrubRange, setScrubRange] = useState({ start: 0, end: Math.min(14, WINDOW_DAYS) })
   const [hoveredPersonId, setHoveredPersonId] = useState(null)
   const [selectedPlanet, setSelectedPlanet] = useState(null)
   const [selectedPerson, setSelectedPerson] = useState(null)
@@ -220,7 +256,7 @@ export function Constellation() {
       } else if (manual) {
         state = { mode: 'orbit', activeProds: [manual], manual: true }
       } else {
-        state = { ...computeResourceState(resource, scrubStart, scrubEnd), manual: false }
+        state = { ...computeResourceState(resource, scrubStart, scrubEnd, COMMITMENTS), manual: false }
       }
       return { resource, ...state }
     })
@@ -536,7 +572,35 @@ export function Constellation() {
   const draggingResource = draggingId ? RESOURCES.find(r => r.id === draggingId) : null
 
   // ── Render ───────────────────────────────────────────────────────────
+  // Wrap everything in ConstellationCtx so the deeply-nested sub-components
+  // (tooltip, mini-gantt, production card, etc.) can read live data without
+  // prop-drilling.
+  const ctxValue = {
+    PRODUCTIONS, RESOURCES, COMMITMENTS, WINDOW_DAYS,
+    dayIndex, dateAtDayIndex, productionsForResource, hasConflict, commitmentLoad,
+    PLANET_POS, ORBITERS, ORBITER_PHASE, LOCATIONS_BY_ID, PRODUCTION_LOCATION,
+  }
+
+  if (PRODUCTIONS.length === 0) {
+    return (
+      <ConstellationCtx.Provider value={ctxValue}>
+        <div className="px-6 py-5">
+          <Header />
+          <div className="card-elevated mt-4 px-6 py-12 text-center">
+            <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle mb-2">
+              NO PRODUCTIONS WITH DATE BOUNDS
+            </p>
+            <p className="text-sm text-orbital-dim max-w-md mx-auto">
+              Add a production with start and end dates to populate the constellation.
+            </p>
+          </div>
+        </div>
+      </ConstellationCtx.Provider>
+    )
+  }
+
   return (
+    <ConstellationCtx.Provider value={ctxValue}>
     <div className="px-6 py-5">
       <Header />
 
@@ -803,6 +867,7 @@ export function Constellation() {
         />
       </div>
     </div>
+    </ConstellationCtx.Provider>
   )
 }
 
@@ -1410,6 +1475,7 @@ function FocusLock({ focusedProduction, isHome, onReturn }) {
 // Drag banner — shown while a resource is being dragged
 // ══════════════════════════════════════════════════════════════════════════
 function DragBanner({ resource, targetId }) {
+  const { PRODUCTIONS } = useConstellation()
   const targetProd = targetId && targetId !== 'home'
     ? PRODUCTIONS.find(p => p.id === targetId)
     : null
@@ -1449,6 +1515,7 @@ function DragBanner({ resource, targetId }) {
 // Tooltip
 // ══════════════════════════════════════════════════════════════════════════
 function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, expanded, onClose }) {
+  const { PRODUCTIONS, COMMITMENTS, productionsForResource } = useConstellation()
   if (!resourceId) return null
   const state = states.find(s => s.resource.id === resourceId)
   if (!state) return null
@@ -1611,6 +1678,7 @@ function SectionDivider() {
 // Detailed list of every commitment with date range, day count, location.
 // At-scrubber status is annotated as ACTIVE / UPCOMING / WRAPPED.
 function AssignmentsDetail({ resourceId, activeProds, scrubStart, scrubEnd }) {
+  const { PRODUCTIONS, COMMITMENTS } = useConstellation()
   const myCommitments = COMMITMENTS
     .filter(c => c.resourceId === resourceId)
     .sort((a, b) => a.start - b.start)
@@ -1665,6 +1733,7 @@ function AssignmentsDetail({ resourceId, activeProds, scrubStart, scrubEnd }) {
 // Breakdown of every overlap pair for a TORN resource — which two productions
 // contest them, the exact overlap window, and the duration.
 function ConflictsBreakdown({ resourceId }) {
+  const { PRODUCTIONS, COMMITMENTS } = useConstellation()
   const myCommitments = COMMITMENTS.filter(c => c.resourceId === resourceId)
   const overlaps = []
   for (let i = 0; i < myCommitments.length; i++) {
@@ -1726,6 +1795,7 @@ function ConflictsBreakdown({ resourceId }) {
 // Visual utilization bar — what % of the current scrubber window this
 // resource is committed for, with overcommitment shown as a red overflow.
 function UtilizationBar({ resourceId, scrubStartDay, scrubEndDay }) {
+  const { COMMITMENTS, dateAtDayIndex } = useConstellation()
   // For each day in the window, count active commitments
   const span = Math.max(1, scrubEndDay - scrubStartDay)
   let totalCommittedDays = 0
@@ -1855,6 +1925,7 @@ function TipStat({ label, value, color }) {
 // Mini horizontal Gantt — one row per production this resource touches,
 // commitment rendered as a colored bar inside the 6-week window track.
 function MiniGantt({ resourceId, scrubStartDay, scrubEndDay, scrubMode }) {
+  const { PRODUCTIONS, COMMITMENTS, WINDOW_DAYS, dayIndex, dateAtDayIndex } = useConstellation()
   const myCommitments = COMMITMENTS.filter(c => c.resourceId === resourceId)
   const productions = [...new Set(myCommitments.map(c => c.productionId))]
     .map(id => PRODUCTIONS.find(p => p.id === id))
@@ -1933,6 +2004,7 @@ function MiniGantt({ resourceId, scrubStartDay, scrubEndDay, scrubMode }) {
 
 // Peers — other resources on the same active production(s)
 function PeersSection({ resourceId, activeProds }) {
+  const { PRODUCTIONS, RESOURCES, COMMITMENTS } = useConstellation()
   if (activeProds.length === 0) return null
   const blocks = activeProds.map(prodId => {
     const prod = PRODUCTIONS.find(p => p.id === prodId)
@@ -1995,6 +2067,7 @@ function PeersSection({ resourceId, activeProds }) {
 // Production card — shown when a planet is selected
 // ══════════════════════════════════════════════════════════════════════════
 function ProductionCard({ planetId, orbiterStates, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, scrubMode, onClose }) {
+  const { PRODUCTIONS, RESOURCES, COMMITMENTS, PRODUCTION_LOCATION } = useConstellation()
   if (planetId === 'home') {
     return (
       <HomeBaseCard
@@ -2160,6 +2233,7 @@ function ProductionCard({ planetId, orbiterStates, scrubStart, scrubEnd, scrubSt
 }
 
 function ProductionTimelineStrip({ production, scrubStartDay, scrubEndDay, scrubMode }) {
+  const { WINDOW_DAYS, dayIndex, dateAtDayIndex } = useConstellation()
   const W = 530
   const H = 22
   const total = WINDOW_DAYS
@@ -2278,6 +2352,7 @@ function RosterSection({ title, resources, active }) {
 }
 
 function ProductionConflictsBlock({ production, conflicts }) {
+  const { PRODUCTIONS, RESOURCES } = useConstellation()
   return (
     <div>
       <p className="font-telemetry text-[10px] tracking-[0.22em] mb-2"
@@ -2335,6 +2410,7 @@ function ProductionConflictsBlock({ production, conflicts }) {
 // Home base card — shown when the home planet is selected
 // ══════════════════════════════════════════════════════════════════════════
 function HomeBaseCard({ orbiterStates, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, scrubMode, onClose }) {
+  const { PRODUCTIONS, PRODUCTION_LOCATION } = useConstellation()
   const onStation     = orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'people')
   const inStorage     = orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'gear')
   const peopleDeployed = orbiterStates.filter(s => s.mode !== 'home' && s.resource.kind === 'people').length
