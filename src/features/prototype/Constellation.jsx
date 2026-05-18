@@ -1015,6 +1015,7 @@ function adjustColor(hex, percent) {
 }
 
 function PlanetDefs() {
+  const { PRODUCTIONS } = useConstellation()
   return (
     <defs>
       {/* ── Home planet gradients ─────────────────────────────────── */}
