@@ -111,12 +111,16 @@ export const CONTRACTOR_FLAG = {
 }
 
 // ─── User Profiles ───────────────────────────────────────────────────────────
+// `email` is the stable identity anchor — when a Google sign-in's
+// profile.email matches, AppContext maps the live profile to this legacy
+// id so demo tasks (which use 'mark'/'aj'/'danny'/etc. as assigneeId)
+// surface correctly on the signed-in user's dashboard.
 export const USERS = [
-  { id: 'mark',   name: 'Mark',   role: ROLES.ADMIN,      avatar: 'M', color: '#6366f1' },
-  { id: 'aj',     name: 'AJ',     role: ROLES.ADMIN,      avatar: 'A', color: '#8b5cf6' },
-  { id: 'danny',  name: 'Danny',  role: ROLES.SUPERVISOR, avatar: 'D', color: '#3b82f6' },
-  { id: 'brian',  name: 'Brian',  role: ROLES.CREW,       avatar: 'B', color: '#10b981' },
-  { id: 'wilder', name: 'Wilder', role: ROLES.CREW,       avatar: 'W', color: '#f59e0b' },
+  { id: 'mark',   name: 'Mark',   email: 'mark@orbitalvs.com',    role: ROLES.ADMIN,      avatar: 'M', color: '#6366f1' },
+  { id: 'aj',     name: 'AJ',     email: 'aj@orbitalvs.com',      role: ROLES.ADMIN,      avatar: 'A', color: '#8b5cf6' },
+  { id: 'danny',  name: 'Danny',  email: 'dhorgan@orbitalvs.com', role: ROLES.SUPERVISOR, avatar: 'D', color: '#3b82f6' },
+  { id: 'brian',  name: 'Brian',  email: 'brian@orbitalvs.com',   role: ROLES.CREW,       avatar: 'B', color: '#10b981' },
+  { id: 'wilder', name: 'Wilder', email: 'wilder@orbitalvs.com',  role: ROLES.CREW,       avatar: 'W', color: '#f59e0b' },
 ]
 
 // ─── Factory functions ────────────────────────────────────────────────────────

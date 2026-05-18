@@ -23,15 +23,10 @@ const ROLE_META = {
   [ROLES.CREW]:       { label: 'Crew',          color: '#34d399', bg: 'rgba(52,211,153,0.12)',  border: 'rgba(52,211,153,0.35)'  },
 }
 
-// Real emails confirmed for the two team members who've signed in so far;
-// the rest use a synthesized placeholder until their real address lands.
-const USER_EMAIL = {
-  mark:   'mark@orbitalvs.com',
-  danny:  'dhorgan@orbitalvs.com',
-  aj:     'aj@orbitalvs.com',
-  brian:  'brian@orbitalvs.com',
-  wilder: 'wilder@orbitalvs.com',
-}
+// Email lives on each USERS entry now (see src/data/models.js). Kept as a
+// thin helper so consumers can keep calling USER_EMAIL[id] without churning
+// downstream code.
+const USER_EMAIL = Object.fromEntries(USERS.map(u => [u.id, u.email]))
 
 export function TeamPage() {
   const { currentUser } = useApp()

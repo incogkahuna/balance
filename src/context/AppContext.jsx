@@ -278,9 +278,17 @@ export function AppProvider({ children }) {
       }
     }
     if (!profile) return null
-    const legacy = USERS.find(
-      u => u.name.toLowerCase() === profile.name.toLowerCase()
-    )
+    // Match the signed-in profile to a legacy USERS entry so demo data
+    // (tasks / milestones / etc. assigned to 'mark', 'danny', etc.)
+    // surfaces correctly for the real user. Email is the stable anchor —
+    // profile.name varies because Google might return "Daniel Horgan"
+    // while the legacy id is "danny". Email is set at sign-up time and
+    // doesn't drift.
+    const profileEmail = profile.email?.toLowerCase()
+    const profileName  = profile.name?.toLowerCase() || ''
+    const legacy =
+      USERS.find(u => u.email && u.email.toLowerCase() === profileEmail) ||
+      USERS.find(u => u.name.toLowerCase() === profileName)
     if (legacy) {
       return {
         ...legacy,
