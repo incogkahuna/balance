@@ -11,6 +11,10 @@ export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
   const typeCfg   = MILESTONE_TYPE_CONFIG[milestone.type]   || MILESTONE_TYPE_CONFIG['Pre-Production']
   const statusCfg = MILESTONE_STATUS_CONFIG[milestone.status] || MILESTONE_STATUS_CONFIG['Upcoming']
   const owner     = milestone.ownerId ? resolveAssignee(milestone.ownerId) : null
+  const participants = (milestone.participantIds || [])
+    .map(id => resolveAssignee(id))
+    .filter(Boolean)
+  const totalAssigned = (owner ? 1 : 0) + participants.length
 
   const date        = milestone.date ? parseISO(milestone.date) : null
   const isPastDate  = date && isPast(date)
@@ -114,21 +118,56 @@ export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
         <p className="text-xs text-orbital-subtle mb-2 line-clamp-2">{milestone.description}</p>
       )}
 
-      {/* Owner */}
-      {owner && (
-        <div className="flex items-center gap-1.5 mt-1">
-          <div
-            className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 overflow-hidden"
-            style={!owner.photoUrl ? { backgroundColor: owner.color || '#64748b' } : {}}
-          >
-            <ContractorPhoto
-              photoUrl={owner.photoUrl}
-              alt={owner.name}
-              className="w-full h-full object-cover"
-              fallback={<>{owner.avatar}</>}
-            />
-          </div>
-          <span className="text-xs text-orbital-subtle">{owner.name}</span>
+      {/* Assigned team — owner first (with OWNER tag), then participants.
+          Each gets a small avatar + name pill so it's clear at a glance
+          who's responsible for and contributing to this milestone. */}
+      {totalAssigned > 0 && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2">
+          {owner && (
+            <span
+              className="inline-flex items-center gap-1.5 px-1.5 py-0.5"
+              style={{
+                background: 'rgba(96,165,250,0.12)',
+                border: '1px solid rgba(96,165,250,0.35)',
+              }}
+              title={`${owner.name} · Owner`}
+            >
+              <span
+                className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 overflow-hidden"
+                style={!owner.photoUrl ? { backgroundColor: owner.color || '#64748b' } : {}}
+              >
+                <ContractorPhoto
+                  photoUrl={owner.photoUrl}
+                  alt={owner.name}
+                  className="w-full h-full object-cover"
+                  fallback={<>{owner.avatar}</>}
+                />
+              </span>
+              <span className="text-xs text-orbital-text">{owner.name}</span>
+              <span className="font-telemetry text-[8px] tracking-wider text-blue-400">OWNER</span>
+            </span>
+          )}
+          {participants.map(person => (
+            <span
+              key={person.id}
+              className="inline-flex items-center gap-1.5 px-1.5 py-0.5"
+              style={{ border: '1px solid var(--orbital-border)' }}
+              title={person.name}
+            >
+              <span
+                className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0 overflow-hidden"
+                style={!person.photoUrl ? { backgroundColor: person.color || '#64748b' } : {}}
+              >
+                <ContractorPhoto
+                  photoUrl={person.photoUrl}
+                  alt={person.name}
+                  className="w-full h-full object-cover"
+                  fallback={<>{person.avatar}</>}
+                />
+              </span>
+              <span className="text-xs text-orbital-subtle">{person.name}</span>
+            </span>
+          ))}
         </div>
       )}
     </div>

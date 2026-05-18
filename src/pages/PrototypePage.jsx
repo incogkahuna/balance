@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { ResourceRiver } from '../features/prototype/ResourceRiver.jsx'
 import { Constellation } from '../features/prototype/Constellation.jsx'
 import { Gantt } from '../features/prototype/Gantt.jsx'
+import { usePrototypeData } from '../features/prototype/dataSource.js'
+import { Radio, Database } from 'lucide-react'
 
 const VIEWS = [
   { id: 'constellation', label: 'Constellation' },
@@ -11,6 +13,7 @@ const VIEWS = [
 
 export function PrototypePage() {
   const [view, setView] = useState('constellation')
+  const data = usePrototypeData()
 
   return (
     <div className="min-h-screen pb-12">
@@ -26,14 +29,7 @@ export function PrototypePage() {
           <span className="font-telemetry text-[9px] text-orbital-subtle tracking-[0.25em]">
             PROTOTYPE · RESOURCE ALLOCATION
           </span>
-          <span className="px-2 py-0.5 font-telemetry text-[9px] tracking-widest"
-            style={{
-              background: 'rgba(232,121,249,0.12)',
-              border: '1px solid rgba(232,121,249,0.4)',
-              color: '#e879f9',
-            }}>
-            PITCH RENDER
-          </span>
+          <DataSourceBadge source={data.source} />
         </div>
 
         <div
@@ -60,6 +56,9 @@ export function PrototypePage() {
         </div>
       </div>
 
+      {/* ── Live snapshot — proof that real assignments are flowing in ── */}
+      {data.source === 'live' && <LiveSnapshot data={data} />}
+
       {/* ── Content ───────────────────────────────────────────────────── */}
       <div className="animate-hud-in" key={view}>
         {view === 'river' && <ResourceRiver />}
@@ -68,4 +67,86 @@ export function PrototypePage() {
       </div>
     </div>
   )
+}
+
+// ── Telemetric badge surfaced in the toolbar ───────────────────────────────
+function DataSourceBadge({ source }) {
+  if (source === 'live') {
+    return (
+      <span className="px-2 py-0.5 font-telemetry text-[9px] tracking-widest inline-flex items-center gap-1.5"
+        style={{
+          background: 'rgba(52,211,153,0.12)',
+          border: '1px solid rgba(52,211,153,0.45)',
+          color: '#34d399',
+        }}>
+        <Radio size={9} />
+        LIVE DATA
+      </span>
+    )
+  }
+  return (
+    <span className="px-2 py-0.5 font-telemetry text-[9px] tracking-widest inline-flex items-center gap-1.5"
+      style={{
+        background: 'rgba(232,121,249,0.12)',
+        border: '1px solid rgba(232,121,249,0.4)',
+        color: '#e879f9',
+      }}>
+      <Database size={9} />
+      SEED DATA
+    </span>
+  )
+}
+
+// ── Live snapshot panel ────────────────────────────────────────────────────
+// Rendered when the adapter detected real productions in AppContext. Shows
+// what the visualizations *would* render once they're refactored to consume
+// the adapter — in the meantime it proves milestone assignments are landing
+// where they need to.
+function LiveSnapshot({ data }) {
+  const { productions, resources, commitments } = data
+  const conflictedResources = resources.filter(r => data.hasConflict(r.id))
+  return (
+    <div className="px-6 py-4 border-b" style={{ borderColor: 'var(--orbital-border)' }}>
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="font-telemetry text-[10px] tracking-[0.22em] text-orbital-subtle">
+          LIVE SNAPSHOT · DERIVED FROM YOUR PRODUCTIONS + MILESTONES
+        </p>
+        <p className="font-telemetry text-[9px] tracking-wider text-orbital-dim">
+          {data.windowDays} DAY WINDOW · {format(data.windowStart)} → {format(data.windowEnd)}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+        <StatCell label="PRODUCTIONS" value={productions.length} accent="#60a5fa" />
+        <StatCell label="PEOPLE TRACKED" value={resources.length} accent="#34d399" />
+        <StatCell label="COMMITMENTS" value={commitments.length} accent="#fbbf24" />
+        <StatCell
+          label="CONFLICTS"
+          value={conflictedResources.length}
+          accent={conflictedResources.length > 0 ? '#ef4444' : '#71717a'}
+        />
+      </div>
+      <p className="text-[11px] text-orbital-dim leading-relaxed">
+        The visualizations below still render the curated demo dataset for now — refactoring them to
+        consume this live data is a follow-up. The numbers above prove the data layer is wired:
+        every team member you assign to a milestone shows up as a commitment on this production for a
+        window around the milestone date, and the conflict detector catches anyone double-booked.
+      </p>
+    </div>
+  )
+}
+
+function StatCell({ label, value, accent }) {
+  return (
+    <div className="card-elevated px-3 py-2.5" style={{ borderTop: `2px solid ${accent}` }}>
+      <p className="font-telemetry text-[9px] tracking-wider text-orbital-subtle mb-1">{label}</p>
+      <p className="font-telemetry text-xl text-orbital-text tabular-nums">
+        {String(value).padStart(2, '0')}
+      </p>
+    </div>
+  )
+}
+
+function format(date) {
+  if (!date) return ''
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
 }
