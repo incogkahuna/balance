@@ -29,8 +29,10 @@ import { BUCKETS } from '../lib/storage.ts'
 import clsx from 'clsx'
 
 // Bible tab is conditionally appended for Admin/Supervisor — built below
-// Roadmap is visible to all roles (Crew sees read-only)
-const BASE_TABS = ['Overview', 'Roadmap', 'Team', 'Tasks', 'Package', 'Add-ons', 'Debrief']
+// Overview now embeds the Roadmap (Summary / Timeline / Concerns) above the
+// task-progress + notes + add-ons + debrief cards — single tab for the entire
+// "what's happening on this production" view.
+const BASE_TABS = ['Overview', 'Team', 'Tasks', 'Package', 'Add-ons', 'Debrief']
 
 export function ProductionDetailPage() {
   const { id } = useParams()
@@ -244,10 +246,13 @@ export function ProductionDetailPage() {
               )}
             >
               {t}
-              {t === 'Roadmap' && roadmapHealth !== ROADMAP_HEALTH.ON_TRACK && (
-                <span className={`ml-1.5 w-1.5 h-1.5 rounded-full inline-block ${
-                  roadmapHealth === ROADMAP_HEALTH.AT_RISK ? 'bg-red-400' : 'bg-amber-400'
-                }`} />
+              {t === 'Overview' && roadmapHealth !== ROADMAP_HEALTH.ON_TRACK && (
+                <span
+                  className={`ml-1.5 w-1.5 h-1.5 rounded-full inline-block ${
+                    roadmapHealth === ROADMAP_HEALTH.AT_RISK ? 'bg-red-400' : 'bg-amber-400'
+                  }`}
+                  title={`Roadmap status: ${roadmapHealth}`}
+                />
               )}
               {t === 'Tasks' && pendingTasks.length > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-orbital-muted text-orbital-subtle text-xs">
@@ -266,10 +271,6 @@ export function ProductionDetailPage() {
         {/* Tab Content */}
         {tab === 'Overview' && (
           <OverviewTab production={production} tasks={tasks} />
-        )}
-
-        {tab === 'Roadmap' && (
-          <RoadmapTab production={production} />
         )}
 
         {tab === 'Team' && (
@@ -382,6 +383,11 @@ function OverviewTab({ production, tasks }) {
 
   return (
     <div className="space-y-5">
+      {/* Roadmap section (Summary / Timeline / Concerns sub-tabs) — merged in
+          from the old standalone Roadmap tab so everything actionable about
+          this production lives in one place. */}
+      <RoadmapTab production={production} />
+
       {/* Task progress */}
       {total > 0 && (
         <div className="card p-5">
