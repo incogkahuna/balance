@@ -135,6 +135,10 @@ export function createProduction(overrides = {}) {
     status: PRODUCTION_STATUS.INCOMING,
     startDate: '',
     endDate: '',
+    // Optional working-window list: [{ start, end }] in YYYY-MM-DD. For
+    // projects that span weeks but only run on certain days. Empty = single
+    // window, use startDate/endDate directly.
+    dateRanges: [],
     stageManagerId: null,      // contractorId of stage manager (first-class field)
     assignedMembers: [],       // [{ userId, roleOnProduction }] — Orbital staff
     assignedContractors: [],   // [{ contractorId, role, assignedAt, assignedBy }]

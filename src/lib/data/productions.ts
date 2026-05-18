@@ -32,6 +32,10 @@ export interface Production {
   status: ProductionStatus
   startDate: string | null
   endDate: string | null
+  // Optional working-window list for projects that span weeks but only run
+  // on certain days. Each entry: { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }.
+  // Empty array = single-window project; use startDate/endDate directly.
+  dateRanges: Array<{ start: string; end: string }>
   stageManagerId: string | null
   assignedMembers: AssignedMember[]
   assignedContractors: AssignedContractor[]
@@ -75,6 +79,7 @@ interface ProductionRow {
   status: ProductionStatus
   start_date: string | null
   end_date: string | null
+  date_ranges: Array<{ start: string; end: string }>
   stage_manager_id: string | null
   assigned_members: AssignedMember[]
   assigned_contractors: AssignedContractor[]
@@ -100,6 +105,7 @@ function rowToProduction(r: ProductionRow): Production {
     status:              r.status,
     startDate:           r.start_date,
     endDate:             r.end_date,
+    dateRanges:          r.date_ranges ?? [],
     stageManagerId:      r.stage_manager_id,
     assignedMembers:     r.assigned_members ?? [],
     assignedContractors: r.assigned_contractors ?? [],
@@ -139,6 +145,7 @@ function productionToRow(p: NewProduction): Partial<ProductionRow> {
   if (p.status              !== undefined) row.status               = p.status
   if (p.startDate           !== undefined) row.start_date           = p.startDate || null
   if (p.endDate             !== undefined) row.end_date             = p.endDate   || null
+  if (p.dateRanges          !== undefined) row.date_ranges          = p.dateRanges
   if (p.stageManagerId      !== undefined) row.stage_manager_id     = p.stageManagerId
   if (p.assignedMembers     !== undefined) row.assigned_members     = p.assignedMembers
   if (p.assignedContractors !== undefined) row.assigned_contractors = p.assignedContractors
