@@ -219,43 +219,49 @@ export function MilestoneForm({ production, initial, onClose }) {
             </div>
           </div>
 
-          {/* Participants — multi-select chips */}
+          {/* Participants — two-section roster: AVAILABLE / ASSIGNED.
+              Shows the entire salary team (USERS) regardless of whether each
+              person is on this production, so milestone owners can pull in
+              anyone from the studio. Clicking a chip moves it between
+              sections. The current Owner sits in AVAILABLE as a greyed-out
+              chip so it's visible but not selectable. */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="label mb-0 inline-flex items-center gap-1.5">
-                <UsersIcon size={11} className="text-orbital-subtle" />
-                Participants
-              </label>
-              {form.participantIds.length > 0 && (
-                <span className="font-telemetry text-[9px] tracking-wider text-orbital-dim">
-                  {form.participantIds.length} SELECTED
-                </span>
-              )}
-            </div>
-            {team.length === 0 ? (
-              <p className="text-xs text-orbital-dim">
-                No one is assigned to this production yet — add team members on the production edit screen first.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {team.map(person => {
-                  const isOwner = person.id === form.ownerId
-                  const selected = form.participantIds.includes(person.id)
-                  return (
+            <label className="label inline-flex items-center gap-1.5 mb-2">
+              <UsersIcon size={11} className="text-orbital-subtle" />
+              Participants
+            </label>
+
+            {/* ASSIGNED section */}
+            <div
+              className="p-2.5 mb-2"
+              style={{ background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.25)' }}
+            >
+              <div className="flex items-baseline justify-between mb-1.5">
+                <p className="font-telemetry text-[9px] tracking-wider text-blue-400">
+                  ASSIGNED
+                </p>
+                <p className="font-telemetry text-[9px] tracking-wider text-blue-400 tabular-nums">
+                  {form.participantIds.length}
+                </p>
+              </div>
+              {form.participantIds.length === 0 ? (
+                <p className="text-[11px] text-orbital-dim italic py-1">
+                  No one assigned yet. Click a name below to add them.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {USERS.filter(p => form.participantIds.includes(p.id)).map(person => (
                     <button
                       key={person.id}
                       type="button"
                       onClick={() => toggleParticipant(person.id)}
-                      disabled={isOwner}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 transition-colors group/chip"
                       style={{
-                        background: selected ? 'rgba(59,130,246,0.18)' : 'transparent',
-                        border: `1px solid ${selected ? 'rgba(59,130,246,0.5)' : 'var(--orbital-border)'}`,
-                        color: selected ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
-                        opacity: isOwner ? 0.4 : 1,
-                        cursor: isOwner ? 'not-allowed' : 'pointer',
+                        background: 'rgba(59,130,246,0.18)',
+                        border: '1px solid rgba(59,130,246,0.55)',
+                        color: 'var(--orbital-text)',
                       }}
-                      title={isOwner ? `${person.name} is the owner` : (selected ? 'Click to remove' : 'Click to add')}
+                      title="Click to remove"
                     >
                       <span
                         className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-semibold flex-shrink-0"
@@ -264,11 +270,67 @@ export function MilestoneForm({ production, initial, onClose }) {
                         {person.avatar || person.name?.charAt(0)?.toUpperCase()}
                       </span>
                       <span className="text-xs">{person.name}</span>
+                      <X size={10} className="text-orbital-subtle group-hover/chip:text-red-400 transition-colors" />
                     </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* AVAILABLE section */}
+            <div className="p-2.5" style={{ border: '1px solid var(--orbital-border)' }}>
+              <p className="font-telemetry text-[9px] tracking-wider text-orbital-subtle mb-1.5">
+                AVAILABLE
+              </p>
+              {(() => {
+                const available = USERS.filter(p => !form.participantIds.includes(p.id))
+                if (available.length === 0) {
+                  return (
+                    <p className="text-[11px] text-orbital-dim italic py-1">
+                      Everyone's assigned.
+                    </p>
                   )
-                })}
-              </div>
-            )}
+                }
+                return (
+                  <div className="flex flex-wrap gap-1.5">
+                    {available.map(person => {
+                      const isOwner = person.id === form.ownerId
+                      return (
+                        <button
+                          key={person.id}
+                          type="button"
+                          onClick={() => toggleParticipant(person.id)}
+                          disabled={isOwner}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 transition-colors hover:bg-orbital-muted"
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid var(--orbital-border)',
+                            color: 'var(--orbital-subtle)',
+                            opacity: isOwner ? 0.35 : 1,
+                            cursor: isOwner ? 'not-allowed' : 'pointer',
+                          }}
+                          title={isOwner ? `${person.name} is the milestone owner` : 'Click to assign'}
+                        >
+                          <span
+                            className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-semibold flex-shrink-0"
+                            style={{ background: person.color || '#6b7280' }}
+                          >
+                            {person.avatar || person.name?.charAt(0)?.toUpperCase()}
+                          </span>
+                          <span className="text-xs">{person.name}</span>
+                          {isOwner && (
+                            <span className="font-telemetry text-[8px] tracking-wider text-orbital-dim ml-0.5">
+                              OWNER
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+            </div>
+
             <p className="text-[11px] text-orbital-dim mt-2">
               Owners and participants each get a task auto-created when first added — visible on their Team page.
             </p>
