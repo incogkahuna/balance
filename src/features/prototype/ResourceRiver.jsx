@@ -1,9 +1,6 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, createContext, useContext } from 'react'
 import { format } from 'date-fns'
-import {
-  PRODUCTIONS, RESOURCES, COMMITMENTS, KIND_META,
-  WINDOW_START, WINDOW_DAYS, dayIndex, dateAtDayIndex,
-} from './sampleData.js'
+import { usePrototypeData } from './dataSource.js'
 
 const KIND_ORDER = ['people', 'gear', 'locations']
 
@@ -16,12 +13,18 @@ const NAME_COL_W = 180
 const LANE_H = 16
 const LANE_GAP = 2
 
+// File-scope context for live (or seed-fallback) data so sub-components
+// don't need every value prop-drilled through them.
+const RiverCtx = createContext(null)
+const useRiver = () => useContext(RiverCtx)
+
 // Per-commitment assignment to a vertical lane so simultaneous commitments
-// stack neatly instead of overlapping. Returns an array parallel to
-// `commitments` with { laneIdx, lanesUsed } annotations.
-function assignLanes(commitments) {
+// stack neatly instead of overlapping. Takes dayIndex as a parameter
+// because we no longer have a module-level dayIndex constant — the live
+// data adapter provides one bound to the active window.
+function assignLanes(commitments, dayIndex) {
   const sorted = [...commitments].sort((a, b) => a.start - b.start)
-  const lanes = []  // each lane = end-day-index of the last commitment placed in it
+  const lanes = []
   const placed = sorted.map(c => {
     const startIdx = dayIndex(c.start)
     const endIdx   = dayIndex(c.end)
@@ -38,21 +41,35 @@ function assignLanes(commitments) {
 }
 
 export function ResourceRiver() {
-  const [scrubDay, setScrubDay] = useState(7)
+  const data = usePrototypeData()
+  const [scrubDay, setScrubDay] = useState(0)
   const [hoveredProd, setHoveredProd] = useState(null)
-  const scrubDate = dateAtDayIndex(scrubDay)
+  const scrubDate = data.dateAtDayIndex(scrubDay)
 
   return (
-    <div className="px-6 py-5">
-      <Header scrubDate={scrubDate} />
+    <RiverCtx.Provider value={data}>
+      <div className="px-6 py-5">
+        <Header scrubDate={scrubDate} />
 
-      <div className="card-elevated mt-4 overflow-hidden">
-        <Legend hoveredProd={hoveredProd} setHoveredProd={setHoveredProd} />
-        <TimelineAxis />
-        <Lanes hoveredProd={hoveredProd} scrubDay={scrubDay} />
-        <Scrubber day={scrubDay} setDay={setScrubDay} />
+        {data.productions.length === 0 ? (
+          <div className="card-elevated mt-4 px-6 py-12 text-center">
+            <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle mb-2">
+              NO PRODUCTIONS WITH DATE BOUNDS
+            </p>
+            <p className="text-sm text-orbital-dim max-w-md mx-auto">
+              Add a production with start and end dates to see resources committed across time.
+            </p>
+          </div>
+        ) : (
+          <div className="card-elevated mt-4 overflow-hidden">
+            <Legend hoveredProd={hoveredProd} setHoveredProd={setHoveredProd} />
+            <TimelineAxis />
+            <Lanes hoveredProd={hoveredProd} scrubDay={scrubDay} />
+            <Scrubber day={scrubDay} setDay={setScrubDay} />
+          </div>
+        )}
       </div>
-    </div>
+    </RiverCtx.Provider>
   )
 }
 
@@ -81,12 +98,13 @@ function Header({ scrubDate }) {
 
 // ── Legend strip — production chips, hover to spotlight ────────────────────
 function Legend({ hoveredProd, setHoveredProd }) {
+  const { productions } = useRiver()
   return (
     <div className="flex items-center gap-2 px-4 py-2.5"
       style={{ borderBottom: '1px solid var(--orbital-border)' }}>
       <span className="hud-label mr-2">PRODUCTIONS</span>
       <div className="flex items-center gap-1.5 flex-wrap">
-        {PRODUCTIONS.map(p => {
+        {productions.map(p => {
           const dim = hoveredProd && hoveredProd !== p.id
           return (
             <button key={p.id}
@@ -116,18 +134,24 @@ function Legend({ hoveredProd, setHoveredProd }) {
 
 // ── Week-label axis above the tracks ───────────────────────────────────────
 function TimelineAxis() {
+  const { windowDays, dateAtDayIndex } = useRiver()
+  // 7 evenly spaced labels across the window (works for any window length)
+  const labelCount = 7
   return (
     <div className="flex"
       style={{ borderBottom: '1px solid var(--orbital-border)' }}>
       <div style={{ width: NAME_COL_W, flexShrink: 0 }} />
       <div className="relative flex-1 h-7">
-        {Array.from({ length: 7 }, (_, i) => (
-          <span key={i}
-            className="absolute top-1.5 -translate-x-1/2 font-telemetry text-[9px] text-orbital-subtle tracking-[0.18em]"
-            style={{ left: `${(i / 6) * 100}%` }}>
-            {format(dateAtDayIndex(i * 7), 'MMM d').toUpperCase()}
-          </span>
-        ))}
+        {Array.from({ length: labelCount }, (_, i) => {
+          const dayIdx = Math.round((i / (labelCount - 1)) * windowDays)
+          return (
+            <span key={i}
+              className="absolute top-1.5 -translate-x-1/2 font-telemetry text-[9px] text-orbital-subtle tracking-[0.18em]"
+              style={{ left: `${(i / (labelCount - 1)) * 100}%` }}>
+              {format(dateAtDayIndex(Math.min(dayIdx, windowDays)), 'MMM d').toUpperCase()}
+            </span>
+          )
+        })}
       </div>
     </div>
   )
@@ -135,18 +159,23 @@ function TimelineAxis() {
 
 // ── Sectioned list of rows + a single global playhead line ─────────────────
 function Lanes({ hoveredProd, scrubDay }) {
+  const { resources, windowDays } = useRiver()
   return (
     <div className="relative">
-      {KIND_ORDER.map(kind => (
-        <Section key={kind}
-          kind={kind}
-          resources={RESOURCES.filter(r => r.kind === kind)}
-          hoveredProd={hoveredProd} />
-      ))}
+      {KIND_ORDER.map(kind => {
+        const sectionResources = resources.filter(r => r.kind === kind)
+        if (sectionResources.length === 0) return null
+        return (
+          <Section key={kind}
+            kind={kind}
+            resources={sectionResources}
+            hoveredProd={hoveredProd} />
+        )
+      })}
       {/* Global playhead — positioned within the track column only */}
       <div className="absolute top-0 bottom-0 pointer-events-none"
         style={{
-          left: `calc(${NAME_COL_W}px + (100% - ${NAME_COL_W}px) * ${scrubDay / WINDOW_DAYS})`,
+          left: `calc(${NAME_COL_W}px + (100% - ${NAME_COL_W}px) * ${windowDays > 0 ? scrubDay / windowDays : 0})`,
           width: 1,
           background: 'rgba(255,255,255,0.85)',
           mixBlendMode: 'difference',
@@ -157,6 +186,7 @@ function Lanes({ hoveredProd, scrubDay }) {
 }
 
 function Section({ kind, resources, hoveredProd }) {
+  const { KIND_META } = useRiver()
   return (
     <div>
       <div className="flex items-center gap-2 px-4 py-1.5"
@@ -178,8 +208,9 @@ function Section({ kind, resources, hoveredProd }) {
 }
 
 function Row({ resource, hoveredProd }) {
-  const myCommitments = COMMITMENTS.filter(c => c.resourceId === resource.id)
-  const { placed, lanesUsed } = assignLanes(myCommitments)
+  const { commitments, productions, dayIndex, windowDays } = useRiver()
+  const myCommitments = commitments.filter(c => c.resourceId === resource.id)
+  const { placed, lanesUsed } = assignLanes(myCommitments, dayIndex)
   const trackHeight = lanesUsed * LANE_H + (lanesUsed - 1) * LANE_GAP + 8
   const hasConflict = lanesUsed > 1
 
@@ -201,9 +232,10 @@ function Row({ resource, hoveredProd }) {
       </div>
       <div className="relative flex-1" style={{ height: trackHeight }}>
         {placed.map((c, i) => {
-          const prod = PRODUCTIONS.find(p => p.id === c.productionId)
-          const left   = (c.startIdx / WINDOW_DAYS) * 100
-          const width  = ((c.endIdx - c.startIdx + 1) / WINDOW_DAYS) * 100
+          const prod = productions.find(p => p.id === c.productionId)
+          if (!prod) return null
+          const left   = (c.startIdx / windowDays) * 100
+          const width  = ((c.endIdx - c.startIdx + 1) / windowDays) * 100
           const top    = 4 + c.laneIdx * (LANE_H + LANE_GAP)
           const dim    = hoveredProd && hoveredProd !== prod.id
           return (
@@ -235,16 +267,16 @@ function Row({ resource, hoveredProd }) {
 }
 
 // ── Scrubber ───────────────────────────────────────────────────────────────
-// Same drag-anywhere-on-track UX as the Constellation scrubber.
 function Scrubber({ day, setDay }) {
+  const { windowDays } = useRiver()
   const trackRef = useRef(null)
   const dragging = useRef(false)
 
   const dayFromClient = useCallback((cx) => {
     const box = trackRef.current.getBoundingClientRect()
     const ratio = Math.max(0, Math.min(1, (cx - box.left) / box.width))
-    return Math.round(ratio * WINDOW_DAYS)
-  }, [])
+    return Math.round(ratio * windowDays)
+  }, [windowDays])
 
   const onDown = (e) => {
     dragging.current = true
@@ -274,7 +306,7 @@ function Scrubber({ day, setDay }) {
       <div className="flex items-center justify-between mb-2">
         <span className="hud-label">TIMELINE</span>
         <span className="font-telemetry text-[10px] text-orbital-subtle tracking-wider">
-          DAY {String(day).padStart(2, '0')} / {WINDOW_DAYS}
+          DAY {String(day).padStart(2, '0')} / {windowDays}
         </span>
       </div>
       <div
@@ -288,13 +320,13 @@ function Scrubber({ day, setDay }) {
         <div className="absolute top-1/2 -translate-y-1/2"
           style={{
             left: 0,
-            width: `${(day / WINDOW_DAYS) * 100}%`,
+            width: `${windowDays > 0 ? (day / windowDays) * 100 : 0}%`,
             height: 2, background: '#3b82f6',
             boxShadow: '0 0 6px rgba(59,130,246,0.7)',
           }} />
         <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 pointer-events-none"
           style={{
-            left: `${(day / WINDOW_DAYS) * 100}%`,
+            left: `${windowDays > 0 ? (day / windowDays) * 100 : 0}%`,
             width: 12, height: 12,
             background: '#3b82f6',
             border: '2px solid #fff',

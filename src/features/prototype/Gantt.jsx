@@ -1,78 +1,101 @@
-import { useState, useMemo } from 'react'
-import { format, addDays, differenceInCalendarDays } from 'date-fns'
-import {
-  PRODUCTIONS, COMMITMENTS, RESOURCES,
-  WINDOW_START, WINDOW_DAYS, dayIndex, dateAtDayIndex,
-} from './sampleData.js'
+import { useState, useMemo, createContext, useContext } from 'react'
+import { format, addDays } from 'date-fns'
+import { usePrototypeData } from './dataSource.js'
 
-// ── Dimensions ───────────────────────────────────────────────────────────────
+// ── Visual dimensions (constant regardless of data) ─────────────────────────
 const NAME_COL_W = 220
-const DAY_W      = 22                              // 22 × 42 = 924px timeline
+const DAY_W      = 22
 const ROW_H      = 42
 const ROW_GAP    = 2
 const AXIS_H     = 56
-const TIMELINE_W = WINDOW_DAYS * DAY_W
-const TOTAL_W    = NAME_COL_W + TIMELINE_W
+
+// File-scope context — holds the live (or seed-fallback) dataset and the
+// derived layout dimensions. Sub-components pull from this rather than
+// importing constants.
+const GanttCtx = createContext(null)
+const useGantt = () => useContext(GanttCtx)
 
 // ── Public component ─────────────────────────────────────────────────────────
 export function Gantt() {
-  const [hoveredProd, setHoveredProd] = useState(null)
-  const [scrubDay, setScrubDay] = useState(7)
-  const scrubDate = dateAtDayIndex(scrubDay)
+  const data = usePrototypeData()
+  const { productions, commitments, resources, dayIndex, dateAtDayIndex, windowDays } = data
 
-  // Sort productions by start date so the diagonal cascade reads top→down left→right
+  const [hoveredProd, setHoveredProd] = useState(null)
+  const [scrubDay, setScrubDay]       = useState(0)
+
+  // Layout dimensions that depend on windowDays
+  const TIMELINE_W = windowDays * DAY_W
+  const TOTAL_W    = NAME_COL_W + TIMELINE_W
+
+  // Sort productions by start date for a diagonal cascade top→down, left→right
   const sortedProds = useMemo(
-    () => [...PRODUCTIONS].sort((a, b) => a.start - b.start),
-    []
+    () => [...productions].sort((a, b) => a.start - b.start),
+    [productions]
   )
 
-  // Today index — for the live indicator line. If "today" is outside the
-  // window, the line just doesn't render.
+  const scrubDate = dateAtDayIndex(scrubDay)
+
+  // Today index — for the live indicator line. Null when today is outside
+  // the visible window.
   const todayIdx = useMemo(() => {
     const idx = dayIndex(new Date())
-    return idx >= 0 && idx <= WINDOW_DAYS ? idx : null
-  }, [])
+    return idx >= 0 && idx <= windowDays ? idx : null
+  }, [dayIndex, windowDays])
+
+  const ctxValue = {
+    productions: sortedProds,
+    commitments,
+    resources,
+    dayIndex,
+    dateAtDayIndex,
+    windowDays,
+    TIMELINE_W,
+    TOTAL_W,
+    source: data.source,
+  }
 
   return (
-    <div className="px-6 py-5">
-      <Header scrubDate={scrubDate} />
+    <GanttCtx.Provider value={ctxValue}>
+      <div className="px-6 py-5">
+        <Header scrubDate={scrubDate} />
 
-      <div className="card-elevated mt-4 overflow-hidden">
-        <Legend
-          productions={sortedProds}
-          hoveredProd={hoveredProd}
-          setHoveredProd={setHoveredProd}
-        />
+        {sortedProds.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <div className="card-elevated mt-4 overflow-hidden">
+            <Legend hoveredProd={hoveredProd} setHoveredProd={setHoveredProd} />
 
-        <div className="overflow-x-auto">
-          <svg
-            width={TOTAL_W}
-            height={AXIS_H + sortedProds.length * (ROW_H + ROW_GAP)}
-            style={{ display: 'block', background: 'var(--orbital-panel)' }}
-          >
-            <Grid rowCount={sortedProds.length} />
-            <TimelineAxis />
-            {todayIdx !== null && <NowLine idx={todayIdx} />}
-            <ScrubLine idx={scrubDay} />
+            <div className="overflow-x-auto">
+              <svg
+                width={TOTAL_W}
+                height={AXIS_H + sortedProds.length * (ROW_H + ROW_GAP)}
+                style={{ display: 'block', background: 'var(--orbital-panel)' }}
+              >
+                <Grid rowCount={sortedProds.length} />
+                <TimelineAxis />
+                {todayIdx !== null && <NowLine idx={todayIdx} />}
+                <ScrubLine idx={scrubDay} />
 
-            {sortedProds.map((prod, i) => (
-              <Row
-                key={prod.id}
-                prod={prod}
-                rowIdx={i}
-                dimmed={hoveredProd && hoveredProd !== prod.id}
-                onHover={() => setHoveredProd(prod.id)}
-                onUnhover={() => setHoveredProd(null)}
-                scrubDay={scrubDay}
-              />
-            ))}
-          </svg>
-        </div>
+                {sortedProds.map((prod, i) => (
+                  <Row
+                    key={prod.id}
+                    prod={prod}
+                    rowIdx={i}
+                    dimmed={hoveredProd && hoveredProd !== prod.id}
+                    onHover={() => setHoveredProd(prod.id)}
+                    onUnhover={() => setHoveredProd(null)}
+                    scrubDay={scrubDay}
+                  />
+                ))}
+              </svg>
+            </div>
 
-        <Scrubber day={scrubDay} setDay={setScrubDay} />
-        <SummaryStrip productions={sortedProds} scrubDate={scrubDate} />
+            <Scrubber day={scrubDay} setDay={setScrubDay} />
+            <SummaryStrip scrubDate={scrubDate} />
+          </div>
+        )}
       </div>
-    </div>
+    </GanttCtx.Provider>
   )
 }
 
@@ -99,11 +122,28 @@ function Header({ scrubDate }) {
   )
 }
 
+// Empty-state card for when usePrototypeData() returned 0 productions
+// (live mode with nothing in Supabase, no fallback to seed).
+function EmptyState() {
+  return (
+    <div className="card-elevated mt-4 px-6 py-12 text-center">
+      <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle mb-2">
+        NO PRODUCTIONS WITH DATE BOUNDS
+      </p>
+      <p className="text-sm text-orbital-dim max-w-md mx-auto">
+        Add a production with start and end dates to see it on the Gantt. The view
+        auto-fits the timeline window to your real production dates.
+      </p>
+    </div>
+  )
+}
+
 // ── Top legend (clickable production chips) ─────────────────────────────────
-function Legend({ productions, hoveredProd, setHoveredProd }) {
+function Legend({ hoveredProd, setHoveredProd }) {
+  const { productions } = useGantt()
   return (
     <div
-      className="flex items-center gap-2 px-3 py-2"
+      className="flex items-center gap-2 px-3 py-2 flex-wrap"
       style={{ borderBottom: '1px solid var(--orbital-border)' }}
     >
       <span className="hud-label">PRODUCTIONS</span>
@@ -133,9 +173,11 @@ function Legend({ productions, hoveredProd, setHoveredProd }) {
 
 // ── Background grid: vertical lines every week, horizontal rows ─────────────
 function Grid({ rowCount }) {
+  const { windowDays, TOTAL_W } = useGantt()
+  const weekCount = Math.ceil(windowDays / 7)
   const weekLines = []
-  for (let w = 0; w <= 6; w++) {
-    const x = NAME_COL_W + w * 7 * DAY_W
+  for (let w = 0; w <= weekCount; w++) {
+    const x = NAME_COL_W + Math.min(w * 7, windowDays) * DAY_W
     weekLines.push(
       <line
         key={`w${w}`}
@@ -161,7 +203,6 @@ function Grid({ rowCount }) {
   }
   return (
     <g>
-      {/* Name column background */}
       <rect x={0} y={0} width={NAME_COL_W} height={AXIS_H + rowCount * (ROW_H + ROW_GAP)}
         fill="rgba(0,0,0,0.18)" />
       {weekLines}
@@ -172,9 +213,11 @@ function Grid({ rowCount }) {
 
 // ── Timeline axis: week labels + day ticks ──────────────────────────────────
 function TimelineAxis() {
+  const { productions, windowDays, dateAtDayIndex, TOTAL_W } = useGantt()
+  const weekCount = Math.ceil(windowDays / 7)
   const weekLabels = []
-  for (let w = 0; w < 6; w++) {
-    const startDate = addDays(WINDOW_START, w * 7)
+  for (let w = 0; w < weekCount; w++) {
+    const startDate = dateAtDayIndex(w * 7)
     const x = NAME_COL_W + w * 7 * DAY_W
     weekLabels.push(
       <g key={`wl${w}`}>
@@ -199,9 +242,8 @@ function TimelineAxis() {
     )
   }
 
-  // Day ticks at the bottom of the axis
   const dayTicks = []
-  for (let d = 0; d <= WINDOW_DAYS; d++) {
+  for (let d = 0; d <= windowDays; d++) {
     const x = NAME_COL_W + d * DAY_W
     const major = d % 7 === 0
     dayTicks.push(
@@ -217,7 +259,6 @@ function TimelineAxis() {
 
   return (
     <g>
-      {/* Header column label */}
       <text
         x={14} y={18}
         fill="var(--orbital-subtle)"
@@ -233,11 +274,10 @@ function TimelineAxis() {
         fontSize={9}
         fontFamily="'Space Mono', monospace"
       >
-        {PRODUCTIONS.length} ACTIVE
+        {productions.length} ACTIVE
       </text>
       {weekLabels}
       {dayTicks}
-      {/* Bottom border under the axis */}
       <line
         x1={0} x2={TOTAL_W}
         y1={AXIS_H} y2={AXIS_H}
@@ -249,12 +289,14 @@ function TimelineAxis() {
 
 // ── Now line — vertical accent at today's column ────────────────────────────
 function NowLine({ idx }) {
+  const { productions } = useGantt()
   const x = NAME_COL_W + idx * DAY_W + DAY_W / 2
+  const bottom = AXIS_H + productions.length * (ROW_H + ROW_GAP)
   return (
     <g>
       <line
         x1={x} x2={x}
-        y1={AXIS_H - 12} y2={AXIS_H + 8 * (ROW_H + ROW_GAP)}
+        y1={AXIS_H - 12} y2={bottom}
         stroke="#fbbf24"
         strokeWidth={1}
         strokeDasharray="3 3"
@@ -275,11 +317,13 @@ function NowLine({ idx }) {
 
 // ── Scrub line — vertical line at the playhead day ──────────────────────────
 function ScrubLine({ idx }) {
+  const { productions } = useGantt()
   const x = NAME_COL_W + idx * DAY_W + DAY_W / 2
+  const bottom = AXIS_H + productions.length * (ROW_H + ROW_GAP)
   return (
     <line
       x1={x} x2={x}
-      y1={0} y2={AXIS_H + 8 * (ROW_H + ROW_GAP)}
+      y1={0} y2={bottom}
       stroke="#60a5fa"
       strokeWidth={1.5}
       opacity={0.85}
@@ -289,6 +333,7 @@ function ScrubLine({ idx }) {
 
 // ── Production row: name column + bar ───────────────────────────────────────
 function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
+  const { commitments, resources, dayIndex } = useGantt()
   const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
   const startIdx = dayIndex(prod.start)
   const endIdx   = dayIndex(prod.end)
@@ -297,12 +342,10 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
   const barY     = y + 8
   const barH     = ROW_H - 16
 
-  // Active when the scrubber's day is inside this production's window
   const isLive   = scrubDay >= startIdx && scrubDay <= endIdx
 
-  // Resource count for this production (people / gear / loc)
-  const peopleCount = COMMITMENTS.filter(c => c.productionId === prod.id && RESOURCES.find(r => r.id === c.resourceId)?.kind === 'people').length
-  const gearCount   = COMMITMENTS.filter(c => c.productionId === prod.id && RESOURCES.find(r => r.id === c.resourceId)?.kind === 'gear').length
+  const peopleCount = commitments.filter(c => c.productionId === prod.id && resources.find(r => r.id === c.resourceId)?.kind === 'people').length
+  const gearCount   = commitments.filter(c => c.productionId === prod.id && resources.find(r => r.id === c.resourceId)?.kind === 'gear').length
   const durDays     = endIdx - startIdx + 1
 
   return (
@@ -311,7 +354,6 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
       onMouseLeave={onUnhover}
       style={{ cursor: 'pointer', opacity: dimmed ? 0.25 : 1, transition: 'opacity 200ms ease' }}
     >
-      {/* Name column */}
       <text
         x={14} y={y + 18}
         fill="var(--orbital-text)"
@@ -327,10 +369,9 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
         fontFamily="'Space Mono', monospace"
         letterSpacing={1}
       >
-        {prod.code} · {durDays}d · {peopleCount}p · {gearCount}g
+        {prod.code} · {durDays}d · {peopleCount}p{gearCount > 0 ? ` · ${gearCount}g` : ''}
       </text>
 
-      {/* Bar background (sub-bar tint for hover affordance) */}
       <rect
         x={barX} y={barY}
         width={barW} height={barH}
@@ -338,8 +379,6 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
         stroke={prod.color}
         strokeWidth={1}
       />
-
-      {/* Solid bar with subtle gradient feel via opacity */}
       <rect
         x={barX} y={barY}
         width={barW} height={barH}
@@ -347,7 +386,6 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
         opacity={0.78}
       />
 
-      {/* Live-pulse accent if scrubber is inside this production */}
       {isLive && (
         <rect
           x={barX - 1} y={barY - 1}
@@ -359,7 +397,6 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
         />
       )}
 
-      {/* Bar label inside (only if there's room) */}
       {barW > 70 && (
         <text
           x={barX + 8}
@@ -379,7 +416,7 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
 
 // ── Scrubber — drag a date through the window ───────────────────────────────
 function Scrubber({ day, setDay }) {
-  const pct = (day / WINDOW_DAYS) * 100
+  const { windowDays } = useGantt()
   return (
     <div
       className="flex items-center gap-4 px-4 py-3"
@@ -393,7 +430,7 @@ function Scrubber({ day, setDay }) {
         <input
           type="range"
           min={0}
-          max={WINDOW_DAYS}
+          max={windowDays}
           step={1}
           value={day}
           onChange={(e) => setDay(parseInt(e.target.value, 10))}
@@ -401,14 +438,15 @@ function Scrubber({ day, setDay }) {
         />
       </div>
       <span className="font-telemetry text-[10px] tracking-wider text-orbital-text whitespace-nowrap tabular-nums">
-        DAY {String(day).padStart(2, '0')} / {WINDOW_DAYS}
+        DAY {String(day).padStart(2, '0')} / {windowDays}
       </span>
     </div>
   )
 }
 
 // ── Bottom summary — what's active at the scrub date ────────────────────────
-function SummaryStrip({ productions, scrubDate }) {
+function SummaryStrip({ scrubDate }) {
+  const { productions } = useGantt()
   const active = productions.filter(p => p.start <= scrubDate && scrubDate <= p.end)
   return (
     <div

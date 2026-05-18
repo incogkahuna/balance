@@ -126,10 +126,11 @@ function LiveSnapshot({ data }) {
         />
       </div>
       <p className="text-[11px] text-orbital-dim leading-relaxed">
-        The visualizations below still render the curated demo dataset for now — refactoring them to
-        consume this live data is a follow-up. The numbers above prove the data layer is wired:
-        every team member you assign to a milestone shows up as a commitment on this production for a
-        window around the milestone date, and the conflict detector catches anyone double-booked.
+        <strong className="text-orbital-subtle">Gantt and Resource River</strong> render live data
+        — switch tabs to see your real productions and milestone assignments.{' '}
+        <strong className="text-orbital-subtle">Constellation</strong> still uses the curated demo
+        dataset (its 4-corner layout is hardcoded for 4 productions; refactoring it to handle
+        arbitrary counts is the next step).
       </p>
     </div>
   )
