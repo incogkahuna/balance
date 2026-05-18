@@ -11,6 +11,7 @@ import { ProductionDetailPage } from './pages/ProductionDetailPage.jsx'
 import { TasksPage } from './pages/TasksPage.jsx'
 import { ContractorsPage } from './features/contractors/ContractorsPage.jsx'
 import { TeamPage } from './pages/TeamPage.jsx'
+import { ComingSoonPage } from './pages/ComingSoonPage.jsx'
 
 // Stale-chunk recovery: when we deploy a new build to Vercel, the chunk
 // filenames change (Vite hashes them for cache-busting). A user with the
@@ -124,6 +125,7 @@ export default function App() {
             <Route path="/analytics"         element={wrap(<AnalyticsPage />)} />
             <Route path="/contractors"       element={wrap(<ContractorsPage />)} />
             <Route path="/team"              element={wrap(<TeamPage />)} />
+            <Route path="/coming-soon"       element={wrap(<ComingSoonPage />)} />
             <Route path="/prototype/resources" element={wrap(<PrototypePage />)} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
