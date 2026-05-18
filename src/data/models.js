@@ -111,6 +111,37 @@ export const CONTRACTOR_FLAG = {
 }
 
 // ─── User Profiles ───────────────────────────────────────────────────────────
+// Preset role options for assigned team members, per production phase.
+// "Other" surfaces a custom-text input in the form; the saved value is
+// whatever the user types. Unknown values (legacy or custom) are treated
+// as Other on read and editable as free text.
+export const PRODUCTION_ROLE_PRESETS = [
+  'Project Lead',
+  'Project Supervisor',
+  'Technician Support',
+]
+
+// Normalize a legacy or new-shape assigned-member record into the canonical
+// shape: { userId, roles: { prep, production, post } }. Falls back to the
+// old `roleOnProduction` field as the production-phase role.
+export function normalizeAssignedMember(m) {
+  if (!m) return null
+  const roles = m.roles || {
+    prep:       '',
+    production: m.roleOnProduction || '',
+    post:       '',
+  }
+  return {
+    userId: m.userId,
+    roleOnProduction: roles.production,   // mirror for legacy display sites
+    roles: {
+      prep:       roles.prep || '',
+      production: roles.production || '',
+      post:       roles.post || '',
+    },
+  }
+}
+
 // `email` is the stable identity anchor — when a Google sign-in's
 // profile.email matches, AppContext maps the live profile to this legacy
 // id so demo tasks (which use 'mark'/'aj'/'danny'/etc. as assigneeId)

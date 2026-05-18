@@ -5,8 +5,12 @@ import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import {
   PRODUCTION_STATUS, PRODUCTION_TYPE, PRODUCTION_TYPE_PRESETS, LOCATION_TYPE, ROLES,
+  PRODUCTION_ROLE_PRESETS, normalizeAssignedMember,
   createProduction, USERS
 } from '../../data/models.js'
+
+// Sentinel for the per-phase role dropdown "Other…" option.
+const CUSTOM_ROLE = '__custom_role__'
 
 // Sentinel for the "Custom…" dropdown option. The actual saved value is
 // whatever the user types in the free-form input below.
@@ -40,7 +44,11 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
     productionType: initial?.productionType || PRODUCTION_TYPE.TVC_AOTO,
     status: initial?.status || PRODUCTION_STATUS.INCOMING,
     dateRanges: initialRanges,
-    assignedMembers: initial?.assignedMembers || [],
+    // Normalize each member to the new {userId, roles:{prep,production,post}}
+    // shape so the UI never has to deal with the legacy roleOnProduction
+    // string. Mirroring back to roleOnProduction on save keeps legacy
+    // display sites working.
+    assignedMembers: (initial?.assignedMembers || []).map(normalizeAssignedMember).filter(Boolean),
     instructionNotes: initial?.instructionPackage?.notes || '',
   })
 
@@ -88,14 +96,27 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
     if (exists) {
       set('assignedMembers', form.assignedMembers.filter(m => m.userId !== userId))
     } else {
-      set('assignedMembers', [...form.assignedMembers, { userId, roleOnProduction: '' }])
+      set('assignedMembers', [
+        ...form.assignedMembers,
+        normalizeAssignedMember({ userId }),
+      ])
     }
   }
 
-  const setMemberRole = (userId, role) => {
-    set('assignedMembers', form.assignedMembers.map(m =>
-      m.userId === userId ? { ...m, roleOnProduction: role } : m
-    ))
+  // Update one phase's role for a given member.
+  // phase ∈ 'prep' | 'production' | 'post'.
+  const setMemberRoleForPhase = (userId, phase, role) => {
+    set('assignedMembers', form.assignedMembers.map(m => {
+      if (m.userId !== userId) return m
+      const nextRoles = { ...m.roles, [phase]: role }
+      return {
+        ...m,
+        roles: nextRoles,
+        // Keep the legacy field mirrored to the production-phase role so
+        // older display sites keep showing something sensible.
+        roleOnProduction: nextRoles.production,
+      }
+    }))
   }
 
   // Single source of truth: turn current form state into a production object.
@@ -285,22 +306,28 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
         </p>
       </div>
 
-      {/* Team — Orbital Staff */}
+      {/* Team — Orbital Staff. Each assigned member gets per-phase role
+          dropdowns (Prep / Production / Post). Selecting "Other…" reveals
+          a free-form text input for that phase. */}
       <div>
         <label className="label">Team</label>
-        <div className="space-y-2">
+        <div className="space-y-3">
           {USERS.map(user => {
             const assigned = form.assignedMembers.find(m => m.userId === user.id)
             return (
-              <div key={user.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              <div
+                key={user.id}
+                className="rounded-lg border transition-colors"
+                style={{
+                  background: assigned ? 'rgba(59,130,246,0.06)' : 'var(--orbital-surface)',
+                  borderColor: assigned ? 'rgba(59,130,246,0.4)' : 'var(--orbital-border)',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => toggleMember(user.id)}
-                  className={`flex items-center gap-2.5 flex-1 p-2.5 rounded-lg border text-left transition-colors ${
-                    assigned
-                      ? 'bg-blue-500/10 border-blue-500/40 text-orbital-text'
-                      : 'bg-orbital-surface border-orbital-border text-orbital-subtle hover:border-orbital-muted'
-                  }`}
+                  className="flex items-center gap-2.5 w-full p-2.5 text-left transition-colors"
+                  style={{ color: assigned ? 'var(--orbital-text)' : 'var(--orbital-subtle)' }}
                 >
                   <div
                     className="w-7 h-7 rounded-full flex items-center justify-center font-semibold text-white text-xs flex-shrink-0"
@@ -308,23 +335,34 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
                   >
                     {user.avatar}
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{user.name}</p>
                     <p className="text-xs opacity-60 capitalize">{user.role}</p>
                   </div>
                   {assigned && (
-                    <svg className="ml-auto w-4 h-4 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                    <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   )}
                 </button>
                 {assigned && (
-                  <input
-                    className="input w-full sm:w-40"
-                    placeholder="Role on this job"
-                    value={assigned.roleOnProduction}
-                    onChange={e => setMemberRole(user.id, e.target.value)}
-                  />
+                  <div className="px-2.5 pb-2.5 space-y-1.5" style={{ borderTop: '1px dashed var(--orbital-border)', paddingTop: '8px' }}>
+                    <PhaseRoleSelect
+                      label="PREP"
+                      value={assigned.roles?.prep || ''}
+                      onChange={v => setMemberRoleForPhase(user.id, 'prep', v)}
+                    />
+                    <PhaseRoleSelect
+                      label="PROD"
+                      value={assigned.roles?.production || ''}
+                      onChange={v => setMemberRoleForPhase(user.id, 'production', v)}
+                    />
+                    <PhaseRoleSelect
+                      label="POST"
+                      value={assigned.roles?.post || ''}
+                      onChange={v => setMemberRoleForPhase(user.id, 'post', v)}
+                    />
+                  </div>
                 )}
               </div>
             )
@@ -357,6 +395,57 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
         )}
       </div>
     </form>
+  )
+}
+
+// ── Phase role select — preset dropdown + free-form "Other…" input ────────
+function PhaseRoleSelect({ label, value, onChange }) {
+  const isCustom = !!value && !PRODUCTION_ROLE_PRESETS.includes(value)
+  const [showCustom, setShowCustom] = useState(isCustom)
+
+  const handleSelect = (next) => {
+    if (next === CUSTOM_ROLE) {
+      setShowCustom(true)
+      // If they previously had a preset, clear it so the input starts empty
+      if (PRODUCTION_ROLE_PRESETS.includes(value)) onChange('')
+    } else {
+      setShowCustom(false)
+      onChange(next)
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-[44px_1fr] gap-2 items-center">
+      <label
+        className="font-telemetry text-[9px] tracking-wider text-orbital-subtle"
+        title={label === 'PREP' ? 'Pre-production' : label === 'PROD' ? 'Production / Shoot' : 'Post-production'}
+      >
+        {label}
+      </label>
+      <div className="flex gap-2">
+        <select
+          className="select flex-1 text-xs py-1.5"
+          value={showCustom ? CUSTOM_ROLE : (value || '')}
+          onChange={e => handleSelect(e.target.value)}
+        >
+          <option value="">— None —</option>
+          {PRODUCTION_ROLE_PRESETS.map(r => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+          <option value={CUSTOM_ROLE}>Other…</option>
+        </select>
+        {showCustom && (
+          <input
+            type="text"
+            className="input flex-1 text-xs py-1.5"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder="Custom role"
+            autoFocus={!isCustom}
+          />
+        )}
+      </div>
+    </div>
   )
 }
 
