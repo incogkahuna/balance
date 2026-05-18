@@ -1,5 +1,9 @@
 import { useState, useMemo } from 'react'
-import { Mail, Phone, MapPin, Briefcase, CheckCircle2, Activity, Film } from 'lucide-react'
+import { format, parseISO, differenceInCalendarDays } from 'date-fns'
+import {
+  Mail, MapPin, Briefcase, CheckCircle2, Activity, Film,
+  Clock, Target, AlertOctagon, Zap, ArrowRight,
+} from 'lucide-react'
 import { USERS, ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { useApp } from '../context/AppContext.jsx'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
@@ -94,29 +98,78 @@ function TeamMemberDetail({ user }) {
   const { productions, tasks } = useApp()
   const roleMeta = ROLE_META[user.role]
 
-  // Productions they're assigned to (Orbital-staff side, not contractor)
+  // ── Productions ───────────────────────────────────────────────────────────
   const assignedProductions = useMemo(
     () => productions.filter(p =>
       p.assignedMembers?.some(m => m.userId === user.id)
     ),
     [productions, user.id]
   )
+  const activeProds    = assignedProductions.filter(p => p.status === PRODUCTION_STATUS.ACTIVE).length
+  const completedProds = assignedProductions.filter(p => p.status === PRODUCTION_STATUS.COMPLETED || p.status === PRODUCTION_STATUS.WRAP).length
 
-  // Tasks assigned to them
+  // ── Tasks ─────────────────────────────────────────────────────────────────
   const myTasks = useMemo(
     () => tasks.filter(t => t.assigneeId === user.id),
     [tasks, user.id]
   )
 
-  const activeTasks    = myTasks.filter(t => t.status !== TASK_STATUS.VERIFIED && t.status !== TASK_STATUS.COMPLETE).length
-  const completedTasks = myTasks.filter(t => t.status === TASK_STATUS.VERIFIED || t.status === TASK_STATUS.COMPLETE).length
-  const activeProds    = assignedProductions.filter(p => p.status === PRODUCTION_STATUS.ACTIVE).length
+  const isDone = (t) => t.status === TASK_STATUS.VERIFIED || t.status === TASK_STATUS.COMPLETE
+  const isOpen = (t) => !isDone(t) && t.status !== TASK_STATUS.BLOCKED
+
+  const openTasks      = myTasks.filter(isOpen)
+  const completedTasks = myTasks.filter(isDone)
+  const blockedTasks   = myTasks.filter(t => t.status === TASK_STATUS.BLOCKED)
+  const inProgressTasks = myTasks.filter(t => t.status === TASK_STATUS.IN_PROGRESS).length
+
+  // ── Time-to-complete & on-time rate ──────────────────────────────────────
+  // Turnaround = days between task creation and last update on completed tasks.
+  // Caveat: updated_at gets bumped on any update, not strictly on completion.
+  // For demo seed values this approximates "how long did it take to finish."
+  // A future iteration could pull from task_status_history for exact transition times.
+  const tasksWithTurnaround = completedTasks
+    .map(t => {
+      if (!t.createdAt || !t.updatedAt) return null
+      const days = differenceInCalendarDays(parseISO(t.updatedAt), parseISO(t.createdAt))
+      return { task: t, days: Math.max(0, days) }
+    })
+    .filter(Boolean)
+
+  const avgTurnaround = tasksWithTurnaround.length > 0
+    ? tasksWithTurnaround.reduce((sum, x) => sum + x.days, 0) / tasksWithTurnaround.length
+    : null
+
+  // On-time rate: of completed tasks with a due date, how many were updated on or before that date?
+  const completedWithDue = completedTasks.filter(t => t.dueDate && t.updatedAt)
+  const onTimeCount = completedWithDue.filter(t =>
+    differenceInCalendarDays(parseISO(t.dueDate), parseISO(t.updatedAt)) >= 0
+  ).length
+  const onTimeRate = completedWithDue.length > 0
+    ? Math.round((onTimeCount / completedWithDue.length) * 100)
+    : null
+
+  // ── Next up — first non-done, non-blocked task sorted by due date ─────────
+  const nextUp = useMemo(() => {
+    return [...openTasks].sort((a, b) => {
+      if (!a.dueDate && !b.dueDate) return 0
+      if (!a.dueDate) return 1
+      if (!b.dueDate) return -1
+      return parseISO(a.dueDate) - parseISO(b.dueDate)
+    })[0]
+  }, [openTasks])
+
+  // ── Recent completed (last 5, most-recent first) ─────────────────────────
+  const recentlyCompleted = useMemo(() => {
+    return [...tasksWithTurnaround]
+      .sort((a, b) => parseISO(b.task.updatedAt) - parseISO(a.task.updatedAt))
+      .slice(0, 5)
+  }, [tasksWithTurnaround])
 
   return (
     <div className="grid lg:grid-cols-3 gap-4">
       {/* ── Hero card ─────────────────────────────────────────────────── */}
       <div
-        className="lg:col-span-1 card-elevated p-5"
+        className="lg:col-span-1 card-elevated p-5 self-start"
         style={{ borderLeft: `3px solid ${user.color}` }}
       >
         <div className="flex items-center gap-4 mb-4">
@@ -141,57 +194,142 @@ function TeamMemberDetail({ user }) {
           </div>
         </div>
 
-        <ContactRow icon={Mail}     label="EMAIL"    value={USER_EMAIL[user.id] || `${user.id}@orbitalvs.com`} />
+        <ContactRow icon={Mail}      label="EMAIL"   value={USER_EMAIL[user.id] || `${user.id}@orbitalvs.com`} />
         <ContactRow icon={Briefcase} label="ROLE"    value={`Salaried · ${roleMeta.label}`} />
-        <ContactRow icon={MapPin}   label="STATION" value="Orbital Studios · Los Angeles" />
+        <ContactRow icon={MapPin}    label="STATION" value="Orbital Studios · Los Angeles" />
       </div>
 
       {/* ── Stats + assignment lists ────────────────────────────────────── */}
       <div className="lg:col-span-2 space-y-4">
-        {/* Stat strip */}
+        {/* Stat strip — 6 cells in 3 cols × 2 rows */}
         <div className="grid grid-cols-3 gap-2">
-          <StatBlock icon={Film}         label="PRODUCTIONS" value={assignedProductions.length} sub={`${activeProds} ACTIVE`} accent={user.color} />
-          <StatBlock icon={Activity}     label="OPEN TASKS"  value={activeTasks}    sub="ASSIGNED"           accent="#fbbf24" />
-          <StatBlock icon={CheckCircle2} label="COMPLETED"   value={completedTasks} sub="VERIFIED + DONE"     accent="#34d399" />
+          <StatBlock icon={Film}         label="PRODUCTIONS" value={assignedProductions.length} sub={`${activeProds} ACTIVE · ${completedProds} WRAPPED`} accent={user.color} />
+          <StatBlock icon={Activity}     label="OPEN TASKS"  value={openTasks.length} sub={`${inProgressTasks} IN PROGRESS`} accent="#fbbf24" />
+          <StatBlock icon={CheckCircle2} label="COMPLETED"   value={completedTasks.length} sub="VERIFIED + DONE" accent="#34d399" />
+          <StatBlock
+            icon={Clock}
+            label="AVG TURNAROUND"
+            value={avgTurnaround !== null ? avgTurnaround.toFixed(1) : '—'}
+            sub={avgTurnaround !== null ? `DAYS · ${tasksWithTurnaround.length} TASKS` : 'NO DATA YET'}
+            accent="#60a5fa"
+          />
+          <StatBlock
+            icon={Target}
+            label="ON-TIME RATE"
+            value={onTimeRate !== null ? `${onTimeRate}%` : '—'}
+            sub={onTimeRate !== null ? `${onTimeCount} / ${completedWithDue.length} TASKS` : 'NO DATA YET'}
+            accent={onTimeRate === null ? '#71717a' : onTimeRate >= 80 ? '#34d399' : onTimeRate >= 50 ? '#fbbf24' : '#ef4444'}
+          />
+          <StatBlock
+            icon={AlertOctagon}
+            label="BLOCKED"
+            value={blockedTasks.length}
+            sub={blockedTasks.length > 0 ? 'NEEDS ATTENTION' : 'ALL CLEAR'}
+            accent={blockedTasks.length > 0 ? '#ef4444' : '#71717a'}
+          />
         </div>
 
-        {/* Productions list */}
-        <div className="card-elevated">
-          <div className="px-4 py-2.5" style={{ borderBottom: '1px solid var(--orbital-border)' }}>
-            <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">
-              ASSIGNED PRODUCTIONS · {assignedProductions.length}
-            </p>
-          </div>
-          {assignedProductions.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-orbital-dim text-center">
-              Not currently assigned to any production.
-            </p>
-          ) : (
-            <div className="divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
-              {assignedProductions.map(prod => {
-                const myAssignment = prod.assignedMembers.find(m => m.userId === user.id)
-                return (
-                  <div key={prod.id} className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-orbital-panel transition-colors">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-orbital-text truncate">{prod.name}</p>
-                      <p className="text-xs text-orbital-subtle truncate mt-0.5">
-                        {prod.client}
-                        {myAssignment?.roleOnProduction && ` · ${myAssignment.roleOnProduction}`}
-                      </p>
-                    </div>
-                    <StatusBadge status={prod.status} />
-                  </div>
-                )
-              })}
+        {/* Next up callout */}
+        {nextUp && (
+          <div
+            className="card-elevated px-4 py-3 flex items-center gap-4"
+            style={{ borderLeft: `3px solid ${user.color}` }}
+          >
+            <Zap size={20} style={{ color: user.color }} className="flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">NEXT UP</p>
+              <p className="text-base text-orbital-text font-medium truncate mt-0.5">{nextUp.title}</p>
+              <p className="text-xs text-orbital-subtle truncate mt-0.5">
+                {productions.find(p => p.id === nextUp.productionId)?.name || 'Unknown production'}
+                {nextUp.dueDate && ` · due ${format(parseISO(nextUp.dueDate), 'MMM d')}`}
+                {' · '}{nextUp.status.toUpperCase()}
+              </p>
             </div>
-          )}
+            <ArrowRight size={16} className="text-orbital-subtle flex-shrink-0" />
+          </div>
+        )}
+
+        {/* Two-column section: productions + recent completions */}
+        <div className="grid md:grid-cols-2 gap-4">
+          {/* Productions list */}
+          <div className="card-elevated">
+            <div className="px-4 py-2.5" style={{ borderBottom: '1px solid var(--orbital-border)' }}>
+              <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">
+                ASSIGNED PRODUCTIONS · {assignedProductions.length}
+              </p>
+            </div>
+            {assignedProductions.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-orbital-dim text-center">
+                Not currently assigned to any production.
+              </p>
+            ) : (
+              <div className="divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
+                {assignedProductions.map(prod => {
+                  const myAssignment = prod.assignedMembers.find(m => m.userId === user.id)
+                  return (
+                    <div key={prod.id} className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-orbital-panel transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-orbital-text truncate">{prod.name}</p>
+                        <p className="text-xs text-orbital-subtle truncate mt-0.5">
+                          {prod.client}
+                          {myAssignment?.roleOnProduction && ` · ${myAssignment.roleOnProduction}`}
+                        </p>
+                      </div>
+                      <StatusBadge status={prod.status} />
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Recent completions with turnaround */}
+          <div className="card-elevated">
+            <div className="px-4 py-2.5" style={{ borderBottom: '1px solid var(--orbital-border)' }}>
+              <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">
+                RECENTLY COMPLETED · {recentlyCompleted.length}
+              </p>
+            </div>
+            {recentlyCompleted.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-orbital-dim text-center">
+                No completed tasks yet.
+              </p>
+            ) : (
+              <div className="divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
+                {recentlyCompleted.map(({ task, days }) => {
+                  const taskProd = productions.find(p => p.id === task.productionId)
+                  return (
+                    <div key={task.id} className="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-orbital-panel transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-orbital-text truncate">{task.title}</p>
+                        {taskProd && (
+                          <p className="text-[11px] text-orbital-subtle truncate mt-0.5">{taskProd.name}</p>
+                        )}
+                      </div>
+                      <span
+                        className="font-telemetry text-[10px] tracking-wider tabular-nums whitespace-nowrap px-1.5 py-0.5"
+                        title="Turnaround: days from creation to completion"
+                        style={{
+                          background: 'rgba(96,165,250,0.1)',
+                          border: '1px solid rgba(96,165,250,0.3)',
+                          color: '#60a5fa',
+                        }}
+                      >
+                        {days}D
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Tasks list */}
+        {/* Full open tasks list */}
         <div className="card-elevated">
           <div className="px-4 py-2.5" style={{ borderBottom: '1px solid var(--orbital-border)' }}>
             <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">
-              OPEN TASKS · {activeTasks}
+              OPEN TASKS · {openTasks.length}
             </p>
           </div>
           {myTasks.length === 0 ? (

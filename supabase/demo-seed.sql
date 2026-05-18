@@ -120,42 +120,65 @@ values (
 );
 
 -- ─── Tasks (a few per production, varied status/priority for visual fill) ──
+--
+-- Each task is assigned to one of the 5 Orbital salary workers (legacy
+-- string ids — assignee_id is TEXT in the schema, so this works for demo
+-- data even though real signed-in users have UUIDs).
+--
+-- For completed and verified tasks we override created_at + updated_at so
+-- the Team page can show realistic turnaround times. Pattern:
+--   • created_at = N days ago
+--   • updated_at = M days ago (M < N)
+--   • turnaround = N - M days
+-- For in-progress / not-started / blocked tasks we leave both as now()
+-- (current default) — they're not "completed" so they don't contribute
+-- to the turnaround average.
 
 insert into public.tasks
-  (production_id, title, description, priority, status, blocked_reason, due_date, is_demo)
+  (production_id, title, description, priority, status, blocked_reason, due_date,
+   assignee_id, created_at, updated_at, is_demo)
 values
   -- Atlas
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'Confirm wardrobe palette with Olivia',
    'Walk through the Atlas color references with the director; flag the green overlap.',
-   'Medium',   'Complete',     '', '2026-06-09', true),
+   'Medium',   'Complete',     '', '2026-06-09',
+   'danny',  now() - interval '9 days',  now() - interval '3 days',  true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'Test LED color pipe end-to-end',
    'Calibrate camera → LED wall pipeline against the approved plates.',
-   'High',     'In Progress',  '', '2026-06-11', true),
+   'High',     'In Progress',  '', '2026-06-11',
+   'wilder', now(),                        now(),                       true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'Source props for day-3 hero shot',
    'Period-correct radio + signage.',
-   'Low',      'Not Started',  '', '2026-06-13', true),
+   'Low',      'Not Started',  '', '2026-06-13',
+   'brian',  now(),                        now(),                       true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'File debrief notes',
    'Wins, challenges, and add-on cost summary.',
-   'Medium',   'Verified',     '', '2026-06-16', true),
+   'Medium',   'Verified',     '', '2026-06-16',
+   'mark',   now() - interval '6 days',  now() - interval '2 days',  true),
 
   -- Halberd
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', 'Truss rigging plan',
    'Engineering review for curved-corner LED build with vehicle on the platform.',
-   'High',     'Not Started',  '', '2026-07-15', true),
+   'High',     'Not Started',  '', '2026-07-15',
+   'wilder', now(),                        now(),                       true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', 'Power requirements scope',
    'Coordinate with venue electrician for service capacity.',
-   'Critical', 'Blocked',      'Awaiting venue spec sheet from Long Beach Conv. Ctr.', '2026-07-10', true),
+   'Critical', 'Blocked',      'Awaiting venue spec sheet from Long Beach Conv. Ctr.', '2026-07-10',
+   'aj',     now(),                        now(),                       true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', 'Site survey scheduling',
    'Coordinate with Halberd marketing + venue ops.',
-   'Medium',   'Not Started',  '', '2026-07-08', true),
+   'Medium',   'Not Started',  '', '2026-07-08',
+   'danny',  now(),                        now(),                       true),
 
   -- Pinegrove
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', 'Pickup shot list confirmed',
    'Verified against editor notes.',
-   'Medium',   'Verified',     '', '2026-03-08', true),
+   'Medium',   'Verified',     '', '2026-03-08',
+   'aj',     now() - interval '14 days', now() - interval '11 days', true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', 'Stage B audio room handoff',
    'Confirmed clean handoff to Pinegrove sound team.',
-   'Low',      'Complete',     '', '2026-03-09', true);
+   'Low',      'Complete',     '', '2026-03-09',
+   'brian',  now() - interval '12 days', now() - interval '10 days', true);
 
 -- ─── Result summary ────────────────────────────────────────────────────────
 select 'productions seeded' as kind, count(*) from public.productions where is_demo
