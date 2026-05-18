@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { ResourceRiver } from '../features/prototype/ResourceRiver.jsx'
 import { Constellation } from '../features/prototype/Constellation.jsx'
+import { Gantt } from '../features/prototype/Gantt.jsx'
 
 const VIEWS = [
   { id: 'constellation', label: 'Constellation' },
-  { id: 'river',     label: 'Resource River' },
+  { id: 'river',         label: 'Resource River' },
+  { id: 'gantt',         label: 'Gantt' },
 ]
 
 export function PrototypePage() {
@@ -62,6 +64,7 @@ export function PrototypePage() {
       <div className="animate-hud-in" key={view}>
         {view === 'river' && <ResourceRiver />}
         {view === 'constellation' && <Constellation />}
+        {view === 'gantt' && <Gantt />}
       </div>
     </div>
   )
