@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format, parseISO, differenceInCalendarDays } from 'date-fns'
-import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, Maximize2 } from 'lucide-react'
+import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
@@ -285,30 +285,6 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
   )
 }
 
-// ── Per-card size: 5 stops (XS/S/M/L/XL), scaled internals only ──────────────
-// Stored in localStorage per production id so it persists per-browser without
-// requiring a Supabase migration. UI-only preference.
-const CARD_SIZE_KEY = (id) => `balance_card_size_${id}`
-
-// Migrate the older numeric keys (1/2/3) that earlier versions of this UI
-// stored. Returns a canonical size string ('XS'|'S'|'M'|'L'|'XL').
-function normalizeSize(raw) {
-  if (!raw) return 'S'
-  const map = { '1': 'S', '2': 'M', '3': 'L' }
-  const v = map[raw] || raw
-  return ['XS', 'S', 'M', 'L', 'XL'].includes(v) ? v : 'S'
-}
-
-// All sizes occupy a single grid column (no horizontal span) — scaling is
-// purely internal so the card grows in place rather than stretching wider.
-const SIZE_STYLES = {
-  XS: { padX: 'px-3', padTop: 'pt-2.5', padBot: 'pb-2.5', name: 'text-sm',   client: 'text-[11px]', meta: 'text-[10px]', pill: 'text-[9px] px-1.5 py-px',   countdown: 'text-xs',  detailLabel: 'text-[8px]',  detail: 'text-[10px]', icon: 10, avatar: 'xs', barW: 'w-16', rowPadY: 'py-2',   sectionPadY: 'py-1.5' },
-  S:  { padX: 'px-5', padTop: 'pt-4',   padBot: 'pb-4',   name: 'text-lg',   client: 'text-sm',     meta: 'text-xs',     pill: 'text-[10px] px-2 py-0.5',   countdown: 'text-base', detailLabel: 'text-[9px]',  detail: 'text-xs',     icon: 12, avatar: 'sm', barW: 'w-24', rowPadY: 'py-3',   sectionPadY: 'py-2.5' },
-  M:  { padX: 'px-6', padTop: 'pt-5',   padBot: 'pb-5',   name: 'text-xl',   client: 'text-base',   meta: 'text-sm',     pill: 'text-xs px-2.5 py-1',       countdown: 'text-xl',   detailLabel: 'text-[10px]', detail: 'text-sm',    icon: 14, avatar: 'md', barW: 'w-32', rowPadY: 'py-4',   sectionPadY: 'py-3.5' },
-  L:  { padX: 'px-7', padTop: 'pt-6',   padBot: 'pb-6',   name: 'text-2xl',  client: 'text-lg',     meta: 'text-base',   pill: 'text-sm px-3 py-1',         countdown: 'text-3xl',  detailLabel: 'text-xs',     detail: 'text-base',  icon: 16, avatar: 'md', barW: 'w-44', rowPadY: 'py-5',   sectionPadY: 'py-4.5' },
-  XL: { padX: 'px-9', padTop: 'pt-8',   padBot: 'pb-8',   name: 'text-3xl',  client: 'text-xl',     meta: 'text-base',   pill: 'text-base px-3.5 py-1.5',   countdown: 'text-4xl',  detailLabel: 'text-xs',     detail: 'text-lg',    icon: 18, avatar: 'md', barW: 'w-56', rowPadY: 'py-6',   sectionPadY: 'py-5' },
-}
-
 // ── Card detail helpers ──────────────────────────────────────────────────────
 // Tint per production type. Unknown / custom types fall back to a neutral grey.
 const PROD_TYPE_TINT = {
@@ -350,92 +326,6 @@ function getNextMilestone(roadmap) {
   return roadmap.milestones.find(m => m.status !== 'Complete') || null
 }
 
-function useCardSize(prodId) {
-  const [size, setSizeState] = useState(() => {
-    if (typeof window === 'undefined') return 'S'
-    return normalizeSize(window.localStorage.getItem(CARD_SIZE_KEY(prodId)))
-  })
-  const setSize = useCallback((next) => {
-    const v = normalizeSize(next)
-    window.localStorage.setItem(CARD_SIZE_KEY(prodId), v)
-    setSizeState(v)
-  }, [prodId])
-  return [size, setSize]
-}
-
-// ── Size slider popover — segmented control with visual previews ────────────
-const SIZE_OPTIONS = [
-  { value: 'XS', label: 'XS', name: 'EXTRA SMALL', box: 6  },
-  { value: 'S',  label: 'S',  name: 'SMALL',       box: 10 },
-  { value: 'M',  label: 'M',  name: 'MEDIUM',      box: 14 },
-  { value: 'L',  label: 'L',  name: 'LARGE',       box: 18 },
-  { value: 'XL', label: 'XL', name: 'EXTRA LARGE', box: 22 },
-]
-
-function SizeSlider({ value, onChange, onClose }) {
-  useEffect(() => {
-    const handler = () => onClose()
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
-  }, [onClose])
-
-  const current = SIZE_OPTIONS.find(o => o.value === value) || SIZE_OPTIONS[0]
-
-  return (
-    <div
-      className="absolute top-full right-0 mt-1 z-50 p-3 min-w-[280px]"
-      style={{
-        background: 'var(--orbital-surface)',
-        border: '1px solid var(--orbital-border)',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.45)',
-      }}
-      onClick={e => e.stopPropagation()}
-    >
-      <div className="flex items-baseline justify-between mb-2">
-        <p className="text-[10px] text-orbital-subtle font-telemetry tracking-wider">CARD SIZE</p>
-        <p className="text-[10px] text-orbital-text font-telemetry tracking-wider">{current.name}</p>
-      </div>
-      <div
-        className="grid grid-cols-5 gap-0.5 p-0.5"
-        style={{ background: 'var(--orbital-bg)', border: '1px solid var(--orbital-border)' }}
-      >
-        {SIZE_OPTIONS.map((opt) => {
-          const active = value === opt.value
-          return (
-            <button
-              key={opt.value}
-              onClick={() => onChange(opt.value)}
-              className="flex flex-col items-center justify-center gap-1.5 py-2.5 transition-colors"
-              style={{
-                background: active ? 'rgba(59,130,246,0.18)' : 'transparent',
-                border: active ? '1px solid rgba(59,130,246,0.55)' : '1px solid transparent',
-                cursor: active ? 'default' : 'pointer',
-              }}
-              title={opt.name.toLowerCase()}
-            >
-              <span
-                className="block transition-all"
-                style={{
-                  width: opt.box,
-                  height: opt.box,
-                  background: active ? '#60a5fa' : 'var(--orbital-subtle)',
-                  opacity: active ? 0.95 : 0.45,
-                }}
-              />
-              <span
-                className="font-telemetry text-[10px] tracking-wider"
-                style={{ color: active ? '#60a5fa' : 'var(--orbital-subtle)' }}
-              >
-                {opt.label}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 // ── Production card ───────────────────────────────────────────────────────────
 function ProductionCard({
   production: prod,
@@ -449,9 +339,6 @@ function ProductionCard({
 }) {
   const { tasks, getContractor, currentUser, updateProduction } = useApp()
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [sizeOpen, setSizeOpen] = useState(false)
-  const [cardSize, setCardSize] = useCardSize(prod.id)
-  const sz = SIZE_STYLES[cardSize]
 
   const prodTasks      = tasks.filter(t => t.productionId === prod.id)
   const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
@@ -471,7 +358,7 @@ function ProductionCard({
   const addonCount   = prod.addons?.length || 0
   const damageCount  = prod.addons?.filter(a => a.damageFlag).length || 0
   const concernCount = prod.bible?.concerns?.length || 0
-  const showDetailSection = ['M', 'L', 'XL'].includes(cardSize) && (nextMile || addonCount > 0 || concernCount > 0)
+  const showDetailSection = nextMile || addonCount > 0 || concernCount > 0
 
   const locationLabel = prod.locationType === 'In-House (Orbital Studios)'
     ? 'Orbital Studios'
@@ -489,7 +376,7 @@ function ProductionCard({
       onDrop={(e) => { e.preventDefault(); onDrop(prod.id) }}
       onDragEnd={onDragEnd}
       className={clsx(
-        'relative group transition-all duration-150',
+        'relative group transition-all duration-150 h-full',
         isDragging && 'opacity-40 scale-[0.97]',
         isDragOver && !isDragging && 'scale-[1.01]',
       )}
@@ -502,33 +389,12 @@ function ProductionCard({
         />
       )}
 
-      {/* Hover controls: size slider + colour picker + drag handle */}
+      {/* Hover controls: colour picker + drag handle */}
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="relative">
-          <button
-            onClick={(e) => { e.stopPropagation(); setSizeOpen(o => !o); setPickerOpen(false) }}
-            className="p-1 transition-colors"
-            style={{
-              background: 'var(--orbital-surface)',
-              border: '1px solid var(--orbital-border)',
-              color: cardSize !== 'S' ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
-            }}
-            title="Card size"
-          >
-            <Maximize2 size={11} />
-          </button>
-          {sizeOpen && (
-            <SizeSlider
-              value={cardSize}
-              onChange={setCardSize}
-              onClose={() => setSizeOpen(false)}
-            />
-          )}
-        </div>
         {canCustomize && (
           <div className="relative">
             <button
-              onClick={(e) => { e.stopPropagation(); setPickerOpen(o => !o); setSizeOpen(false) }}
+              onClick={(e) => { e.stopPropagation(); setPickerOpen(o => !o) }}
               className="p-1 transition-colors"
               style={{
                 background: 'var(--orbital-surface)',
@@ -563,17 +429,19 @@ function ProductionCard({
         </div>
       </div>
 
-      {/* Card body */}
+      {/* Card body — h-full + flex-col so every card in a row stretches to
+          the same height (no awkward gaps under shorter cards), and the
+          bottom row (avatars + progress) gets mt-auto to pin to the bottom. */}
       <button
         onClick={onClick}
-        className="card text-left w-full hover:bg-orbital-panel transition-colors overflow-hidden"
+        className="card text-left w-full h-full flex flex-col hover:bg-orbital-panel transition-colors overflow-hidden"
         style={{ borderLeft: `3px solid ${borderColor}` }}
       >
         {/* Row 1: name + status badge */}
-        <div className={clsx('flex items-start justify-between gap-3 pb-0', sz.padX, sz.padTop)}>
+        <div className={clsx('flex items-start justify-between gap-3 pb-0', 'px-5', 'pt-4')}>
           <div className="flex-1 min-w-0 pr-12">
-            <p className={clsx('font-semibold text-orbital-text leading-tight truncate', sz.name)}>{prod.name}</p>
-            <p className={clsx('text-orbital-subtle truncate mt-1', sz.client)}>{prod.client}</p>
+            <p className={clsx('font-semibold text-orbital-text leading-tight truncate', 'text-lg')}>{prod.name}</p>
+            <p className={clsx('text-orbital-subtle truncate mt-1', 'text-sm')}>{prod.client}</p>
           </div>
           <div className="flex-shrink-0 flex flex-col items-end gap-1.5 mt-0.5">
             <StatusBadge status={prod.status} />
@@ -593,9 +461,9 @@ function ProductionCard({
         </div>
 
         {/* Row 2: type pill + countdown — always shown, scales with card size */}
-        <div className={clsx('flex items-center justify-between gap-3 pt-3', sz.padX)}>
+        <div className={clsx('flex items-center justify-between gap-3 pt-3', 'px-5')}>
           <span
-            className={clsx('font-telemetry tracking-wider uppercase whitespace-nowrap', sz.pill)}
+            className={clsx('font-telemetry tracking-wider uppercase whitespace-nowrap', 'text-[10px] px-2 py-0.5')}
             style={{
               background: typeTint.bg,
               border: `1px solid ${typeTint.border}`,
@@ -606,10 +474,10 @@ function ProductionCard({
           </span>
           {countdown && (
             <div className="flex items-baseline gap-1.5 font-telemetry">
-              <span className={clsx('font-semibold tabular-nums', sz.countdown)} style={{ color: countdown.accent }}>
+              <span className={clsx('font-semibold tabular-nums', 'text-lg')} style={{ color: countdown.accent }}>
                 {countdown.label}
               </span>
-              <span className={clsx('tracking-wider', sz.detailLabel)} style={{ color: 'var(--orbital-subtle)' }}>
+              <span className={clsx('tracking-wider', 'text-[9px]')} style={{ color: 'var(--orbital-subtle)' }}>
                 {countdown.sub}
               </span>
             </div>
@@ -617,20 +485,20 @@ function ProductionCard({
         </div>
 
         {/* Row 3: metadata — location, dates, stage manager */}
-        <div className={clsx('flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-3', sz.padX, sz.padBot)}>
-          <span className={clsx('flex items-center gap-1.5 text-orbital-subtle', sz.meta)}>
-            <MapPin size={sz.icon} className="flex-shrink-0" />
+        <div className={clsx('flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-3', 'px-5', 'pb-4')}>
+          <span className={clsx('flex items-center gap-1.5 text-orbital-subtle', 'text-xs')}>
+            <MapPin size={12} className="flex-shrink-0" />
             <span className="truncate max-w-[220px]">{locationLabel}</span>
           </span>
           {prod.startDate && (
-            <span className={clsx('flex items-center gap-1.5 text-orbital-subtle font-mono', sz.meta)}>
-              <Calendar size={sz.icon} className="flex-shrink-0" />
+            <span className={clsx('flex items-center gap-1.5 text-orbital-subtle font-mono', 'text-xs')}>
+              <Calendar size={12} className="flex-shrink-0" />
               {format(parseISO(prod.startDate), 'MMM d')}
               {prod.endDate && ` – ${format(parseISO(prod.endDate), 'MMM d')}`}
             </span>
           )}
           {stageManager && (
-            <span className={clsx('text-orbital-subtle truncate', sz.meta)}>
+            <span className={clsx('text-orbital-subtle truncate', 'text-xs')}>
               SM: {stageManager.name}
             </span>
           )}
@@ -639,17 +507,17 @@ function ProductionCard({
         {/* Detail section — only at M+ if there's something to show */}
         {showDetailSection && (
           <div
-            className={clsx('flex flex-col gap-2', sz.padX, sz.sectionPadY)}
+            className={clsx('flex flex-col gap-2', 'px-5', 'py-2.5')}
             style={{ borderTop: '1px solid var(--orbital-border)' }}
           >
             {nextMile && (
               <div className="flex items-baseline justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className={clsx('font-telemetry tracking-wider text-orbital-dim', sz.detailLabel)}>NEXT MILESTONE</p>
-                  <p className={clsx('text-orbital-text truncate mt-0.5', sz.detail)}>{nextMile.title}</p>
+                  <p className={clsx('font-telemetry tracking-wider text-orbital-dim', 'text-[9px]')}>NEXT MILESTONE</p>
+                  <p className={clsx('text-orbital-text truncate mt-0.5', 'text-xs')}>{nextMile.title}</p>
                 </div>
                 {nextMile.date && (
-                  <span className={clsx('font-mono text-orbital-subtle whitespace-nowrap', sz.detail)}>
+                  <span className={clsx('font-mono text-orbital-subtle whitespace-nowrap', 'text-xs')}>
                     {format(parseISO(nextMile.date), 'MMM d')}
                   </span>
                 )}
@@ -659,10 +527,10 @@ function ProductionCard({
               <div className="flex items-center gap-4">
                 {addonCount > 0 && (
                   <div className="flex items-baseline gap-1.5">
-                    <span className={clsx('font-telemetry tabular-nums font-semibold', sz.detail)} style={{ color: damageCount > 0 ? '#fb923c' : 'var(--orbital-text)' }}>
+                    <span className={clsx('font-telemetry tabular-nums font-semibold', 'text-xs')} style={{ color: damageCount > 0 ? '#fb923c' : 'var(--orbital-text)' }}>
                       {addonCount}
                     </span>
-                    <span className={clsx('font-telemetry tracking-wider text-orbital-subtle', sz.detailLabel)}>
+                    <span className={clsx('font-telemetry tracking-wider text-orbital-subtle', 'text-[9px]')}>
                       ADD-ON{addonCount === 1 ? '' : 'S'}
                       {damageCount > 0 && ` · ${damageCount} DMG`}
                     </span>
@@ -670,10 +538,10 @@ function ProductionCard({
                 )}
                 {concernCount > 0 && (
                   <div className="flex items-baseline gap-1.5">
-                    <span className={clsx('font-telemetry tabular-nums font-semibold', sz.detail)} style={{ color: '#fb923c' }}>
+                    <span className={clsx('font-telemetry tabular-nums font-semibold', 'text-xs')} style={{ color: '#fb923c' }}>
                       {concernCount}
                     </span>
-                    <span className={clsx('font-telemetry tracking-wider text-orbital-subtle', sz.detailLabel)}>
+                    <span className={clsx('font-telemetry tracking-wider text-orbital-subtle', 'text-[9px]')}>
                       CONCERN{concernCount === 1 ? '' : 'S'}
                     </span>
                   </div>
@@ -683,26 +551,28 @@ function ProductionCard({
           </div>
         )}
 
-        {/* Row 3: avatars + task progress */}
+        {/* Row 3: avatars + task progress — mt-auto pins this row to the
+            bottom of the card so all cards in a row align cleanly even when
+            some have a detail section above and others don't. */}
         <div
-          className={clsx('flex items-center justify-between', sz.padX, sz.rowPadY)}
+          className={clsx('flex items-center justify-between mt-auto', 'px-5', 'py-3')}
           style={{ borderTop: '1px solid var(--orbital-border)' }}
         >
-          <AvatarGroup userIds={memberIds} size={sz.avatar} />
+          <AvatarGroup userIds={memberIds} size={'sm'} />
           {prodTasks.length > 0 ? (
             <div className="flex items-center gap-2.5">
-              <div className={clsx('h-1', sz.barW)} style={{ background: 'var(--orbital-border)' }}>
+              <div className={clsx('h-1', 'w-24')} style={{ background: 'var(--orbital-border)' }}>
                 <div
                   className="h-full transition-all duration-300"
                   style={{ width: `${pct}%`, background: borderColor }}
                 />
               </div>
-              <span className={clsx('text-orbital-subtle font-mono tabular-nums', sz.meta)}>
+              <span className={clsx('text-orbital-subtle font-mono tabular-nums', 'text-xs')}>
                 {completedTasks}/{prodTasks.length}
               </span>
             </div>
           ) : (
-            <span className={clsx('text-orbital-dim', sz.meta)}>No tasks</span>
+            <span className={clsx('text-orbital-dim', 'text-xs')}>No tasks</span>
           )}
         </div>
       </button>
