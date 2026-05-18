@@ -16,10 +16,14 @@ export const PRODUCTION_STATUS = {
 }
 
 export const PRODUCTION_TYPE = {
-  LED_VOLUME: 'LED Volume',
-  MOBILE_BUILD: 'Mobile Build',
-  OTHER: 'Other',
+  TVC_AOTO:           'TVC AOTO',
+  MOBILE_CAR_PROCESS: 'Mobile CAR process CLI',
+  LITTLE_DIPPER:      'Little Dipper',
 }
+
+// Ordered list for UI dropdowns. "Custom" is handled as a free-form entry
+// option in the form — not stored here.
+export const PRODUCTION_TYPE_PRESETS = Object.values(PRODUCTION_TYPE)
 
 export const LOCATION_TYPE = {
   IN_HOUSE: 'In-House (Orbital Studios)',
@@ -123,7 +127,7 @@ export function createProduction(overrides = {}) {
     client: '',
     locationType: LOCATION_TYPE.IN_HOUSE,
     locationAddress: '',
-    productionType: PRODUCTION_TYPE.LED_VOLUME,
+    productionType: PRODUCTION_TYPE.TVC_AOTO,
     status: PRODUCTION_STATUS.INCOMING,
     startDate: '',
     endDate: '',

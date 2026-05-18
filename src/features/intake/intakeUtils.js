@@ -129,11 +129,11 @@ export function parseTextContent(text, sourceId) {
   const isLED    = LED_KEYWORDS.some(k => lower.includes(k))
   const isMobile = MOBILE_KEYWORDS.some(k => lower.includes(k))
   if (isLED) {
-    candidates.productionType = { value: PRODUCTION_TYPE.LED_VOLUME,   confidence: 'medium', source: sourceId }
-    candidates.locationType   = { value: LOCATION_TYPE.IN_HOUSE,       confidence: 'medium', source: sourceId }
+    candidates.productionType = { value: PRODUCTION_TYPE.TVC_AOTO,           confidence: 'medium', source: sourceId }
+    candidates.locationType   = { value: LOCATION_TYPE.IN_HOUSE,             confidence: 'medium', source: sourceId }
   } else if (isMobile) {
-    candidates.productionType = { value: PRODUCTION_TYPE.MOBILE_BUILD, confidence: 'medium', source: sourceId }
-    candidates.locationType   = { value: LOCATION_TYPE.MOBILE,         confidence: 'medium', source: sourceId }
+    candidates.productionType = { value: PRODUCTION_TYPE.MOBILE_CAR_PROCESS, confidence: 'medium', source: sourceId }
+    candidates.locationType   = { value: LOCATION_TYPE.MOBILE,               confidence: 'medium', source: sourceId }
   }
 
   // ── Dates ──
@@ -305,9 +305,9 @@ const QUESTION_DEFS = [
     hint: null,
     type: 'select',
     options: [
-      { label: 'LED Volume',    value: PRODUCTION_TYPE.LED_VOLUME   },
-      { label: 'Mobile Build',  value: PRODUCTION_TYPE.MOBILE_BUILD },
-      { label: 'Other',         value: PRODUCTION_TYPE.OTHER        },
+      { label: 'TVC AOTO',                value: PRODUCTION_TYPE.TVC_AOTO           },
+      { label: 'Mobile CAR process CLI',  value: PRODUCTION_TYPE.MOBILE_CAR_PROCESS },
+      { label: 'Little Dipper',           value: PRODUCTION_TYPE.LITTLE_DIPPER      },
     ],
   },
   {
@@ -342,8 +342,17 @@ export function resolveField(field, extracted, answers, edits) {
 }
 
 // ─── Starter tasks ────────────────────────────────────────────────────────────
+// Fallback starter tasks for unknown / custom production types.
+const FALLBACK_TASKS = [
+  { title: 'Confirm production brief with client',            priority: TASK_PRIORITY.HIGH   },
+  { title: 'Finalise crew and equipment list',                priority: TASK_PRIORITY.HIGH   },
+  { title: 'Confirm location and access arrangements',        priority: TASK_PRIORITY.MEDIUM },
+  { title: 'Schedule pre-production walkthrough',             priority: TASK_PRIORITY.MEDIUM },
+  { title: 'Set up communication channels with client',       priority: TASK_PRIORITY.LOW    },
+]
+
 const TASK_DEFS = {
-  [PRODUCTION_TYPE.LED_VOLUME]: [
+  [PRODUCTION_TYPE.TVC_AOTO]: [
     { title: 'Confirm client brief and shot list',              priority: TASK_PRIORITY.HIGH   },
     { title: 'Schedule technical recce',                        priority: TASK_PRIORITY.HIGH   },
     { title: 'Confirm LED wall configuration and pixel mapping',priority: TASK_PRIORITY.MEDIUM },
@@ -351,7 +360,7 @@ const TASK_DEFS = {
     { title: 'Test lighting rig and background content',        priority: TASK_PRIORITY.MEDIUM },
     { title: 'Confirm post-production pipeline with client',    priority: TASK_PRIORITY.LOW    },
   ],
-  [PRODUCTION_TYPE.MOBILE_BUILD]: [
+  [PRODUCTION_TYPE.MOBILE_CAR_PROCESS]: [
     { title: 'Confirm venue access times and loading plan',     priority: TASK_PRIORITY.HIGH   },
     { title: 'Arrange transport and logistics for equipment',   priority: TASK_PRIORITY.HIGH   },
     { title: 'Coordinate power requirements with venue',        priority: TASK_PRIORITY.MEDIUM },
@@ -359,17 +368,17 @@ const TASK_DEFS = {
     { title: 'Pre-shoot pack and inventory check',              priority: TASK_PRIORITY.MEDIUM },
     { title: 'Arrange derig transport and return schedule',     priority: TASK_PRIORITY.LOW    },
   ],
-  [PRODUCTION_TYPE.OTHER]: [
-    { title: 'Confirm production brief with client',            priority: TASK_PRIORITY.HIGH   },
-    { title: 'Finalise crew and equipment list',                priority: TASK_PRIORITY.HIGH   },
-    { title: 'Confirm location and access arrangements',        priority: TASK_PRIORITY.MEDIUM },
+  [PRODUCTION_TYPE.LITTLE_DIPPER]: [
+    { title: 'Confirm client brief and shot list',              priority: TASK_PRIORITY.HIGH   },
+    { title: 'Confirm Little Dipper stage configuration',       priority: TASK_PRIORITY.HIGH   },
+    { title: 'Brief crew on Little Dipper workflow',            priority: TASK_PRIORITY.MEDIUM },
     { title: 'Schedule pre-production walkthrough',             priority: TASK_PRIORITY.MEDIUM },
-    { title: 'Set up communication channels with client',       priority: TASK_PRIORITY.LOW    },
+    { title: 'Confirm post-production pipeline with client',    priority: TASK_PRIORITY.LOW    },
   ],
 }
 
 export function generateStarterTasks(productionType, productionId, createdBy) {
-  const defs = TASK_DEFS[productionType] || TASK_DEFS[PRODUCTION_TYPE.OTHER]
+  const defs = TASK_DEFS[productionType] || FALLBACK_TASKS
   return defs.map(def => createTask({
     productionId,
     title:      def.title,
@@ -382,22 +391,30 @@ export function generateStarterTasks(productionType, productionId, createdBy) {
 // ─── Roadmap milestones ───────────────────────────────────────────────────────
 const fmt = d => format(d, "yyyy-MM-dd'T'09:00")
 
+// Fallback milestone set for unknown / custom production types.
+const FALLBACK_MILESTONES = (start, end) => [
+  { title: 'Pre-Production Complete',  type: MILESTONE_TYPE.PRE_PRODUCTION, date: fmt(subDays(start,  7)) },
+  { title: 'Shoot Day',                type: MILESTONE_TYPE.SHOOT_DAY,      date: fmt(start)              },
+  { title: 'Wrap',                     type: MILESTONE_TYPE.WRAP,           date: fmt(addDays(end,    1)) },
+]
+
 const MILESTONE_DEFS = {
-  [PRODUCTION_TYPE.LED_VOLUME]: (start, end) => [
+  [PRODUCTION_TYPE.TVC_AOTO]: (start, end) => [
     { title: 'Client Brief Confirmed',   type: MILESTONE_TYPE.CLIENT,         date: fmt(subDays(start, 14)) },
     { title: 'Tech Recce Complete',      type: MILESTONE_TYPE.TECHNICAL,      date: fmt(subDays(start,  7)) },
     { title: 'Pre-Production Lock',      type: MILESTONE_TYPE.PRE_PRODUCTION, date: fmt(subDays(start,  3)) },
     { title: 'Shoot Day',                type: MILESTONE_TYPE.SHOOT_DAY,      date: fmt(start)              },
     { title: 'Wrap & Handoff',           type: MILESTONE_TYPE.WRAP,           date: fmt(addDays(end,    1)) },
   ],
-  [PRODUCTION_TYPE.MOBILE_BUILD]: (start, end) => [
+  [PRODUCTION_TYPE.MOBILE_CAR_PROCESS]: (start, end) => [
     { title: 'Venue Confirmed',          type: MILESTONE_TYPE.LOGISTICS,      date: fmt(subDays(start, 14)) },
     { title: 'Equipment Dispatch',       type: MILESTONE_TYPE.LOGISTICS,      date: fmt(subDays(start,  2)) },
     { title: 'Shoot Day',                type: MILESTONE_TYPE.SHOOT_DAY,      date: fmt(start)              },
     { title: 'Derig & Wrap',             type: MILESTONE_TYPE.WRAP,           date: fmt(addDays(end,    1)) },
   ],
-  [PRODUCTION_TYPE.OTHER]: (start, end) => [
-    { title: 'Pre-Production Complete',  type: MILESTONE_TYPE.PRE_PRODUCTION, date: fmt(subDays(start,  7)) },
+  [PRODUCTION_TYPE.LITTLE_DIPPER]: (start, end) => [
+    { title: 'Client Brief Confirmed',   type: MILESTONE_TYPE.CLIENT,         date: fmt(subDays(start,  7)) },
+    { title: 'Stage Configuration Set',  type: MILESTONE_TYPE.TECHNICAL,      date: fmt(subDays(start,  3)) },
     { title: 'Shoot Day',                type: MILESTONE_TYPE.SHOOT_DAY,      date: fmt(start)              },
     { title: 'Wrap',                     type: MILESTONE_TYPE.WRAP,           date: fmt(addDays(end,    1)) },
   ],
@@ -407,7 +424,7 @@ export function generateRoadmapMilestones(productionType, startDate, endDate, cr
   if (!startDate) return []
   const start = new Date(startDate)
   const end   = endDate ? new Date(endDate) : addDays(start, 1)
-  const defs  = (MILESTONE_DEFS[productionType] || MILESTONE_DEFS[PRODUCTION_TYPE.OTHER])(start, end)
+  const defs  = (MILESTONE_DEFS[productionType] || FALLBACK_MILESTONES)(start, end)
   return defs.map(def => createMilestone({
     ...def,
     status:    MILESTONE_STATUS.UPCOMING,

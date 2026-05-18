@@ -4,9 +4,13 @@ import { Check, Loader2, AlertCircle } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import {
-  PRODUCTION_STATUS, PRODUCTION_TYPE, LOCATION_TYPE, ROLES,
+  PRODUCTION_STATUS, PRODUCTION_TYPE, PRODUCTION_TYPE_PRESETS, LOCATION_TYPE, ROLES,
   createProduction, USERS
 } from '../../data/models.js'
+
+// Sentinel for the "Custom…" dropdown option. The actual saved value is
+// whatever the user types in the free-form input below.
+const CUSTOM_TYPE = '__custom__'
 
 export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }) {
   const { currentUser } = useApp()
@@ -21,13 +25,19 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
     client: initial?.client || '',
     locationType: initial?.locationType || LOCATION_TYPE.IN_HOUSE,
     locationAddress: initial?.locationAddress || '',
-    productionType: initial?.productionType || PRODUCTION_TYPE.LED_VOLUME,
+    productionType: initial?.productionType || PRODUCTION_TYPE.TVC_AOTO,
     status: initial?.status || PRODUCTION_STATUS.INCOMING,
     startDate: initial?.startDate || '',
     endDate: initial?.endDate || '',
     assignedMembers: initial?.assignedMembers || [],
     instructionNotes: initial?.instructionPackage?.notes || '',
   })
+
+  // Type dropdown UX: if the current productionType isn't one of the presets
+  // (e.g. legacy 'LED Volume', 'Other', or a custom string), the dropdown
+  // shows "Custom" and a text input below holds the actual value.
+  const isCustomType = form.productionType !== '' && !PRODUCTION_TYPE_PRESETS.includes(form.productionType)
+  const [showCustomType, setShowCustomType] = useState(isCustomType)
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
@@ -112,11 +122,37 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Type</label>
-          <select className="select" value={form.productionType} onChange={e => set('productionType', e.target.value)}>
-            {Object.values(PRODUCTION_TYPE).map(t => (
+          <select
+            className="select"
+            value={showCustomType ? CUSTOM_TYPE : form.productionType}
+            onChange={e => {
+              if (e.target.value === CUSTOM_TYPE) {
+                setShowCustomType(true)
+                // Clear the value so the input below starts empty unless
+                // the existing value was already custom (preserve in that case)
+                if (PRODUCTION_TYPE_PRESETS.includes(form.productionType)) {
+                  set('productionType', '')
+                }
+              } else {
+                setShowCustomType(false)
+                set('productionType', e.target.value)
+              }
+            }}
+          >
+            {PRODUCTION_TYPE_PRESETS.map(t => (
               <option key={t} value={t}>{t}</option>
             ))}
+            <option value={CUSTOM_TYPE}>Custom…</option>
           </select>
+          {showCustomType && (
+            <input
+              className="input mt-2"
+              value={form.productionType}
+              onChange={e => set('productionType', e.target.value)}
+              placeholder="Type a custom production type"
+              autoFocus={!isCustomType}
+            />
+          )}
         </div>
         <div>
           <label className="label">Status</label>

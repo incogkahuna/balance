@@ -310,11 +310,17 @@ const SIZE_STYLES = {
 }
 
 // ── Card detail helpers ──────────────────────────────────────────────────────
+// Tint per production type. Unknown / custom types fall back to a neutral grey.
 const PROD_TYPE_TINT = {
-  'LED Volume':   { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  text: '#60a5fa' },
-  'Mobile Build': { bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
-  'Other':        { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.35)', text: '#94a3b8' },
+  'TVC AOTO':               { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  text: '#60a5fa' },
+  'Mobile CAR process CLI': { bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
+  'Little Dipper':          { bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)', text: '#a78bfa' },
+  // Legacy values left intact so any un-migrated demo rows still render
+  'LED Volume':             { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  text: '#60a5fa' },
+  'Mobile Build':           { bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
+  'Other':                  { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.35)', text: '#94a3b8' },
 }
+const FALLBACK_TINT = { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.35)', text: '#94a3b8' }
 
 // Returns { label, accent } describing the production's temporal state
 // relative to today, for the countdown badge.
@@ -459,7 +465,7 @@ function ProductionCard({
   const pct         = prodTasks.length > 0 ? (completedTasks / prodTasks.length) * 100 : 0
 
   // ── Card detail derivations ──
-  const typeTint     = PROD_TYPE_TINT[prod.productionType] || PROD_TYPE_TINT['Other']
+  const typeTint     = PROD_TYPE_TINT[prod.productionType] || FALLBACK_TINT
   const countdown    = computeCountdown(prod)
   const nextMile     = getNextMilestone(prod.roadmap)
   const addonCount   = prod.addons?.length || 0
