@@ -163,8 +163,7 @@ export function RoadmapTab({ production }) {
         <MilestoneForm
           production={production}
           initial={editingMilestone}
-          onSubmit={handleMilestoneSubmit}
-          onCancel={() => { setShowMilestoneForm(false); setEditingMilestone(null) }}
+          onClose={() => { setShowMilestoneForm(false); setEditingMilestone(null) }}
         />
       )}
 

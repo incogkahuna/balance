@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react'
-import { X } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { format } from 'date-fns'
+import { X, Check, Loader2, AlertCircle } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
+import { useAutoSave } from '../../../hooks/useAutoSave.js'
 import {
   MILESTONE_TYPE, MILESTONE_STATUS, createMilestone, USERS
 } from '../../../data/models.js'
@@ -23,9 +25,35 @@ function useProductionTeam(production) {
   }, [production, resolveAssignee])
 }
 
-export function MilestoneForm({ production, initial, onSubmit, onCancel }) {
-  const { currentUser } = useApp()
+export function MilestoneForm({ production, initial, onClose }) {
+  const { currentUser, addMilestone, updateMilestone, deleteMilestone } = useApp()
   const team = useProductionTeam(production)
+
+  // Eager-create flow: if there's no `initial`, we create a placeholder
+  // milestone the moment this form mounts so subsequent edits can save
+  // through updateMilestone. The working milestone's id is tracked in a ref
+  // so the auto-save effect always targets the latest one.
+  //
+  // This means the moment you click "+ Add Milestone", an empty row appears
+  // in the roadmap. If you close the form without typing a title we delete
+  // that row so empty milestones don't accumulate.
+  const workingIdRef = useRef(initial?.id || null)
+  const createdHereRef = useRef(false)
+
+  useEffect(() => {
+    if (initial?.id || workingIdRef.current) return
+    const placeholder = createMilestone({
+      title: '',
+      date: '',
+      type: MILESTONE_TYPE.PRE_PRODUCTION,
+      status: MILESTONE_STATUS.UPCOMING,
+      createdBy: currentUser?.id,
+    })
+    workingIdRef.current = placeholder.id
+    createdHereRef.current = true
+    addMilestone(production.id, placeholder)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [form, setForm] = useState({
     title:       initial?.title || '',
@@ -38,37 +66,57 @@ export function MilestoneForm({ production, initial, onSubmit, onCancel }) {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!form.title.trim() || !form.date) return
-    const milestone = createMilestone({
-      ...(initial || {}),
-      ...form,
-      createdBy: initial?.createdBy || currentUser?.id,
-    })
-    onSubmit(milestone)
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  // 600ms debounce. Each save targets workingIdRef.current via updateMilestone.
+  // The hook bails (returns 'idle') if `enabled` is false — we only enable it
+  // once the placeholder has been created, so we don't race the addMilestone
+  // call above.
+  const enabled = !!workingIdRef.current
+  const { status: saveStatus, lastSavedAt, error: saveError } = useAutoSave(
+    form,
+    (value) => {
+      const id = workingIdRef.current
+      if (!id) return
+      updateMilestone(production.id, id, value)
+    },
+    { enabled, delay: 600 }
+  )
+
+  // ── Close behaviour ───────────────────────────────────────────────────────
+  // If the user closes without ever typing a title AND we created the
+  // milestone on mount (vs editing an existing one), clean it up so empty
+  // rows don't pile up in the roadmap.
+  const handleClose = () => {
+    const id = workingIdRef.current
+    if (id && createdHereRef.current && !form.title.trim()) {
+      deleteMilestone(production.id, id)
+    }
+    onClose?.()
   }
 
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/60 z-40" onClick={onCancel} />
+      <div className="fixed inset-0 bg-black/60 z-40" onClick={handleClose} />
 
       {/* Sheet */}
       <div className="fixed inset-x-0 bottom-0 z-50 bg-orbital-surface border-t border-orbital-border rounded-t-2xl max-h-[92vh] flex flex-col lg:inset-auto lg:fixed lg:top-1/2 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:w-[520px] lg:max-h-[90vh] lg:rounded-xl lg:border">
 
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-orbital-border flex-shrink-0">
-          <h3 className="font-semibold text-orbital-text">
-            {initial ? 'Edit Milestone' : 'Add Milestone'}
-          </h3>
-          <button onClick={onCancel} className="p-1.5 rounded hover:bg-orbital-muted transition-colors">
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-orbital-text">
+              {initial ? 'Edit Milestone' : 'Add Milestone'}
+            </h3>
+            <SaveStatus status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} />
+          </div>
+          <button onClick={handleClose} className="p-1.5 rounded hover:bg-orbital-muted transition-colors">
             <X size={16} className="text-orbital-subtle" />
           </button>
         </div>
 
         {/* Scrollable form */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 p-4 space-y-4">
+        <div className="overflow-y-auto flex-1 p-4 space-y-4">
 
           <div>
             <label className="label">Milestone Title *</label>
@@ -77,7 +125,6 @@ export function MilestoneForm({ production, initial, onSubmit, onCancel }) {
               value={form.title}
               onChange={e => set('title', e.target.value)}
               placeholder="e.g. LED Wall Delivery, First Day of Shoot"
-              required
               autoFocus
             />
           </div>
@@ -134,13 +181,52 @@ export function MilestoneForm({ production, initial, onSubmit, onCancel }) {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" className="btn-primary flex-1">
-              {initial ? 'Save Changes' : 'Add Milestone'}
+            <button type="button" onClick={handleClose} className="btn-primary flex-1">
+              Done
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </>
+  )
+}
+
+// ── Save status pill — telemetric chip next to the modal title ──────────────
+function SaveStatus({ status, lastSavedAt, error }) {
+  let icon, label, color, bg, border
+  if (status === 'saving') {
+    icon = <Loader2 size={10} className="animate-spin" />
+    label = 'SAVING'
+    color = '#fbbf24'
+    bg = 'rgba(251,191,36,0.1)'
+    border = 'rgba(251,191,36,0.3)'
+  } else if (status === 'error') {
+    icon = <AlertCircle size={10} />
+    label = 'SAVE FAILED'
+    color = '#ef4444'
+    bg = 'rgba(239,68,68,0.1)'
+    border = 'rgba(239,68,68,0.3)'
+  } else if (status === 'saved' && lastSavedAt) {
+    icon = <Check size={10} />
+    label = `SAVED ${format(lastSavedAt, 'HH:mm:ss')}`
+    color = '#34d399'
+    bg = 'rgba(52,211,153,0.1)'
+    border = 'rgba(52,211,153,0.3)'
+  } else {
+    icon = <Check size={10} className="opacity-40" />
+    label = 'AUTO-SAVE'
+    color = 'var(--orbital-subtle)'
+    bg = 'transparent'
+    border = 'var(--orbital-border)'
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2 py-0.5 font-telemetry text-[9px] tracking-wider"
+      style={{ color, background: bg, border: `1px solid ${border}` }}
+      title={error || ''}
+    >
+      {icon}
+      <span>{label}</span>
+    </span>
   )
 }
