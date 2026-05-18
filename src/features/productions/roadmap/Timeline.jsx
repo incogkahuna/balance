@@ -112,8 +112,10 @@ export function Timeline({ milestones, canEdit, onEdit, onDelete, onAdd }) {
               </span>
             </div>
 
-            {/* Milestone cards in this group */}
-            <div className={clsx('ml-[47px] space-y-2 mb-2', group.isPast && 'opacity-60')}>
+            {/* Milestone cards in this group — per-card dimming decisions live
+                on the card itself so In Progress milestones stay loud even
+                when they're past-due (whereas Complete past work fades back). */}
+            <div className="ml-[47px] space-y-2 mb-2">
               {group.milestones.map(milestone => {
                 const typeCfg = MILESTONE_TYPE_CONFIG[milestone.type] || MILESTONE_TYPE_CONFIG['Pre-Production']
                 return (

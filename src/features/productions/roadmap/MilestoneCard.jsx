@@ -12,20 +12,35 @@ export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
   const statusCfg = MILESTONE_STATUS_CONFIG[milestone.status] || MILESTONE_STATUS_CONFIG['Upcoming']
   const owner     = milestone.ownerId ? resolveAssignee(milestone.ownerId) : null
 
-  const date    = milestone.date ? parseISO(milestone.date) : null
-  const isPastDate = date && isPast(date)
+  const date        = milestone.date ? parseISO(milestone.date) : null
+  const isPastDate  = date && isPast(date)
   const isTodayDate = date && isToday(date)
-  const isAtRisk = milestone.status === MILESTONE_STATUS.AT_RISK
-  const isComplete = milestone.status === MILESTONE_STATUS.COMPLETE
+  const isAtRisk    = milestone.status === MILESTONE_STATUS.AT_RISK
+  const isComplete  = milestone.status === MILESTONE_STATUS.COMPLETE
+  const isInProgress = milestone.status === MILESTONE_STATUS.IN_PROGRESS
 
+  // Per-status visual treatment. In Progress always stays loud (even when
+  // past-due, since that's active work that needs attention); Complete fades
+  // back; Upcoming-past dims slightly; Upcoming-future is neutral.
   return (
     <div className={clsx(
       'relative rounded-lg border p-3.5 transition-all group',
-      isAtRisk   ? 'border-amber-500/40 bg-amber-500/5' :
-      isComplete ? 'border-orbital-border bg-orbital-surface opacity-60' :
-      isTodayDate ? 'border-blue-500/40 bg-blue-500/5' :
-                 'border-orbital-border bg-orbital-muted'
+      isInProgress ? 'border-blue-500/60 bg-blue-500/[0.08] shadow-[0_0_18px_rgba(59,130,246,0.18)]' :
+      isAtRisk     ? 'border-amber-500/40 bg-amber-500/5' :
+      isComplete   ? 'border-orbital-border bg-orbital-surface opacity-55' :
+      isTodayDate  ? 'border-blue-500/40 bg-blue-500/5' :
+                     'border-orbital-border bg-orbital-muted',
+      // Past-dated Upcoming items dim slightly (the date slipped without
+      // anyone touching them). In Progress overrides this.
+      !isInProgress && !isComplete && !isAtRisk && isPastDate && 'opacity-70'
     )}>
+      {/* In Progress accent: thick glowing left border */}
+      {isInProgress && (
+        <span
+          className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg"
+          style={{ background: '#3b82f6', boxShadow: '0 0 8px rgba(59,130,246,0.7)' }}
+        />
+      )}
       {/* Top row */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
@@ -33,8 +48,21 @@ export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
           <span className={clsx('text-xs px-2 py-0.5 rounded border font-medium', typeCfg.bg, typeCfg.text, typeCfg.border)}>
             {milestone.type}
           </span>
-          {/* Status badge */}
-          <span className={clsx('text-xs px-2 py-0.5 rounded border', statusCfg.bg, statusCfg.text, statusCfg.border)}>
+          {/* Status badge — In Progress is bumped up visually with a brighter
+              background and a pulsing dot so it stands out from Complete /
+              Upcoming chips. */}
+          <span className={clsx(
+            'text-xs px-2 py-0.5 rounded border inline-flex items-center gap-1.5',
+            isInProgress
+              ? 'border-blue-500/70 bg-blue-500/15 text-blue-300 font-semibold'
+              : `${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`
+          )}>
+            {isInProgress && (
+              <span className="relative inline-flex w-1.5 h-1.5 flex-shrink-0">
+                <span className="absolute inline-flex w-full h-full rounded-full bg-blue-400 opacity-75 animate-ping" />
+                <span className="relative inline-flex w-full h-full rounded-full bg-blue-400" />
+              </span>
+            )}
             {milestone.status}
           </span>
           {isAtRisk && <AlertTriangle size={13} className="text-amber-400 flex-shrink-0" />}
