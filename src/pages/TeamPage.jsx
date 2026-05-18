@@ -1,12 +1,20 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, parseISO, differenceInCalendarDays } from 'date-fns'
 import {
   Mail, MapPin, Briefcase, CheckCircle2, Activity, Film,
-  Clock, Target, AlertOctagon, Zap, ArrowRight,
+  Clock, Target, AlertOctagon, Zap, ArrowRight, Plus, X, Loader2,
 } from 'lucide-react'
 import { USERS, ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { useApp } from '../context/AppContext.jsx'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
+import { Modal } from '../components/ui/Modal.jsx'
+import { listRoleAssignments, upsertRoleAssignment } from '../lib/data/roleAssignments.ts'
+
+// Curated palette for new-member color selection — matches the existing USERS aesthetic
+const COLOR_PALETTE = [
+  '#6366f1', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b',
+  '#ef4444', '#ec4899', '#06b6d4', '#84cc16', '#a78bfa',
+]
 
 // Map our role enum to user-facing labels and color accents
 const ROLE_META = {
@@ -26,8 +34,40 @@ const USER_EMAIL = {
 }
 
 export function TeamPage() {
+  const { currentUser } = useApp()
+  const isAdmin = currentUser?.role === ROLES.ADMIN
+
+  // Pre-authorized members from Supabase (admin-readable). For non-admins this
+  // stays empty and we fall back to the hardcoded USERS list.
+  const [assignments, setAssignments] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const reload = async () => {
+    try {
+      const rows = await listRoleAssignments()
+      setAssignments(rows)
+    } catch (e) {
+      console.error('[TeamPage] failed to load role_assignments', e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { reload() }, [])
+
+  // Merge USERS (legacy hardcoded — keeps the in-app id/avatar) with any
+  // role_assignments that aren't already represented in USERS by email match.
+  // The result is the canonical team list shown in the tab strip.
+  const members = useMemo(() => buildMembers(assignments), [assignments])
+
   const [selectedId, setSelectedId] = useState(USERS[0].id)
-  const selected = USERS.find(u => u.id === selectedId) || USERS[0]
+  const selected = members.find(m => m.id === selectedId) || members[0]
+
+  const [showAdd, setShowAdd] = useState(false)
+  const handleAdded = async () => {
+    setShowAdd(false)
+    await reload()
+  }
 
   return (
     <div className="px-4 lg:px-6 py-5 max-w-7xl mx-auto">
@@ -39,9 +79,20 @@ export function TeamPage() {
           </p>
           <h1 className="text-base font-semibold text-orbital-text">Salary Roster</h1>
         </div>
-        <p className="font-telemetry text-[10px] text-orbital-dim tracking-wider">
-          {USERS.length} ACTIVE
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="font-telemetry text-[10px] text-orbital-dim tracking-wider">
+            {members.length} MEMBER{members.length === 1 ? '' : 'S'}
+          </p>
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="btn-primary flex items-center gap-1.5"
+            >
+              <Plus size={14} />
+              <span>Add Member</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Sub-tab strip: one per team member ───────────────────────── */}
@@ -52,7 +103,7 @@ export function TeamPage() {
           border: '1px solid var(--orbital-border)',
         }}
       >
-        {USERS.map(user => {
+        {members.map(user => {
           const active = user.id === selectedId
           const roleMeta = ROLE_META[user.role]
           return (
@@ -64,6 +115,7 @@ export function TeamPage() {
                 background: active ? 'var(--orbital-surface)' : 'transparent',
                 border: active ? `1px solid ${user.color}55` : '1px solid transparent',
                 color: active ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
+                opacity: user.isPending ? 0.75 : 1,
               }}
             >
               <span
@@ -83,13 +135,164 @@ export function TeamPage() {
               >
                 {roleMeta.label.toUpperCase()}
               </span>
+              {user.isPending && (
+                <span
+                  className="font-telemetry text-[9px] tracking-wider px-1.5 py-px"
+                  style={{
+                    background: 'rgba(251,191,36,0.12)',
+                    border: '1px solid rgba(251,191,36,0.35)',
+                    color: '#fbbf24',
+                  }}
+                  title="Pre-authorized — hasn't signed in yet"
+                >
+                  PENDING
+                </span>
+              )}
             </button>
           )
         })}
       </div>
 
-      <TeamMemberDetail user={selected} />
+      {selected && <TeamMemberDetail user={selected} />}
+
+      <Modal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        title="Add Team Member"
+        size="md"
+      >
+        <AddMemberForm onAdded={handleAdded} onCancel={() => setShowAdd(false)} />
+      </Modal>
     </div>
+  )
+}
+
+// Merge the legacy USERS list with any role_assignments not already represented.
+// Members from role_assignments who don't have a profile yet (no legacy USERS
+// row by email match AND not yet signed in) are flagged isPending so the UI
+// can show an "awaiting first sign-in" badge.
+function buildMembers(assignments) {
+  const known = USERS.map(u => ({ ...u, email: USER_EMAIL[u.id] || null }))
+  const knownEmails = new Set(known.map(u => u.email).filter(Boolean))
+
+  const extras = assignments
+    .filter(a => !knownEmails.has(a.email))
+    .map(a => ({
+      id: a.email,                                            // stable per-email id
+      name: a.displayName || a.email.split('@')[0],
+      role: a.role,
+      avatar: (a.displayName || a.email).charAt(0).toUpperCase(),
+      color: a.displayColor || '#6b7280',
+      email: a.email,
+      isPending: true,
+    }))
+
+  return [...known, ...extras]
+}
+
+// ── Add Team Member modal form ────────────────────────────────────────────────
+function AddMemberForm({ onAdded, onCancel }) {
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [role, setRole] = useState(ROLES.CREW)
+  const [color, setColor] = useState(COLOR_PALETTE[0])
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState(null)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!email.trim()) { setError('Email is required.'); return }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await upsertRoleAssignment({
+        email: email.trim(),
+        role,
+        displayName: name.trim() || undefined,
+        displayColor: color,
+      })
+      onAdded()
+    } catch (err) {
+      setError(err?.message || 'Failed to save.')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <p className="text-xs text-orbital-subtle leading-relaxed">
+        Pre-authorize a new team member. They'll be auto-promoted to the role
+        below when they sign in with this email for the first time at
+        balance-six-gamma.vercel.app.
+      </p>
+
+      <div>
+        <label className="label">Work email *</label>
+        <input
+          type="email"
+          className="input"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          placeholder="name@orbitalvs.com"
+          required
+          autoFocus
+        />
+      </div>
+
+      <div>
+        <label className="label">Display name</label>
+        <input
+          className="input"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="(optional — defaults to the local-part of the email)"
+        />
+      </div>
+
+      <div>
+        <label className="label">Role</label>
+        <select className="select" value={role} onChange={e => setRole(e.target.value)}>
+          <option value={ROLES.CREW}>Crew — view assignments, log add-ons, complete tasks</option>
+          <option value={ROLES.SUPERVISOR}>Supervisor — create and manage productions</option>
+          <option value={ROLES.ADMIN}>Admin — full access</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="label">Avatar color</label>
+        <div className="flex flex-wrap gap-1.5">
+          {COLOR_PALETTE.map(c => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              className="w-8 h-8 transition-transform"
+              style={{
+                background: c,
+                border: color === c ? '2px solid var(--orbital-text)' : '1px solid var(--orbital-border)',
+                transform: color === c ? 'scale(1.1)' : 'scale(1)',
+              }}
+              title={c}
+            />
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <p className="text-xs text-red-400 px-2 py-1.5"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+          {error}
+        </p>
+      )}
+
+      <div className="flex gap-3 pt-2">
+        <button type="button" onClick={onCancel} className="btn-secondary flex-1" disabled={submitting}>Cancel</button>
+        <button type="submit" className="btn-primary flex-1 inline-flex items-center justify-center gap-2" disabled={submitting}>
+          {submitting && <Loader2 size={14} className="animate-spin" />}
+          {submitting ? 'Saving…' : 'Pre-authorize'}
+        </button>
+      </div>
+    </form>
   )
 }
 
