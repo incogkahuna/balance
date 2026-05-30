@@ -5,15 +5,28 @@ import { usePrototypeData } from './dataSource.js'
 // ── Visual dimensions (constant regardless of data) ─────────────────────────
 const NAME_COL_W = 220
 const DAY_W      = 22
-const ROW_H      = 42
+const ROW_H      = 48                    // bumped from 42 — gives bars more presence
 const ROW_GAP    = 2
 const AXIS_H     = 56
+const DOT_SIZE   = 8                     // avatar dot diameter for in-bar resources
 
 // File-scope context — holds the live (or seed-fallback) dataset and the
 // derived layout dimensions. Sub-components pull from this rather than
 // importing constants.
 const GanttCtx = createContext(null)
 const useGantt = () => useContext(GanttCtx)
+
+const FILTER_OPTIONS = [
+  { id: 'all',       label: 'ALL'       },
+  { id: 'people',    label: 'PEOPLE'    },
+  { id: 'gear',      label: 'GEAR'      },
+  { id: 'locations', label: 'LOCATIONS' },
+]
+
+const GROUPBY_OPTIONS = [
+  { id: 'production', label: 'BY PRODUCTION' },
+  { id: 'resource',   label: 'BY RESOURCE'   },
+]
 
 // ── Public component ─────────────────────────────────────────────────────────
 export function Gantt() {
@@ -22,15 +35,36 @@ export function Gantt() {
 
   const [hoveredProd, setHoveredProd] = useState(null)
   const [scrubDay, setScrubDay]       = useState(0)
+  const [groupBy, setGroupBy]         = useState('production')
+  const [filter, setFilter]           = useState('all')
 
   // Layout dimensions that depend on windowDays
   const TIMELINE_W = windowDays * DAY_W
   const TOTAL_W    = NAME_COL_W + TIMELINE_W
 
-  // Sort productions by start date for a diagonal cascade top→down, left→right
+  // Sort productions by start date so the diagonal cascade reads top→down left→right
   const sortedProds = useMemo(
     () => [...productions].sort((a, b) => a.start - b.start),
     [productions]
+  )
+
+  // Filtered resource list for resource-mode rows AND for in-bar dots in
+  // production mode. Filter "all" → everything; otherwise just that kind.
+  const filteredResources = useMemo(
+    () => filter === 'all' ? resources : resources.filter(r => r.kind === filter),
+    [resources, filter]
+  )
+
+  // Resource rows: sort by kind then name so people cluster together
+  const sortedResources = useMemo(
+    () => [...filteredResources].sort((a, b) => {
+      if (a.kind !== b.kind) {
+        const order = { people: 0, gear: 1, locations: 2 }
+        return (order[a.kind] ?? 9) - (order[b.kind] ?? 9)
+      }
+      return a.name.localeCompare(b.name)
+    }),
+    [filteredResources]
   )
 
   const scrubDate = dateAtDayIndex(scrubDay)
@@ -42,15 +76,22 @@ export function Gantt() {
     return idx >= 0 && idx <= windowDays ? idx : null
   }, [dayIndex, windowDays])
 
+  // Which rows we render depends on groupBy mode.
+  const rows = groupBy === 'production' ? sortedProds : sortedResources
+  const svgHeight = AXIS_H + Math.max(rows.length, 1) * (ROW_H + ROW_GAP)
+
   const ctxValue = {
     productions: sortedProds,
     commitments,
     resources,
+    filteredResources,
     dayIndex,
     dateAtDayIndex,
     windowDays,
     TIMELINE_W,
     TOTAL_W,
+    filter,
+    groupBy,
     source: data.source,
   }
 
@@ -63,30 +104,59 @@ export function Gantt() {
           <EmptyState />
         ) : (
           <div className="card-elevated mt-4 overflow-hidden">
+            <Toolbar
+              groupBy={groupBy} setGroupBy={setGroupBy}
+              filter={filter} setFilter={setFilter}
+            />
             <Legend hoveredProd={hoveredProd} setHoveredProd={setHoveredProd} />
 
             <div className="overflow-x-auto">
               <svg
                 width={TOTAL_W}
-                height={AXIS_H + sortedProds.length * (ROW_H + ROW_GAP)}
+                height={svgHeight}
                 style={{ display: 'block', background: 'var(--orbital-panel)' }}
               >
-                <Grid rowCount={sortedProds.length} />
+                <Grid rowCount={rows.length} />
                 <TimelineAxis />
-                {todayIdx !== null && <NowLine idx={todayIdx} />}
-                <ScrubLine idx={scrubDay} />
+                {todayIdx !== null && <NowLine idx={todayIdx} rowCount={rows.length} />}
+                <ScrubLine idx={scrubDay} rowCount={rows.length} />
 
-                {sortedProds.map((prod, i) => (
-                  <Row
-                    key={prod.id}
-                    prod={prod}
-                    rowIdx={i}
-                    dimmed={hoveredProd && hoveredProd !== prod.id}
-                    onHover={() => setHoveredProd(prod.id)}
-                    onUnhover={() => setHoveredProd(null)}
-                    scrubDay={scrubDay}
-                  />
-                ))}
+                {groupBy === 'production'
+                  ? sortedProds.map((prod, i) => (
+                      <ProductionRow
+                        key={prod.id}
+                        prod={prod}
+                        rowIdx={i}
+                        dimmed={hoveredProd && hoveredProd !== prod.id}
+                        onHover={() => setHoveredProd(prod.id)}
+                        onUnhover={() => setHoveredProd(null)}
+                        scrubDay={scrubDay}
+                      />
+                    ))
+                  : sortedResources.map((res, i) => (
+                      <ResourceRow
+                        key={res.id}
+                        resource={res}
+                        rowIdx={i}
+                        dimmed={hoveredProd && !commitments.some(c => c.resourceId === res.id && c.productionId === hoveredProd)}
+                        onHover={() => {}}
+                        onUnhover={() => {}}
+                        scrubDay={scrubDay}
+                      />
+                    ))
+                }
+
+                {rows.length === 0 && (
+                  <text
+                    x={NAME_COL_W + TIMELINE_W / 2}
+                    y={AXIS_H + 60}
+                    fill="var(--orbital-dim)"
+                    fontSize={12}
+                    textAnchor="middle"
+                  >
+                    No {filter === 'all' ? 'resources' : filter} match the current filter.
+                  </text>
+                )}
               </svg>
             </div>
 
@@ -122,8 +192,66 @@ function Header({ scrubDate }) {
   )
 }
 
+// ── Toolbar: group-by toggle + resource filter chips ────────────────────────
+function Toolbar({ groupBy, setGroupBy, filter, setFilter }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-4 px-3 py-2 flex-wrap"
+      style={{ borderBottom: '1px solid var(--orbital-border)' }}
+    >
+      {/* Group-by toggle */}
+      <div className="flex items-center gap-2">
+        <span className="hud-label">GROUP</span>
+        <div
+          className="inline-flex"
+          style={{ border: '1px solid var(--orbital-border)', background: 'var(--orbital-muted)' }}
+        >
+          {GROUPBY_OPTIONS.map(opt => {
+            const active = groupBy === opt.id
+            return (
+              <button
+                key={opt.id}
+                onClick={() => setGroupBy(opt.id)}
+                className="px-2.5 py-1 font-telemetry text-[10px] tracking-wider transition-colors"
+                style={{
+                  background: active ? 'rgba(59,130,246,0.18)' : 'transparent',
+                  color: active ? '#60a5fa' : 'var(--orbital-subtle)',
+                  boxShadow: active ? 'inset 0 0 8px rgba(59,130,246,0.25)' : 'none',
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Filter chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="hud-label">FILTER</span>
+        {FILTER_OPTIONS.map(opt => {
+          const active = filter === opt.id
+          return (
+            <button
+              key={opt.id}
+              onClick={() => setFilter(opt.id)}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 font-telemetry text-[10px] tracking-wider transition-colors"
+              style={{
+                background: active ? 'rgba(59,130,246,0.18)' : 'transparent',
+                border: `1px solid ${active ? 'rgba(59,130,246,0.55)' : 'var(--orbital-border)'}`,
+                color: active ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
+              }}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // Empty-state card for when usePrototypeData() returned 0 productions
-// (live mode with nothing in Supabase, no fallback to seed).
 function EmptyState() {
   return (
     <div className="card-elevated mt-4 px-6 py-12 text-center">
@@ -213,7 +341,7 @@ function Grid({ rowCount }) {
 
 // ── Timeline axis: week labels + day ticks ──────────────────────────────────
 function TimelineAxis() {
-  const { productions, windowDays, dateAtDayIndex, TOTAL_W } = useGantt()
+  const { groupBy, productions, filteredResources, windowDays, dateAtDayIndex, TOTAL_W } = useGantt()
   const weekCount = Math.ceil(windowDays / 7)
   const weekLabels = []
   for (let w = 0; w < weekCount; w++) {
@@ -257,6 +385,9 @@ function TimelineAxis() {
     )
   }
 
+  const label  = groupBy === 'production' ? 'PRODUCTION' : 'RESOURCE'
+  const sub    = groupBy === 'production' ? `${productions.length} ACTIVE` : `${filteredResources.length} SHOWING`
+
   return (
     <g>
       <text
@@ -266,7 +397,7 @@ function TimelineAxis() {
         fontFamily="'Space Mono', monospace"
         letterSpacing={1.5}
       >
-        PRODUCTION
+        {label}
       </text>
       <text
         x={14} y={34}
@@ -274,7 +405,7 @@ function TimelineAxis() {
         fontSize={9}
         fontFamily="'Space Mono', monospace"
       >
-        {productions.length} ACTIVE
+        {sub}
       </text>
       {weekLabels}
       {dayTicks}
@@ -288,10 +419,9 @@ function TimelineAxis() {
 }
 
 // ── Now line — vertical accent at today's column ────────────────────────────
-function NowLine({ idx }) {
-  const { productions } = useGantt()
+function NowLine({ idx, rowCount }) {
   const x = NAME_COL_W + idx * DAY_W + DAY_W / 2
-  const bottom = AXIS_H + productions.length * (ROW_H + ROW_GAP)
+  const bottom = AXIS_H + rowCount * (ROW_H + ROW_GAP)
   return (
     <g>
       <line
@@ -316,10 +446,9 @@ function NowLine({ idx }) {
 }
 
 // ── Scrub line — vertical line at the playhead day ──────────────────────────
-function ScrubLine({ idx }) {
-  const { productions } = useGantt()
+function ScrubLine({ idx, rowCount }) {
   const x = NAME_COL_W + idx * DAY_W + DAY_W / 2
-  const bottom = AXIS_H + productions.length * (ROW_H + ROW_GAP)
+  const bottom = AXIS_H + rowCount * (ROW_H + ROW_GAP)
   return (
     <line
       x1={x} x2={x}
@@ -331,22 +460,44 @@ function ScrubLine({ idx }) {
   )
 }
 
-// ── Production row: name column + bar ───────────────────────────────────────
-function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
-  const { commitments, resources, dayIndex } = useGantt()
+// ── Production row (group-by-production mode) ──────────────────────────────
+// Each row is one production. Bar spans its start→end dates. Mini avatar
+// dots inside the bar represent committed resources (filtered by the toolbar
+// chip), giving an at-a-glance read of "who's on this".
+function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
+  const { commitments, resources, filteredResources, dayIndex, filter } = useGantt()
   const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
   const startIdx = dayIndex(prod.start)
   const endIdx   = dayIndex(prod.end)
   const barX     = NAME_COL_W + startIdx * DAY_W
   const barW     = (endIdx - startIdx + 1) * DAY_W
-  const barY     = y + 8
-  const barH     = ROW_H - 16
+  const barY     = y + 10
+  const barH     = ROW_H - 20
 
   const isLive   = scrubDay >= startIdx && scrubDay <= endIdx
 
+  // All resources committed to this production, filtered by toolbar chip
+  const committedHere = useMemo(() => {
+    const ids = new Set(commitments.filter(c => c.productionId === prod.id).map(c => c.resourceId))
+    return filteredResources.filter(r => ids.has(r.id))
+  }, [commitments, filteredResources, prod.id])
+
+  // Full counts (regardless of filter) for the subtitle
   const peopleCount = commitments.filter(c => c.productionId === prod.id && resources.find(r => r.id === c.resourceId)?.kind === 'people').length
   const gearCount   = commitments.filter(c => c.productionId === prod.id && resources.find(r => r.id === c.resourceId)?.kind === 'gear').length
   const durDays     = endIdx - startIdx + 1
+
+  // How many dots can we fit inside the bar?
+  const dotPad      = 4
+  const dotSpacing  = DOT_SIZE + 2
+  const maxDots     = Math.max(0, Math.floor((barW - dotPad * 2 - 30) / dotSpacing))
+  const dotsToRender = committedHere.slice(0, maxDots)
+  const overflow    = Math.max(0, committedHere.length - maxDots)
+
+  // Subtitle counts react to the active filter
+  const countLabel = filter === 'all'
+    ? `${peopleCount}p${gearCount > 0 ? ` · ${gearCount}g` : ''}`
+    : `${committedHere.length} ${filter}`
 
   return (
     <g
@@ -363,13 +514,13 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
         {prod.name}
       </text>
       <text
-        x={14} y={y + 32}
+        x={14} y={y + 34}
         fill="var(--orbital-subtle)"
         fontSize={10}
         fontFamily="'Space Mono', monospace"
         letterSpacing={1}
       >
-        {prod.code} · {durDays}d · {peopleCount}p{gearCount > 0 ? ` · ${gearCount}g` : ''}
+        {prod.code} · {durDays}d · {countLabel}
       </text>
 
       <rect
@@ -383,21 +534,11 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
         x={barX} y={barY}
         width={barW} height={barH}
         fill={prod.color}
-        opacity={0.78}
+        opacity={0.65}
       />
 
-      {isLive && (
-        <rect
-          x={barX - 1} y={barY - 1}
-          width={barW + 2} height={barH + 2}
-          fill="none"
-          stroke="#fff"
-          strokeWidth={1}
-          opacity={0.5}
-        />
-      )}
-
-      {barW > 70 && (
+      {/* Bar label — date range, only when there's room AND no dots crowd it */}
+      {barW > 100 && committedHere.length === 0 && (
         <text
           x={barX + 8}
           y={barY + barH / 2 + 4}
@@ -410,6 +551,159 @@ function Row({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
           {format(prod.start, 'MMM d').toUpperCase()} → {format(prod.end, 'MMM d').toUpperCase()}
         </text>
       )}
+
+      {/* In-bar avatar dots */}
+      {dotsToRender.map((r, i) => (
+        <g key={r.id}>
+          <circle
+            cx={barX + dotPad + DOT_SIZE / 2 + i * dotSpacing}
+            cy={barY + barH / 2}
+            r={DOT_SIZE / 2}
+            fill={r.color || '#fff'}
+            stroke="#0d0f12"
+            strokeWidth={1}
+          />
+          <title>{r.name}{r.role ? ` · ${r.role}` : ''}</title>
+        </g>
+      ))}
+      {overflow > 0 && (
+        <text
+          x={barX + dotPad + dotsToRender.length * dotSpacing + 2}
+          y={barY + barH / 2 + 3.5}
+          fill="rgba(255,255,255,0.85)"
+          fontSize={9}
+          fontFamily="'Space Mono', monospace"
+          letterSpacing={0.5}
+        >
+          +{overflow}
+        </text>
+      )}
+
+      {isLive && (
+        <rect
+          x={barX - 1} y={barY - 1}
+          width={barW + 2} height={barH + 2}
+          fill="none"
+          stroke="#fff"
+          strokeWidth={1}
+          opacity={0.5}
+        />
+      )}
+    </g>
+  )
+}
+
+// ── Resource row (group-by-resource mode) ──────────────────────────────────
+// Each row is one resource. Bars are commitments — one per production this
+// resource is on, colored by that production. Overlapping commitments earn a
+// red conflict marker on the name column.
+function ResourceRow({ resource, rowIdx, dimmed, scrubDay }) {
+  const { commitments, productions, dayIndex } = useGantt()
+  const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
+
+  const myCommitments = useMemo(
+    () => commitments.filter(c => c.resourceId === resource.id),
+    [commitments, resource.id]
+  )
+
+  // Conflict = any two of my commitments have overlapping date ranges.
+  const hasConflict = useMemo(() => {
+    for (let i = 0; i < myCommitments.length; i++) {
+      for (let j = i + 1; j < myCommitments.length; j++) {
+        const a = myCommitments[i], b = myCommitments[j]
+        if (a.productionId === b.productionId) continue
+        if (a.start <= b.end && b.start <= a.end) return true
+      }
+    }
+    return false
+  }, [myCommitments])
+
+  // Is the resource committed to ANY production at the scrub date?
+  const isLive = useMemo(() => {
+    const scrubDate = dayIndex(new Date()) // unused; we want scrubDay-relative
+    return myCommitments.some(c => {
+      const s = dayIndex(c.start)
+      const e = dayIndex(c.end)
+      return scrubDay >= s && scrubDay <= e
+    })
+  }, [myCommitments, scrubDay, dayIndex])
+
+  return (
+    <g
+      style={{ opacity: dimmed ? 0.3 : 1, transition: 'opacity 200ms ease' }}
+    >
+      {/* Conflict accent on the name column */}
+      {hasConflict && (
+        <rect
+          x={0} y={y}
+          width={3} height={ROW_H}
+          fill="#ef4444"
+          opacity={0.9}
+        />
+      )}
+
+      <text
+        x={14} y={y + 18}
+        fill={isLive ? 'var(--orbital-text)' : 'var(--orbital-subtle)'}
+        fontSize={13}
+        fontWeight={600}
+      >
+        {resource.name}
+      </text>
+      <text
+        x={14} y={y + 34}
+        fill="var(--orbital-dim)"
+        fontSize={10}
+        fontFamily="'Space Mono', monospace"
+        letterSpacing={1}
+      >
+        {(resource.kind || '').toUpperCase()}
+        {resource.role ? ` · ${resource.role}` : ''}
+        {hasConflict ? ' · ⚠ CONFLICT' : ''}
+      </text>
+
+      {/* Commitment bars */}
+      {myCommitments.map((c, i) => {
+        const prod = productions.find(p => p.id === c.productionId)
+        if (!prod) return null
+        const startIdx = dayIndex(c.start)
+        const endIdx   = dayIndex(c.end)
+        const barX = NAME_COL_W + startIdx * DAY_W
+        const barW = (endIdx - startIdx + 1) * DAY_W
+        const barY = y + 12
+        const barH = ROW_H - 24
+        return (
+          <g key={i}>
+            <rect
+              x={barX} y={barY}
+              width={barW} height={barH}
+              fill={`${prod.color}33`}
+              stroke={prod.color}
+              strokeWidth={1}
+            />
+            <rect
+              x={barX} y={barY}
+              width={barW} height={barH}
+              fill={prod.color}
+              opacity={0.7}
+            />
+            {barW > 50 && (
+              <text
+                x={barX + 6}
+                y={barY + barH / 2 + 4}
+                fill="#0d0f12"
+                fontSize={10}
+                fontWeight={700}
+                fontFamily="'Space Mono', monospace"
+                letterSpacing={1}
+              >
+                {prod.code}
+              </text>
+            )}
+            <title>{prod.name} · {format(c.start, 'MMM d')}–{format(c.end, 'MMM d')}</title>
+          </g>
+        )
+      })}
     </g>
   )
 }
@@ -445,9 +739,54 @@ function Scrubber({ day, setDay }) {
 }
 
 // ── Bottom summary — what's active at the scrub date ────────────────────────
+// In production mode shows # of active productions. In resource mode shows
+// # of resources currently committed (across any production) at the scrub.
 function SummaryStrip({ scrubDate }) {
-  const { productions } = useGantt()
-  const active = productions.filter(p => p.start <= scrubDate && scrubDate <= p.end)
+  const { groupBy, productions, commitments, filteredResources } = useGantt()
+  if (groupBy === 'production') {
+    const active = productions.filter(p => p.start <= scrubDate && scrubDate <= p.end)
+    return (
+      <div
+        className="flex items-center gap-3 px-4 py-2.5"
+        style={{
+          borderTop: '1px solid var(--orbital-border)',
+          background: 'var(--orbital-panel)',
+        }}
+      >
+        <span className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">ACTIVE</span>
+        <span className="font-telemetry text-base tabular-nums text-orbital-text">
+          {String(active.length).padStart(2, '0')}
+        </span>
+        <span className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">/ {productions.length}</span>
+        {active.length > 0 && (
+          <div className="flex items-center gap-2 ml-2 flex-wrap">
+            {active.map(p => (
+              <span
+                key={p.id}
+                className="inline-flex items-center gap-1.5 px-1.5 py-0.5 font-telemetry text-[10px] tracking-wider"
+                style={{
+                  background: `${p.color}1f`,
+                  border: `1px solid ${p.color}55`,
+                  color: p.color,
+                }}
+              >
+                <span className="w-1 h-1 rounded-full" style={{ background: p.color }} />
+                {p.code}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Resource mode summary
+  const filteredIds = new Set(filteredResources.map(r => r.id))
+  const activeResourceIds = new Set(
+    commitments
+      .filter(c => filteredIds.has(c.resourceId) && c.start <= scrubDate && scrubDate <= c.end)
+      .map(c => c.resourceId)
+  )
   return (
     <div
       className="flex items-center gap-3 px-4 py-2.5"
@@ -456,29 +795,11 @@ function SummaryStrip({ scrubDate }) {
         background: 'var(--orbital-panel)',
       }}
     >
-      <span className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">ACTIVE</span>
+      <span className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">COMMITTED</span>
       <span className="font-telemetry text-base tabular-nums text-orbital-text">
-        {String(active.length).padStart(2, '0')}
+        {String(activeResourceIds.size).padStart(2, '0')}
       </span>
-      <span className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">/ {productions.length}</span>
-      {active.length > 0 && (
-        <div className="flex items-center gap-2 ml-2 flex-wrap">
-          {active.map(p => (
-            <span
-              key={p.id}
-              className="inline-flex items-center gap-1.5 px-1.5 py-0.5 font-telemetry text-[10px] tracking-wider"
-              style={{
-                background: `${p.color}1f`,
-                border: `1px solid ${p.color}55`,
-                color: p.color,
-              }}
-            >
-              <span className="w-1 h-1 rounded-full" style={{ background: p.color }} />
-              {p.code}
-            </span>
-          ))}
-        </div>
-      )}
+      <span className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">/ {filteredResources.length}</span>
     </div>
   )
 }
