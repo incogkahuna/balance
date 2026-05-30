@@ -857,12 +857,23 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, onClick, scru
   const gearCount   = commitments.filter(c => c.productionId === prod.id && resources.find(r => r.id === c.resourceId)?.kind === 'gear').length
   const durDays     = endIdx - startIdx + 1
 
-  // How many dots can we fit inside the bar?
-  const dotPad      = 4
-  const dotSpacing  = DOT_SIZE + 2
-  const maxDots     = Math.max(0, Math.floor((barW - dotPad * 2 - 30) / dotSpacing))
+  // ── In-bar layout ───────────────────────────────────────────────────────
+  // Left of the bar: production code (e.g. "SNO-01") — identifies which
+  // production this bar belongs to. Pushed by the legend at the top, but
+  // still useful on the bar itself when there are many rows on screen.
+  // After the code: avatar dots for committed resources.
+  // No more date-range fallback — the bar's start/end already shows the
+  // dates visually on the timeline axis.
+  const CODE_LABEL_W = 48                  // approx width of a 6-char "SNO-01" at fontSize 11
+  const showCode     = barW > 38           // hide when bar would clip the code
+  const dotPad       = 4
+  const dotSpacing   = DOT_SIZE + 2
+  // Dots start after the code if it's shown, otherwise at the bar's left edge
+  const dotsLeftPad  = showCode ? CODE_LABEL_W + 6 : dotPad
+  const dotsAvailW   = barW - dotsLeftPad - 24  // 24px reserve for the +N overflow text
+  const maxDots      = Math.max(0, Math.floor(dotsAvailW / dotSpacing))
   const dotsToRender = committedHere.slice(0, maxDots)
-  const overflow    = Math.max(0, committedHere.length - maxDots)
+  const overflow     = Math.max(0, committedHere.length - maxDots)
 
   // Subtitle counts react to the active filter
   const countLabel = filter === 'all'
@@ -911,10 +922,11 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, onClick, scru
         opacity={0.65}
       />
 
-      {/* Bar label — date range, only when there's room AND no dots crowd it */}
-      {barW > 100 && committedHere.length === 0 && (
+      {/* Production code on the bar — the "abbreviation" Danny asked for so
+          bars aren't blank. Always shown when the bar is wide enough. */}
+      {showCode && (
         <text
-          x={barX + 8}
+          x={barX + 6}
           y={barY + barH / 2 + 4}
           fill="#0d0f12"
           fontSize={11}
@@ -922,15 +934,15 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, onClick, scru
           fontFamily="'Space Mono', monospace"
           letterSpacing={1}
         >
-          {format(prod.start, 'MMM d').toUpperCase()} → {format(prod.end, 'MMM d').toUpperCase()}
+          {prod.code}
         </text>
       )}
 
-      {/* In-bar avatar dots */}
+      {/* In-bar avatar dots — pushed to start after the code label */}
       {dotsToRender.map((r, i) => (
         <g key={r.id}>
           <circle
-            cx={barX + dotPad + DOT_SIZE / 2 + i * dotSpacing}
+            cx={barX + dotsLeftPad + DOT_SIZE / 2 + i * dotSpacing}
             cy={barY + barH / 2}
             r={DOT_SIZE / 2}
             fill={r.color || '#fff'}
@@ -942,7 +954,7 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, onClick, scru
       ))}
       {overflow > 0 && (
         <text
-          x={barX + dotPad + dotsToRender.length * dotSpacing + 2}
+          x={barX + dotsLeftPad + dotsToRender.length * dotSpacing + 2}
           y={barY + barH / 2 + 3.5}
           fill="rgba(255,255,255,0.85)"
           fontSize={9}
