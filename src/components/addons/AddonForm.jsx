@@ -1,16 +1,44 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { AlertTriangle, Camera, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useAutoSave } from '../../hooks/useAutoSave.js'
+import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
 import { createAddon } from '../../data/models.js'
 import { StoredImage } from '../files/StoredImage.tsx'
 import { uploadFile, BUCKETS, paths } from '../../lib/storage.ts'
 
-export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
-  const { currentUser } = useApp()
+export function AddonForm({ productionId, initial, onClose }) {
+  const { currentUser, addAddon, updateAddon, deleteAddon } = useApp()
   const fileRef = useRef()
 
-  // Stable id for the addon — needed in the storage path before submit.
+  // Stable id for the addon — needed in the storage path for photo uploads
+  // AND used by the eager-create placeholder so the auto-save effect knows
+  // which addon row to update.
   const [addonId] = useState(() => initial?.id || crypto.randomUUID())
+
+  // ── Eager-create placeholder ──────────────────────────────────────────────
+  const workingIdRef = useRef(initial?.id || null)
+  const createdHereRef = useRef(false)
+
+  useEffect(() => {
+    if (initial?.id || workingIdRef.current) return
+    const placeholder = createAddon({
+      id: addonId,
+      productionId,
+      equipment: '',
+      quantity: 1,
+      duration: '',
+      cost: '',
+      damaged: false,
+      notes: '',
+      damagePhotos: [],
+      loggedBy: currentUser?.id || '',
+    })
+    workingIdRef.current = addonId
+    createdHereRef.current = true
+    addAddon(productionId, placeholder)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [form, setForm] = useState({
     equipment: initial?.equipment || '',
@@ -26,6 +54,27 @@ export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
   const [uploadError, setUploadError] = useState(null)
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
+
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  const enabled = !!workingIdRef.current
+  const { status: saveStatus, lastSavedAt, error: saveError } = useAutoSave(
+    form,
+    (value) => {
+      const id = workingIdRef.current
+      if (!id) return
+      updateAddon(productionId, id, value)
+    },
+    { enabled, delay: 600 }
+  )
+
+  // Close: drop placeholder if equipment field was never filled in
+  const handleClose = () => {
+    const id = workingIdRef.current
+    if (id && createdHereRef.current && !form.equipment.trim()) {
+      deleteAddon(productionId, id)
+    }
+    onClose?.()
+  }
 
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || [])
@@ -55,26 +104,12 @@ export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
     }
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    const addon = createAddon({
-      ...(initial || {}),
-      id: addonId,
-      productionId,
-      equipment: form.equipment,
-      quantity: form.quantity,
-      duration: form.duration,
-      cost: form.cost,
-      damaged: form.damaged,
-      notes: form.notes,
-      damagePhotos: form.damagePhotos,
-      loggedBy: initial?.loggedBy || currentUser?.id,
-    })
-    onSubmit(addon)
-  }
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <SaveStatusPill status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} compact />
+      </div>
+
       <div>
         <label className="label">Equipment / Item *</label>
         <input
@@ -82,7 +117,7 @@ export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
           value={form.equipment}
           onChange={e => set('equipment', e.target.value)}
           placeholder="e.g. Scissor lift, Forklift, 4x LED panels..."
-          required
+          autoFocus
         />
       </div>
 
@@ -201,12 +236,11 @@ export function AddonForm({ productionId, initial, onSubmit, onCancel }) {
       </div>
 
       <div className="flex gap-3 pt-1">
-        <button type="button" onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
-        <button type="submit" className="btn-primary flex-1" disabled={uploading}>
-          {initial?.id ? 'Save Add-on' : 'Log Add-on'}
+        <button type="button" onClick={handleClose} className="btn-primary flex-1" disabled={uploading}>
+          Done
         </button>
       </div>
-    </form>
+    </div>
   )
 }
 

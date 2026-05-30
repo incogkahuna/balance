@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
-import { format } from 'date-fns'
-import { Check, Loader2, AlertCircle, Plus, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
+import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
 import {
   PRODUCTION_STATUS, PRODUCTION_TYPE, PRODUCTION_TYPE_PRESETS, LOCATION_TYPE, ROLES,
   PRODUCTION_ROLE_PRESETS, normalizeAssignedMember,
@@ -163,7 +163,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {autoSaveEnabled && (
-        <SaveStatus status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} />
+        <SaveStatusPill status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} />
       )}
 
       <div>
@@ -449,41 +449,3 @@ function PhaseRoleSelect({ label, value, onChange }) {
   )
 }
 
-// ── Save status pill — shown at the top of the form in auto-save mode ──────
-function SaveStatus({ status, lastSavedAt, error }) {
-  let icon, label, color, bg, border
-  if (status === 'saving') {
-    icon = <Loader2 size={11} className="animate-spin" />
-    label = 'SAVING'
-    color = '#fbbf24'
-    bg = 'rgba(251,191,36,0.1)'
-    border = 'rgba(251,191,36,0.3)'
-  } else if (status === 'error') {
-    icon = <AlertCircle size={11} />
-    label = `SAVE FAILED · ${error || 'unknown error'}`.toUpperCase().slice(0, 80)
-    color = '#ef4444'
-    bg = 'rgba(239,68,68,0.1)'
-    border = 'rgba(239,68,68,0.3)'
-  } else if (status === 'saved' && lastSavedAt) {
-    icon = <Check size={11} />
-    label = `SAVED · ${format(lastSavedAt, 'HH:mm:ss')}`
-    color = '#34d399'
-    bg = 'rgba(52,211,153,0.1)'
-    border = 'rgba(52,211,153,0.3)'
-  } else {
-    icon = <Check size={11} className="opacity-40" />
-    label = 'AUTO-SAVE ENABLED'
-    color = 'var(--orbital-subtle)'
-    bg = 'transparent'
-    border = 'var(--orbital-border)'
-  }
-  return (
-    <div
-      className="inline-flex items-center gap-2 px-2.5 py-1 font-telemetry text-[10px] tracking-wider"
-      style={{ color, background: bg, border: `1px solid ${border}` }}
-    >
-      {icon}
-      <span>{label}</span>
-    </div>
-  )
-}

@@ -1,6 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { Camera } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
+import { useAutoSave } from '../../hooks/useAutoSave.js'
+import { SaveStatusPill } from '../../components/ui/SaveStatusPill.jsx'
 import {
   ROLES, AVAILABILITY_STATUS, EXPERIENCE_LEVEL, CONTRACTOR_FLAG,
   createContractor,
@@ -8,13 +10,34 @@ import {
 import { ContractorPhoto } from '../../components/files/ContractorPhoto.tsx'
 import { uploadFile, BUCKETS, paths } from '../../lib/storage.ts'
 
-export function ContractorForm({ initial, onSubmit, onCancel }) {
-  const { currentUser } = useApp()
+export function ContractorForm({ initial, onClose }) {
+  const { currentUser, addContractor, updateContractor, deleteContractor } = useApp()
   const isAdmin = currentUser?.role === ROLES.ADMIN
   const photoInputRef = useRef(null)
 
-  // Stable id — needed in the storage path before submit.
+  // Stable id — needed in the storage path AND used by the eager-create
+  // placeholder so the auto-save effect knows which contractor row to update.
   const [contractorId] = useState(() => initial?.id || crypto.randomUUID())
+
+  // ── Eager-create placeholder ──────────────────────────────────────────────
+  const workingIdRef = useRef(initial?.id || null)
+  const createdHereRef = useRef(false)
+
+  useEffect(() => {
+    if (initial?.id || workingIdRef.current) return
+    const placeholder = createContractor({
+      id: contractorId,
+      name: '',
+      primaryRole: '',
+      availability: AVAILABILITY_STATUS.AVAILABLE,
+      experienceLevel: EXPERIENCE_LEVEL.MID,
+      flag: CONTRACTOR_FLAG.NEUTRAL,
+    })
+    workingIdRef.current = contractorId
+    createdHereRef.current = true
+    addContractor(placeholder)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [form, setForm] = useState({
     name:              initial?.name || '',
@@ -66,37 +89,57 @@ export function ContractorForm({ initial, onSubmit, onCancel }) {
     }
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    const contractor = createContractor({
-      ...(initial || {}),
-      id:             contractorId,
-      name:           form.name.trim(),
-      photoUrl:       form.photoUrl,
-      phone:          form.phone.trim(),
-      email:          form.email.trim(),
-      location:       form.location.trim(),
-      availability:   form.availability,
-      primaryRole:    form.primaryRole.trim(),
-      secondaryRoles: form.secondaryRoles.split(',').map(s => s.trim()).filter(Boolean),
-      skills:         form.skills.split(',').map(s => s.trim()).filter(Boolean),
-      experienceLevel: form.experienceLevel,
-      flag:           form.flag,
-      notes:          form.notes.trim(),
-      dayRate:        form.dayRate.trim(),
-      weeklyRate:     form.weeklyRate.trim(),
-      rateNotes:      form.rateNotes.trim(),
-      emergencyContact: {
-        name:         form.ecName.trim(),
-        relationship: form.ecRelationship.trim(),
-        phone:        form.ecPhone.trim(),
-      },
-    })
-    onSubmit(contractor)
+  // Build the contractor update from the current form state. Memoized so the
+  // useAutoSave dep comparison stays cheap.
+  const builtUpdate = useMemo(() => ({
+    name:           form.name.trim(),
+    photoUrl:       form.photoUrl,
+    phone:          form.phone.trim(),
+    email:          form.email.trim(),
+    location:       form.location.trim(),
+    availability:   form.availability,
+    primaryRole:    form.primaryRole.trim(),
+    secondaryRoles: form.secondaryRoles.split(',').map(s => s.trim()).filter(Boolean),
+    skills:         form.skills.split(',').map(s => s.trim()).filter(Boolean),
+    experienceLevel: form.experienceLevel,
+    flag:           form.flag,
+    notes:          form.notes.trim(),
+    dayRate:        form.dayRate.trim(),
+    weeklyRate:     form.weeklyRate.trim(),
+    rateNotes:      form.rateNotes.trim(),
+    emergencyContact: {
+      name:         form.ecName.trim(),
+      relationship: form.ecRelationship.trim(),
+      phone:        form.ecPhone.trim(),
+    },
+  }), [form])
+
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  const enabled = !!workingIdRef.current
+  const { status: saveStatus, lastSavedAt, error: saveError } = useAutoSave(
+    builtUpdate,
+    (value) => {
+      const id = workingIdRef.current
+      if (!id) return
+      updateContractor(id, value)
+    },
+    { enabled, delay: 600 }
+  )
+
+  // Close: drop placeholder if no name typed
+  const handleClose = () => {
+    const id = workingIdRef.current
+    if (id && createdHereRef.current && !form.name.trim()) {
+      deleteContractor(id)
+    }
+    onClose?.()
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <div className="space-y-5">
+      <div className="flex items-center justify-end">
+        <SaveStatusPill status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} compact />
+      </div>
       {/* Photo */}
       <div className="flex items-center gap-4">
         <div
@@ -151,7 +194,7 @@ export function ContractorForm({ initial, onSubmit, onCancel }) {
           value={form.name}
           onChange={e => set('name', e.target.value)}
           placeholder="e.g. Jake Morrison"
-          required
+          autoFocus
         />
       </div>
 
@@ -197,7 +240,6 @@ export function ContractorForm({ initial, onSubmit, onCancel }) {
           value={form.primaryRole}
           onChange={e => set('primaryRole', e.target.value)}
           placeholder="e.g. LED Wall Operator"
-          required
         />
       </div>
 
@@ -352,13 +394,10 @@ export function ContractorForm({ initial, onSubmit, onCancel }) {
       )}
 
       <div className="flex gap-3 pt-2">
-        <button type="button" onClick={onCancel} className="btn-secondary flex-1" disabled={uploading}>
-          Cancel
-        </button>
-        <button type="submit" className="btn-primary flex-1" disabled={uploading}>
-          {initial?.id ? 'Save Changes' : 'Add Contractor'}
+        <button type="button" onClick={handleClose} className="btn-primary flex-1" disabled={uploading}>
+          Done
         </button>
       </div>
-    </form>
+    </div>
   )
 }

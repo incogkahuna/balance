@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { format } from 'date-fns'
-import { X, Check, Loader2, AlertCircle, Users as UsersIcon } from 'lucide-react'
+import { X, Users as UsersIcon } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { useAutoSave } from '../../../hooks/useAutoSave.js'
+import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
   MILESTONE_TYPE, MILESTONE_STATUS, TASK_PRIORITY, TASK_STATUS,
   createMilestone, createTask, USERS,
@@ -157,7 +157,7 @@ export function MilestoneForm({ production, initial, onClose }) {
             <h3 className="font-semibold text-orbital-text">
               {initial ? 'Edit Milestone' : 'Add Milestone'}
             </h3>
-            <SaveStatus status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} />
+            <SaveStatusPill status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} compact />
           </div>
           <button onClick={handleClose} className="p-1.5 rounded hover:bg-orbital-muted transition-colors">
             <X size={16} className="text-orbital-subtle" />
@@ -357,42 +357,3 @@ export function MilestoneForm({ production, initial, onClose }) {
   )
 }
 
-// ── Save status pill — telemetric chip next to the modal title ──────────────
-function SaveStatus({ status, lastSavedAt, error }) {
-  let icon, label, color, bg, border
-  if (status === 'saving') {
-    icon = <Loader2 size={10} className="animate-spin" />
-    label = 'SAVING'
-    color = '#fbbf24'
-    bg = 'rgba(251,191,36,0.1)'
-    border = 'rgba(251,191,36,0.3)'
-  } else if (status === 'error') {
-    icon = <AlertCircle size={10} />
-    label = 'SAVE FAILED'
-    color = '#ef4444'
-    bg = 'rgba(239,68,68,0.1)'
-    border = 'rgba(239,68,68,0.3)'
-  } else if (status === 'saved' && lastSavedAt) {
-    icon = <Check size={10} />
-    label = `SAVED ${format(lastSavedAt, 'HH:mm:ss')}`
-    color = '#34d399'
-    bg = 'rgba(52,211,153,0.1)'
-    border = 'rgba(52,211,153,0.3)'
-  } else {
-    icon = <Check size={10} className="opacity-40" />
-    label = 'AUTO-SAVE'
-    color = 'var(--orbital-subtle)'
-    bg = 'transparent'
-    border = 'var(--orbital-border)'
-  }
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 font-telemetry text-[9px] tracking-wider"
-      style={{ color, background: bg, border: `1px solid ${border}` }}
-      title={error || ''}
-    >
-      {icon}
-      <span>{label}</span>
-    </span>
-  )
-}

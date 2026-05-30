@@ -338,21 +338,19 @@ export function ProductionDetailPage() {
         danger
       />
 
-      {/* Add task */}
+      {/* Add task — auto-saves as you type, "Done" just closes the modal */}
       <Modal open={showAddTask} onClose={() => setShowAddTask(false)} title="New Task" size="lg">
         <TaskForm
           productionId={id}
-          onSubmit={(task) => { addTask(task); setShowAddTask(false) }}
-          onCancel={() => setShowAddTask(false)}
+          onClose={() => setShowAddTask(false)}
         />
       </Modal>
 
-      {/* Add addon */}
+      {/* Add addon — auto-saves on every change; "Done" just closes */}
       <Modal open={showAddAddon} onClose={() => setShowAddAddon(false)} title="Log Add-on" size="md">
         <AddonForm
           productionId={id}
-          onSubmit={(addon) => { addAddon(id, addon); setShowAddAddon(false) }}
-          onCancel={() => setShowAddAddon(false)}
+          onClose={() => setShowAddAddon(false)}
         />
       </Modal>
 

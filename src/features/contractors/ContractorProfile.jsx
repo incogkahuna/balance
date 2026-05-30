@@ -251,12 +251,11 @@ export function ContractorProfile({ contractor, onClose, onDeleted }) {
         )}
       </div>
 
-      {/* Edit modal */}
+      {/* Edit modal — auto-saves on every change; "Done" just closes */}
       <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Contractor" size="lg">
         <ContractorForm
           initial={contractor}
-          onSubmit={handleSave}
-          onCancel={() => setShowEdit(false)}
+          onClose={() => setShowEdit(false)}
         />
       </Modal>
 

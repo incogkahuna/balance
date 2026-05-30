@@ -189,11 +189,10 @@ export function ContractorsPage() {
         )}
       </Modal>
 
-      {/* Add contractor modal */}
+      {/* Add contractor — auto-saves on every change; "Done" just closes */}
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Contractor" size="lg">
         <ContractorForm
-          onSubmit={handleAdd}
-          onCancel={() => setShowAdd(false)}
+          onClose={() => setShowAdd(false)}
         />
       </Modal>
     </div>

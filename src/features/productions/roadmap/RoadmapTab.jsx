@@ -171,8 +171,7 @@ export function RoadmapTab({ production }) {
         <ConcernForm
           production={production}
           initial={editingConcern}
-          onSubmit={handleConcernSubmit}
-          onCancel={() => { setShowConcernForm(false); setEditingConcern(null) }}
+          onClose={() => { setShowConcernForm(false); setEditingConcern(null) }}
         />
       )}
     </div>

@@ -1,9 +1,33 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
-import { TASK_PRIORITY, USERS, createTask } from '../../data/models.js'
+import { useAutoSave } from '../../hooks/useAutoSave.js'
+import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
+import { TASK_PRIORITY, TASK_STATUS, USERS, createTask } from '../../data/models.js'
 
-export function TaskForm({ productionId, initial, onSubmit, onCancel }) {
-  const { currentUser } = useApp()
+export function TaskForm({ productionId, initial, onClose }) {
+  const { currentUser, addTask, updateTask, deleteTask } = useApp()
+
+  // ── Eager-create placeholder ──────────────────────────────────────────────
+  // Add an empty task immediately so the auto-save effect has something to
+  // target. If the user closes without typing a title, we drop the placeholder.
+  const workingIdRef = useRef(initial?.id || null)
+  const createdHereRef = useRef(false)
+
+  useEffect(() => {
+    if (initial?.id || workingIdRef.current) return
+    const placeholder = createTask({
+      productionId,
+      title: '',
+      assigneeId: '',
+      priority: TASK_PRIORITY.MEDIUM,
+      status: TASK_STATUS.NOT_STARTED,
+      assignedBy: currentUser?.id || '',
+    })
+    workingIdRef.current = placeholder.id
+    createdHereRef.current = true
+    addTask(placeholder)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [form, setForm] = useState({
     title: initial?.title || '',
@@ -16,24 +40,33 @@ export function TaskForm({ productionId, initial, onSubmit, onCancel }) {
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    const task = createTask({
-      ...(initial || {}),
-      productionId,
-      title: form.title,
-      description: form.description,
-      assigneeId: form.assigneeId,
-      assignedBy: initial?.assignedBy || currentUser?.id,
-      dueDate: form.dueDate,
-      priority: form.priority,
-      expectationsNote: form.expectationsNote,
-    })
-    onSubmit(task)
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  const enabled = !!workingIdRef.current
+  const { status: saveStatus, lastSavedAt, error: saveError } = useAutoSave(
+    form,
+    (value) => {
+      const id = workingIdRef.current
+      if (!id) return
+      updateTask(id, value)
+    },
+    { enabled, delay: 600 }
+  )
+
+  // Close: drop placeholder if no title typed
+  const handleClose = () => {
+    const id = workingIdRef.current
+    if (id && createdHereRef.current && !form.title.trim()) {
+      deleteTask(id)
+    }
+    onClose?.()
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <SaveStatusPill status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} compact />
+      </div>
+
       <div>
         <label className="label">Task Title *</label>
         <input
@@ -41,7 +74,7 @@ export function TaskForm({ productionId, initial, onSubmit, onCancel }) {
           value={form.title}
           onChange={e => set('title', e.target.value)}
           placeholder="e.g. LED Wall Pre-Calibration"
-          required
+          autoFocus
         />
       </div>
 
@@ -57,12 +90,11 @@ export function TaskForm({ productionId, initial, onSubmit, onCancel }) {
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="label">Assign To *</label>
+          <label className="label">Assign To</label>
           <select
             className="select"
             value={form.assigneeId}
             onChange={e => set('assigneeId', e.target.value)}
-            required
           >
             <option value="">Select person</option>
             {USERS.map(u => (
@@ -112,11 +144,10 @@ export function TaskForm({ productionId, initial, onSubmit, onCancel }) {
       </div>
 
       <div className="flex gap-3 pt-1">
-        <button type="button" onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
-        <button type="submit" className="btn-primary flex-1">
-          {initial?.id ? 'Save Task' : 'Create Task'}
+        <button type="button" onClick={handleClose} className="btn-primary flex-1">
+          Done
         </button>
       </div>
-    </form>
+    </div>
   )
 }

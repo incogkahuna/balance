@@ -537,16 +537,12 @@ export function TaskCard({ task, productionId, showProduction = false }) {
         )}
       </div>
 
-      {/* ── Edit modal ──────────────────────────────────────────────────────── */}
+      {/* ── Edit modal — auto-saves on every change, "Done" just closes ────── */}
       <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Task" size="lg">
         <TaskForm
           productionId={productionId}
           initial={task}
-          onSubmit={(updated) => {
-            updateTask(task.id, updated)
-            setShowEdit(false)
-          }}
-          onCancel={() => setShowEdit(false)}
+          onClose={() => setShowEdit(false)}
         />
       </Modal>
 

@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
+import { useAutoSave } from '../../../hooks/useAutoSave.js'
+import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
   CONCERN_CATEGORY, CONCERN_IMPACT, CONCERN_STATUS, createLogisticalConcern
 } from '../../../data/models.js'
@@ -21,9 +23,31 @@ function useProductionTeam(production) {
   }, [production, resolveAssignee])
 }
 
-export function ConcernForm({ production, initial, onSubmit, onCancel }) {
-  const { currentUser } = useApp()
+export function ConcernForm({ production, initial, onClose }) {
+  const { currentUser, addConcern, updateConcern, deleteConcern } = useApp()
   const team = useProductionTeam(production)
+
+  // ── Eager-create placeholder ──────────────────────────────────────────────
+  // Same pattern as MilestoneForm: create an empty record on mount so
+  // subsequent edits flow through the auto-save effect. Cleaned up on close
+  // if the user never typed a title.
+  const workingIdRef = useRef(initial?.id || null)
+  const createdHereRef = useRef(false)
+
+  useEffect(() => {
+    if (initial?.id || workingIdRef.current) return
+    const placeholder = createLogisticalConcern({
+      title: '',
+      category: CONCERN_CATEGORY.OTHER,
+      impactLevel: CONCERN_IMPACT.MEDIUM,
+      status: CONCERN_STATUS.OPEN,
+      createdBy: currentUser?.id,
+    })
+    workingIdRef.current = placeholder.id
+    createdHereRef.current = true
+    addConcern(production.id, placeholder)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [form, setForm] = useState({
     title:          initial?.title          || '',
@@ -40,33 +64,46 @@ export function ConcernForm({ production, initial, onSubmit, onCancel }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const isResolved = form.status === CONCERN_STATUS.RESOLVED
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (!form.title.trim()) return
-    const concern = createLogisticalConcern({
-      ...(initial || {}),
-      ...form,
-      createdBy: initial?.createdBy || currentUser?.id,
-    })
-    onSubmit(concern)
+  // ── Auto-save ─────────────────────────────────────────────────────────────
+  const enabled = !!workingIdRef.current
+  const { status: saveStatus, lastSavedAt, error: saveError } = useAutoSave(
+    form,
+    (value) => {
+      const id = workingIdRef.current
+      if (!id) return
+      updateConcern(production.id, id, value)
+    },
+    { enabled, delay: 600 }
+  )
+
+  // ── Close behaviour — drop the placeholder if no title was entered ───────
+  const handleClose = () => {
+    const id = workingIdRef.current
+    if (id && createdHereRef.current && !form.title.trim()) {
+      deleteConcern(production.id, id)
+    }
+    onClose?.()
   }
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/60 z-40" onClick={onCancel} />
+      <div className="fixed inset-0 bg-black/60 z-40" onClick={handleClose} />
 
       <div className="fixed inset-x-0 bottom-0 z-50 bg-orbital-surface border-t border-orbital-border rounded-t-2xl max-h-[92vh] flex flex-col lg:inset-auto lg:fixed lg:top-1/2 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:w-[540px] lg:max-h-[90vh] lg:rounded-xl lg:border">
 
         <div className="flex items-center justify-between p-4 border-b border-orbital-border flex-shrink-0">
-          <h3 className="font-semibold text-orbital-text">
-            {initial ? 'Edit Concern' : 'Add Logistical Concern'}
-          </h3>
-          <button onClick={onCancel} className="p-1.5 rounded hover:bg-orbital-muted transition-colors">
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-orbital-text">
+              {initial ? 'Edit Concern' : 'Add Logistical Concern'}
+            </h3>
+            <SaveStatusPill status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} compact />
+          </div>
+          <button onClick={handleClose} className="p-1.5 rounded hover:bg-orbital-muted transition-colors">
             <X size={16} className="text-orbital-subtle" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 p-4 space-y-4">
+        <div className="overflow-y-auto flex-1 p-4 space-y-4">
 
           <div>
             <label className="label">Title *</label>
@@ -75,7 +112,6 @@ export function ConcernForm({ production, initial, onSubmit, onCancel }) {
               value={form.title}
               onChange={e => set('title', e.target.value)}
               placeholder="e.g. Generator Power Requirements, Transport of LED Panels"
-              required
               autoFocus
             />
           </div>
@@ -162,12 +198,11 @@ export function ConcernForm({ production, initial, onSubmit, onCancel }) {
           )}
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
-            <button type="submit" className="btn-primary flex-1">
-              {initial ? 'Save Changes' : 'Add Concern'}
+            <button type="button" onClick={handleClose} className="btn-primary flex-1">
+              Done
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </>
   )
