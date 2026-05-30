@@ -145,6 +145,11 @@ export function Gantt() {
   const MIN_CHART_HEIGHT = 160
   const resizeStartRef = useRef(null)  // { startY, startHeight } while dragging
 
+  // svgHeight is recomputed every render but the drag listener below has
+  // empty deps (we don't want to re-register on every paint). Mirror it in
+  // a ref so the listener can read the current value when capping.
+  const svgHeightRef = useRef(0)
+
   const startResize = (e) => {
     e.preventDefault()
     const wrapper = scrollWrapperRef.current
@@ -166,7 +171,12 @@ export function Gantt() {
       if (!start) return
       const cy = e.clientY ?? e.touches?.[0]?.clientY
       const dy = cy - start.startY
-      const next = Math.max(MIN_CHART_HEIGHT, start.startHeight + dy)
+      // Cap at the chart's natural SVG height — dragging past it just
+      // creates an empty void below the rows (the SVG has a fixed height
+      // computed from row count and doesn't auto-fill the wrapper). Pulling
+      // past the cap should feel like hitting a stop, not painting black.
+      const max  = svgHeightRef.current || Number.POSITIVE_INFINITY
+      const next = Math.min(max, Math.max(MIN_CHART_HEIGHT, start.startHeight + dy))
       setChartHeight(next)
     }
     const onUp = () => {
@@ -239,6 +249,18 @@ export function Gantt() {
   // Which rows we render depends on groupBy mode.
   const rows = groupBy === 'production' ? sortedProds : sortedResources
   const svgHeight = AXIS_H + Math.max(rows.length, 1) * (ROW_H + ROW_GAP)
+
+  // Keep the resize-drag cap in sync with the current SVG height. Refs the
+  // drag listener above (it has empty deps and can't see svgHeight directly).
+  // If a saved chartHeight from localStorage is now larger than the natural
+  // height (because rows were removed), pull it back down so we don't paint
+  // the void again on the next session.
+  useEffect(() => {
+    svgHeightRef.current = svgHeight
+    if (chartHeight !== null && chartHeight > svgHeight) {
+      setChartHeight(svgHeight)
+    }
+  }, [svgHeight, chartHeight])
 
   // ── Bar click → ProductionQuickView popup ───────────────────────────────
   // Look up the full Production from AppContext (the prototype's projection
