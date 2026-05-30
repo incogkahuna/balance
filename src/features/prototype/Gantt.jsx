@@ -46,6 +46,24 @@ export function Gantt() {
   const [filter, setFilter]           = useState('all')
   const [zoomLevel, setZoomLevel]     = useState(1)
 
+  // Chart height: null = auto-fit all rows. A number = explicit pixel
+  // height the user dragged the bottom handle to. Persisted per-browser so
+  // the user's preferred size survives a refresh.
+  const CHART_HEIGHT_KEY = 'balance_gantt_chart_height'
+  const [chartHeight, setChartHeight] = useState(() => {
+    if (typeof window === 'undefined') return null
+    const raw = window.localStorage.getItem(CHART_HEIGHT_KEY)
+    const n = raw ? parseInt(raw, 10) : NaN
+    return Number.isFinite(n) ? n : null
+  })
+  useEffect(() => {
+    if (chartHeight === null) {
+      try { window.localStorage.removeItem(CHART_HEIGHT_KEY) } catch { /* noop */ }
+    } else {
+      try { window.localStorage.setItem(CHART_HEIGHT_KEY, String(chartHeight)) } catch { /* noop */ }
+    }
+  }, [chartHeight])
+
   // Dynamic day width drives the entire timeline scale. Bumped/dropped by
   // the zoom controls in the toolbar (and the +/- keyboard shortcuts).
   const dayW       = BASE_DAY_W * zoomLevel
@@ -108,6 +126,56 @@ export function Gantt() {
     const maxScroll = wrapper.scrollWidth - wrapper.clientWidth
     wrapper.scrollLeft = Math.max(0, Math.min(maxScroll, target))
   }, [dayW, scrubDay])
+
+  // ── Vertical resize handle ──────────────────────────────────────────────
+  // Drag the bar at the bottom of the chart area up/down to constrain the
+  // visible chart height. Inside that height, the SVG scrolls vertically
+  // (and horizontally as before) so the user can pin the chart to whatever
+  // viewport size they like and scroll around within it.
+  const MIN_CHART_HEIGHT = 160
+  const resizeStartRef = useRef(null)  // { startY, startHeight } while dragging
+
+  const startResize = (e) => {
+    e.preventDefault()
+    const wrapper = scrollWrapperRef.current
+    if (!wrapper) return
+    const startHeight = chartHeight ?? wrapper.getBoundingClientRect().height
+    const startY = e.clientY ?? e.touches?.[0]?.clientY
+    resizeStartRef.current = { startY, startHeight }
+    // Visual feedback while dragging
+    document.body.style.cursor = 'ns-resize'
+    document.body.style.userSelect = 'none'
+  }
+
+  // Double-click on the handle resets to auto-fit (null height).
+  const resetHeight = () => setChartHeight(null)
+
+  useEffect(() => {
+    const onMove = (e) => {
+      const start = resizeStartRef.current
+      if (!start) return
+      const cy = e.clientY ?? e.touches?.[0]?.clientY
+      const dy = cy - start.startY
+      const next = Math.max(MIN_CHART_HEIGHT, start.startHeight + dy)
+      setChartHeight(next)
+    }
+    const onUp = () => {
+      if (!resizeStartRef.current) return
+      resizeStartRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    globalThis.addEventListener('mousemove', onMove)
+    globalThis.addEventListener('mouseup', onUp)
+    globalThis.addEventListener('touchmove', onMove)
+    globalThis.addEventListener('touchend', onUp)
+    return () => {
+      globalThis.removeEventListener('mousemove', onMove)
+      globalThis.removeEventListener('mouseup', onUp)
+      globalThis.removeEventListener('touchmove', onMove)
+      globalThis.removeEventListener('touchend', onUp)
+    }
+  }, [])
 
   // Keyboard shortcuts — + / - zoom, 0 resets. Skipped when typing in an
   // input so we never fight a form (even though the prototype has none).
@@ -195,7 +263,13 @@ export function Gantt() {
             />
             <Legend hoveredProd={hoveredProd} setHoveredProd={setHoveredProd} />
 
-            <div ref={scrollWrapperRef} className="overflow-x-auto">
+            <div
+              ref={scrollWrapperRef}
+              className="overflow-x-auto"
+              style={chartHeight !== null
+                ? { height: chartHeight, overflowY: 'auto' }
+                : undefined}
+            >
               <svg
                 width={TOTAL_W}
                 height={svgHeight}
@@ -245,6 +319,13 @@ export function Gantt() {
               </svg>
             </div>
 
+            <ResizeHandle
+              onMouseDown={startResize}
+              onTouchStart={startResize}
+              onDoubleClick={resetHeight}
+              isCustom={chartHeight !== null}
+            />
+
             <Scrubber day={scrubDay} setDay={setScrubDay} />
             <SummaryStrip scrubDate={scrubDate} />
           </div>
@@ -272,6 +353,50 @@ function Header({ scrubDate }) {
         <p className="font-telemetry text-sm text-orbital-text tracking-wider">
           {format(scrubDate, 'EEE · MMM d, yyyy').toUpperCase()}
         </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Resize handle — drag to set chart height, double-click to auto-fit ─────
+function ResizeHandle({ onMouseDown, onTouchStart, onDoubleClick, isCustom }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
+      onDoubleClick={onDoubleClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={isCustom ? 'Drag to resize · double-click to auto-fit' : 'Drag to resize the chart'}
+      className="relative w-full flex items-center justify-center select-none"
+      style={{
+        height: 8,
+        cursor: 'ns-resize',
+        background: hover ? 'rgba(59,130,246,0.18)' : 'transparent',
+        borderTop: '1px solid var(--orbital-border)',
+        borderBottom: '1px solid var(--orbital-border)',
+        transition: 'background 120ms ease-out',
+      }}
+    >
+      {/* Two short stacked lines as the visual grip */}
+      <div className="flex flex-col gap-0.5 pointer-events-none">
+        <span
+          className="block"
+          style={{
+            width: 24,
+            height: 1,
+            background: hover ? '#60a5fa' : (isCustom ? 'var(--orbital-subtle)' : 'var(--orbital-chrome)'),
+          }}
+        />
+        <span
+          className="block"
+          style={{
+            width: 24,
+            height: 1,
+            background: hover ? '#60a5fa' : (isCustom ? 'var(--orbital-subtle)' : 'var(--orbital-chrome)'),
+          }}
+        />
       </div>
     </div>
   )
