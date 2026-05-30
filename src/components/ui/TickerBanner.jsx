@@ -21,8 +21,11 @@ const DEFAULT_SETTINGS = {
 
 const SPEED_LABEL = { slow: 'Slow', normal: 'Normal', fast: 'Fast' }
 
-// seconds per logical item (items are padded to ≥12 before the DOM doubling)
-const SPEED_SPX = { slow: 8.0, normal: 4.5, fast: 2.2 }
+// seconds per logical item (items are padded to ≥12 before the DOM doubling).
+// Whole speed chain was shifted one tier slower per Danny's request: what
+// used to be Normal is now Fast, what used to be Slow is now Normal, and
+// Slow got a fresh slower tier on top. Keeps the ~1.8x ratio between tiers.
+const SPEED_SPX = { slow: 14.4, normal: 8.0, fast: 4.5 }
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const TASK_STATUS_CFG = {
