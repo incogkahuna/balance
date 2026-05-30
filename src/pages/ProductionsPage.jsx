@@ -112,9 +112,9 @@ export function ProductionsPage() {
   }, [productions, search])
 
   return (
-    <div>
+    <div className="overflow-x-hidden">
       <TopBar />
-      <div className="max-w-7xl mx-auto px-4 lg:px-6 py-5">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-5">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between mb-5">
@@ -219,7 +219,7 @@ export function ProductionsPage() {
             )}
           />
         ) : (
-          <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4">
             {sortedFiltered.map(prod => (
               <ProductionCard
                 key={prod.id}
@@ -444,7 +444,7 @@ function ProductionCard({
         {/* pr-12 on sm+ reserves room for the absolute-positioned palette +
             grip controls that only show on desktop; on mobile those are
             hidden so the title can use the full width. */}
-        <div className={clsx('flex items-start justify-between gap-3 pb-0', 'px-5', 'pt-4')}>
+        <div className={clsx('flex items-start justify-between gap-3 pb-0', 'px-4 sm:px-5', 'pt-4')}>
           <div className="flex-1 min-w-0 sm:pr-12">
             <p className={clsx('font-semibold text-orbital-text leading-tight truncate', 'text-lg')}>{prod.name}</p>
             <p className={clsx('text-orbital-subtle truncate mt-1', 'text-sm')}>{prod.client}</p>
@@ -467,7 +467,7 @@ function ProductionCard({
         </div>
 
         {/* Row 2: type pill + countdown — always shown, scales with card size */}
-        <div className={clsx('flex items-center justify-between gap-3 pt-3', 'px-5')}>
+        <div className={clsx('flex items-center justify-between gap-3 pt-3', 'px-4 sm:px-5')}>
           <span
             className={clsx('font-telemetry tracking-wider uppercase whitespace-nowrap', 'text-[10px] px-2 py-0.5')}
             style={{
@@ -491,7 +491,7 @@ function ProductionCard({
         </div>
 
         {/* Row 3: metadata — location, dates, stage manager */}
-        <div className={clsx('flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-3', 'px-5', 'pb-4')}>
+        <div className={clsx('flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-3', 'px-4 sm:px-5', 'pb-4')}>
           <span className={clsx('flex items-center gap-1.5 text-orbital-subtle', 'text-xs')}>
             <MapPin size={12} className="flex-shrink-0" />
             <span className="truncate max-w-[220px]">{locationLabel}</span>
@@ -513,7 +513,7 @@ function ProductionCard({
         {/* Detail section — only at M+ if there's something to show */}
         {showDetailSection && (
           <div
-            className={clsx('flex flex-col gap-2', 'px-5', 'py-2.5')}
+            className={clsx('flex flex-col gap-2', 'px-4 sm:px-5', 'py-2.5')}
             style={{ borderTop: '1px solid var(--orbital-border)' }}
           >
             {nextMile && (
@@ -561,7 +561,7 @@ function ProductionCard({
             bottom of the card so all cards in a row align cleanly even when
             some have a detail section above and others don't. */}
         <div
-          className={clsx('flex items-center justify-between mt-auto', 'px-5', 'py-3')}
+          className={clsx('flex items-center justify-between mt-auto', 'px-4 sm:px-5', 'py-3')}
           style={{ borderTop: '1px solid var(--orbital-border)' }}
         >
           <AvatarGroup userIds={memberIds} size={'sm'} />
