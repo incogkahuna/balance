@@ -90,9 +90,12 @@ export function TeamPage() {
         </div>
       </div>
 
-      {/* ── Sub-tab strip: one per team member ───────────────────────── */}
+      {/* ── Member grid — wraps to as many rows as needed so no name gets
+              clipped no matter how big the roster grows. Selected card
+              gets a coloured border in the member's accent + bright
+              background; the rest stay quiet. */}
       <div
-        className="flex items-center gap-0.5 p-0.5 mb-4 overflow-x-auto"
+        className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5 mb-4 p-1.5"
         style={{
           background: 'var(--orbital-bg)',
           border: '1px solid var(--orbital-border)',
@@ -105,44 +108,35 @@ export function TeamPage() {
             <button
               key={user.id}
               onClick={() => setSelectedId(user.id)}
-              className="flex items-center gap-2 px-3 py-2 transition-colors whitespace-nowrap flex-1"
+              className="relative flex items-center gap-2 px-2.5 py-2 transition-colors text-left min-w-0"
               style={{
                 background: active ? 'var(--orbital-surface)' : 'transparent',
-                border: active ? `1px solid ${user.color}55` : '1px solid transparent',
+                border: active ? `1px solid ${user.color}88` : '1px solid var(--orbital-border)',
                 color: active ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
-                opacity: user.isPending ? 0.75 : 1,
+                opacity: user.isPending ? 0.78 : 1,
+                boxShadow: active ? `0 0 0 1px ${user.color}33, inset 0 0 16px ${user.color}10` : 'none',
               }}
             >
               <span
-                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0"
                 style={{ background: user.color }}
               >
                 {user.avatar}
               </span>
-              <span className="text-sm font-medium">{user.name}</span>
-              <span
-                className="font-telemetry text-[9px] tracking-wider px-1.5 py-px hidden sm:inline-flex"
-                style={{
-                  background: roleMeta.bg,
-                  border: `1px solid ${roleMeta.border}`,
-                  color: roleMeta.color,
-                }}
-              >
-                {roleMeta.label.toUpperCase()}
-              </span>
-              {user.isPending && (
-                <span
-                  className="font-telemetry text-[9px] tracking-wider px-1.5 py-px"
-                  style={{
-                    background: 'rgba(251,191,36,0.12)',
-                    border: '1px solid rgba(251,191,36,0.35)',
-                    color: '#fbbf24',
-                  }}
-                  title="Pre-authorized — hasn't signed in yet"
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate leading-tight">{user.name}</p>
+                <p
+                  className="font-telemetry text-[9px] tracking-wider mt-0.5"
+                  style={{ color: active ? roleMeta.color : 'var(--orbital-dim)' }}
                 >
-                  PENDING
-                </span>
-              )}
+                  {roleMeta.label.toUpperCase()}
+                  {user.isPending && (
+                    <span className="ml-1.5" style={{ color: '#fbbf24' }}>
+                      · PENDING
+                    </span>
+                  )}
+                </p>
+              </div>
             </button>
           )
         })}
