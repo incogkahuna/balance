@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format, parseISO, differenceInCalendarDays } from 'date-fns'
-import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw } from 'lucide-react'
+import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, ArrowRight, AlertTriangle, Package, AlertCircle } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
@@ -35,11 +35,28 @@ const STATUS_ORDER = [
   PRODUCTION_STATUS.COMPLETED,
 ]
 
+// Tailwind's `sm` breakpoint is 640px. Below that we treat as mobile and
+// open the QuickView popup instead of routing to the full detail page —
+// the full page is fine, this just gives a faster preview on a phone
+// without losing scroll position in the list.
+const MOBILE_BREAKPOINT = 640
+
 export function ProductionsPage() {
   const { currentUser, productions, addProduction } = useApp()
   const navigate = useNavigate()
   const [search, setSearch]     = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [quickViewProd, setQuickViewProd] = useState(null)
+
+  // Card click router — mobile gets a popup, desktop navigates as before.
+  // Evaluated at click time so a desktop user who narrows their window
+  // still gets the right behaviour for their current viewport.
+  const handleCardOpen = useCallback((prod) => {
+    const isMobile = typeof window !== 'undefined'
+      && window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`).matches
+    if (isMobile) setQuickViewProd(prod)
+    else navigate(`/productions/${prod.id}`)
+  }, [navigate])
 
   const [cardOrder, setCardOrder]     = useLocalStorage('balance_card_order', [])
   const [dragId, setDragId]           = useState(null)
@@ -230,7 +247,7 @@ export function ProductionsPage() {
               <ProductionCard
                 key={prod.id}
                 production={prod}
-                onClick={() => navigate(`/productions/${prod.id}`)}
+                onClick={() => handleCardOpen(prod)}
                 isDragging={dragId === prod.id}
                 isDragOver={dragOverId === prod.id}
                 onDragStart={handleDragStart}
@@ -246,6 +263,16 @@ export function ProductionsPage() {
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Production" size="lg">
         <ProductionForm onSubmit={handleCreate} onCancel={() => setShowCreate(false)} />
       </Modal>
+
+      <QuickViewModal
+        production={quickViewProd}
+        onClose={() => setQuickViewProd(null)}
+        onOpenFull={() => {
+          const id = quickViewProd?.id
+          setQuickViewProd(null)
+          if (id) navigate(`/productions/${id}`)
+        }}
+      />
     </div>
   )
 }
@@ -589,5 +616,188 @@ function ProductionCard({
         </div>
       </button>
     </div>
+  )
+}
+
+// ── QuickView popup — mobile-only preview shown when a card is tapped ───────
+// Surfaces the same info the card already shows plus a "view full page" CTA.
+// Rendered through the existing Modal component, which already styles itself
+// as a bottom sheet on mobile (rounded-t-2xl, items-end overlay) — so this
+// reads as a native iOS sheet rather than a centred dialog.
+function QuickViewModal({ production, onClose, onOpenFull }) {
+  const { tasks, getContractor } = useApp()
+
+  if (!production) return null
+
+  const prod           = production
+  const prodTasks      = tasks.filter(t => t.productionId === prod.id)
+  const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
+  const memberIds      = prod.assignedMembers.map(m => m.userId)
+  const stageManager   = prod.stageManagerId ? getContractor(prod.stageManagerId) : null
+  const health         = computeRoadmapHealth(prod.roadmap)
+  const borderColor    = prod.cardColor || STATUS_COLOR[prod.status] || '#52525b'
+  const pct            = prodTasks.length > 0 ? (completedTasks / prodTasks.length) * 100 : 0
+
+  const typeTint     = PROD_TYPE_TINT[prod.productionType] || FALLBACK_TINT
+  const countdown    = computeCountdown(prod)
+  const nextMile     = getNextMilestone(prod.roadmap)
+  const addonCount   = prod.addons?.length || 0
+  const damageCount  = prod.addons?.filter(a => a.damageFlag).length || 0
+  const concernCount = prod.bible?.concerns?.length || 0
+
+  const locationLabel = prod.locationType === 'In-House (Orbital Studios)'
+    ? 'Orbital Studios'
+    : prod.locationAddress || 'Mobile'
+
+  return (
+    <Modal
+      open={true}
+      onClose={onClose}
+      title={prod.name}
+      size="md"
+    >
+      <div
+        className="-mx-5 -mt-5 px-5 pt-3 pb-4 mb-4"
+        style={{ borderBottom: '1px solid var(--orbital-border)', borderLeft: `3px solid ${borderColor}` }}
+      >
+        <p className="text-sm text-orbital-subtle">{prod.client}</p>
+        <div className="flex items-center gap-2 mt-2 flex-wrap">
+          <StatusBadge status={prod.status} />
+          {health !== 'On Track' && HEALTH_CONFIG[health] && (
+            <span
+              className="text-[11px] font-medium px-2 py-0.5 inline-flex items-center gap-1"
+              style={{
+                color: '#fb923c',
+                background: 'rgba(251,146,60,0.1)',
+                border: '1px solid rgba(251,146,60,0.25)',
+              }}
+            >
+              <AlertTriangle size={11} />
+              {health}
+            </span>
+          )}
+          {countdown && (
+            <span className="font-telemetry text-xs tabular-nums" style={{ color: countdown.accent }}>
+              {countdown.label} <span className="text-orbital-subtle text-[10px]">{countdown.sub}</span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* Type + dates */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <span
+            className="font-telemetry tracking-wider uppercase whitespace-nowrap text-[10px] px-2 py-0.5"
+            style={{
+              background: typeTint.bg,
+              border: `1px solid ${typeTint.border}`,
+              color: typeTint.text,
+            }}
+          >
+            {prod.productionType}
+          </span>
+          {prod.startDate && (
+            <span className="flex items-center gap-1.5 text-orbital-subtle font-mono text-xs">
+              <Calendar size={12} className="flex-shrink-0" />
+              {format(parseISO(prod.startDate), 'MMM d')}
+              {prod.endDate && ` – ${format(parseISO(prod.endDate), 'MMM d')}`}
+            </span>
+          )}
+        </div>
+
+        {/* Location + SM */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-orbital-subtle text-xs">
+            <MapPin size={12} className="flex-shrink-0" />
+            <span className="truncate">{locationLabel}</span>
+          </div>
+          {stageManager && (
+            <div className="text-orbital-subtle text-xs">
+              SM: <span className="text-orbital-text">{stageManager.name}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Next milestone */}
+        {nextMile && (
+          <div className="rounded-md p-3" style={{ background: 'var(--orbital-muted)', border: '1px solid var(--orbital-border)' }}>
+            <p className="font-telemetry tracking-wider text-orbital-dim text-[9px] mb-1">NEXT MILESTONE</p>
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-orbital-text text-sm truncate">{nextMile.title}</p>
+              {nextMile.date && (
+                <span className="font-mono text-orbital-subtle whitespace-nowrap text-xs">
+                  {format(parseISO(nextMile.date), 'MMM d')}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Counts row */}
+        {(addonCount > 0 || concernCount > 0) && (
+          <div className="flex items-center gap-4">
+            {addonCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: damageCount > 0 ? '#fb923c' : 'var(--orbital-text)' }}>
+                <Package size={12} />
+                <span className="font-semibold tabular-nums">{addonCount}</span>
+                <span className="text-orbital-subtle">
+                  add-on{addonCount === 1 ? '' : 's'}{damageCount > 0 && ` · ${damageCount} dmg`}
+                </span>
+              </span>
+            )}
+            {concernCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: '#fb923c' }}>
+                <AlertCircle size={12} />
+                <span className="font-semibold tabular-nums">{concernCount}</span>
+                <span className="text-orbital-subtle">
+                  concern{concernCount === 1 ? '' : 's'}
+                </span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Team + progress */}
+        <div
+          className="flex items-center justify-between pt-3"
+          style={{ borderTop: '1px solid var(--orbital-border)' }}
+        >
+          <div>
+            <p className="font-telemetry tracking-wider text-orbital-dim text-[9px] mb-1.5">TEAM</p>
+            {memberIds.length > 0
+              ? <AvatarGroup userIds={memberIds} size="sm" />
+              : <span className="text-xs text-orbital-dim">Nobody assigned</span>}
+          </div>
+          <div className="text-right">
+            <p className="font-telemetry tracking-wider text-orbital-dim text-[9px] mb-1.5">TASKS</p>
+            {prodTasks.length > 0 ? (
+              <div className="flex items-center gap-2.5">
+                <div className="h-1 w-20" style={{ background: 'var(--orbital-border)' }}>
+                  <div
+                    className="h-full transition-all duration-300"
+                    style={{ width: `${pct}%`, background: borderColor }}
+                  />
+                </div>
+                <span className="text-orbital-subtle font-mono tabular-nums text-xs">
+                  {completedTasks}/{prodTasks.length}
+                </span>
+              </div>
+            ) : (
+              <span className="text-orbital-dim text-xs">No tasks</span>
+            )}
+          </div>
+        </div>
+
+        {/* Footer CTA */}
+        <button
+          onClick={onOpenFull}
+          className="btn-primary w-full justify-center mt-2"
+        >
+          View full page
+          <ArrowRight size={14} />
+        </button>
+      </div>
+    </Modal>
   )
 }
