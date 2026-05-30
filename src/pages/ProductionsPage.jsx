@@ -198,9 +198,9 @@ export function ProductionsPage() {
           </div>
         </div>
 
-        {/* Drag hint */}
+        {/* Drag hint — desktop-only since HTML5 drag-drop doesn't fire on touch */}
         {!search && sortedFiltered.length > 1 && (
-          <p className="text-[11px] text-orbital-dim mb-3 flex items-center gap-1.5">
+          <p className="hidden sm:flex text-[11px] text-orbital-dim mb-3 items-center gap-1.5">
             <GripVertical size={11} />
             {isCustomOrdered ? 'Custom order active · drag to adjust' : 'Drag to reorder'}
           </p>
@@ -389,8 +389,11 @@ function ProductionCard({
         />
       )}
 
-      {/* Hover controls: colour picker + drag handle */}
-      <div className="absolute top-2 right-2 z-20 flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+      {/* Hover controls: colour picker + drag handle. Hidden entirely on
+          mobile — HTML5 native drag-drop doesn't fire on touch and the
+          colour picker is a desktop-only nicety; both were stealing space
+          in the card's top-right corner on phones. */}
+      <div className="hidden sm:flex absolute top-2 right-2 z-20 items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         {canCustomize && (
           <div className="relative">
             <button
@@ -438,8 +441,11 @@ function ProductionCard({
         style={{ borderLeft: `3px solid ${borderColor}` }}
       >
         {/* Row 1: name + status badge */}
+        {/* pr-12 on sm+ reserves room for the absolute-positioned palette +
+            grip controls that only show on desktop; on mobile those are
+            hidden so the title can use the full width. */}
         <div className={clsx('flex items-start justify-between gap-3 pb-0', 'px-5', 'pt-4')}>
-          <div className="flex-1 min-w-0 pr-12">
+          <div className="flex-1 min-w-0 sm:pr-12">
             <p className={clsx('font-semibold text-orbital-text leading-tight truncate', 'text-lg')}>{prod.name}</p>
             <p className={clsx('text-orbital-subtle truncate mt-1', 'text-sm')}>{prod.client}</p>
           </div>
