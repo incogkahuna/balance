@@ -147,11 +147,12 @@ export function normalizeAssignedMember(m) {
 // id so demo tasks (which use 'mark'/'aj'/'danny'/etc. as assigneeId)
 // surface correctly on the signed-in user's dashboard.
 export const USERS = [
-  { id: 'mark',   name: 'Mark',   email: 'mark@orbitalvs.com',    role: ROLES.ADMIN,      avatar: 'M', color: '#6366f1' },
-  { id: 'aj',     name: 'AJ',     email: 'aj@orbitalvs.com',      role: ROLES.ADMIN,      avatar: 'A', color: '#8b5cf6' },
-  { id: 'danny',  name: 'Danny',  email: 'dhorgan@orbitalvs.com', role: ROLES.SUPERVISOR, avatar: 'D', color: '#3b82f6' },
-  { id: 'brian',  name: 'Brian',  email: 'brian@orbitalvs.com',   role: ROLES.CREW,       avatar: 'B', color: '#10b981' },
-  { id: 'wilder', name: 'Wilder', email: 'wilder@orbitalvs.com',  role: ROLES.CREW,       avatar: 'W', color: '#f59e0b' },
+  { id: 'mark',   name: 'Mark',   email: 'mark@orbitalvs.com',       role: ROLES.ADMIN,      avatar: 'M',  color: '#6366f1' },
+  { id: 'aj',     name: 'AJ',     email: 'aj@orbitalvs.com',         role: ROLES.ADMIN,      avatar: 'A',  color: '#8b5cf6' },
+  { id: 'danny',  name: 'Danny',  email: 'dhorgan@orbitalvs.com',    role: ROLES.ADMIN,      avatar: 'D',  color: '#3b82f6' },
+  { id: 'brian',  name: 'Brian',  email: 'brodriguez@orbitalvs.com', role: ROLES.CREW,       avatar: 'B',  color: '#10b981' },
+  { id: 'wilder', name: 'Wilder', email: 'wilder@orbitalvs.com',     role: ROLES.CREW,       avatar: 'W',  color: '#f59e0b' },
+  { id: 'mike',   name: 'Mike',   email: 'mike@orbitalvs.com',       role: ROLES.CREW,       avatar: 'MS', color: '#06b6d4' },
 ]
 
 // ─── Factory functions ────────────────────────────────────────────────────────
