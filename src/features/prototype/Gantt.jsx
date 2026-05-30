@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, createContext, useContext } from 'react'
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, createContext, useContext } from 'react'
 import { format, addDays } from 'date-fns'
 import { Minus, Plus, Maximize2 } from 'lucide-react'
 import { usePrototypeData } from './dataSource.js'
@@ -52,9 +52,62 @@ export function Gantt() {
   const TIMELINE_W = windowDays * dayW
   const TOTAL_W    = NAME_COL_W + TIMELINE_W
 
-  const zoomIn  = () => setZoomLevel(z => Math.min(ZOOM_MAX, +(z * ZOOM_STEP).toFixed(3)))
-  const zoomOut = () => setZoomLevel(z => Math.max(ZOOM_MIN, +(z / ZOOM_STEP).toFixed(3)))
-  const zoomReset = () => setZoomLevel(1)
+  // ── Zoom anchoring ──────────────────────────────────────────────────────
+  // The horizontal-scroll wrapper around the SVG. Tracked so zoom changes
+  // can re-center the viewport on the scrub line (the day the user is
+  // "addressing"), instead of letting the playhead drift off-screen as the
+  // timeline width changes underneath them.
+  const scrollWrapperRef = useRef(null)
+  // After each zoom change, this layout effect runs once and shifts
+  // scrollLeft so that the playhead lands at its previous on-screen
+  // position (or as close as the scroll bounds allow). Sentinel keeps it
+  // from firing on the very first paint, when there's no "previous" zoom.
+  const prevDayWRef = useRef(null)
+  const zoomAnchorRef = useRef(null)  // { day, screenOffset } captured pre-zoom
+
+  const captureZoomAnchor = () => {
+    const wrapper = scrollWrapperRef.current
+    if (!wrapper) { zoomAnchorRef.current = null; return }
+    const playheadXInTimeline = NAME_COL_W + scrubDay * dayW + dayW / 2
+    const offsetFromScroll = playheadXInTimeline - wrapper.scrollLeft
+    // Visible viewport excludes the fixed name column on the left.
+    const visibleStart = NAME_COL_W
+    const visibleEnd   = wrapper.clientWidth
+    // If the playhead is currently visible, preserve its on-screen offset
+    // (keeps the user's spatial reference). If it's off-screen, center it
+    // in the viewport so the zoom brings it into view — matches the user's
+    // expectation of "zoom in on the blue line."
+    const visible = offsetFromScroll >= visibleStart && offsetFromScroll <= visibleEnd
+    const screenOffset = visible
+      ? offsetFromScroll
+      : (visibleStart + visibleEnd) / 2
+    zoomAnchorRef.current = { day: scrubDay, screenOffset }
+  }
+
+  const zoomIn  = () => { captureZoomAnchor(); setZoomLevel(z => Math.min(ZOOM_MAX, +(z * ZOOM_STEP).toFixed(3))) }
+  const zoomOut = () => { captureZoomAnchor(); setZoomLevel(z => Math.max(ZOOM_MIN, +(z / ZOOM_STEP).toFixed(3))) }
+  const zoomReset = () => { captureZoomAnchor(); setZoomLevel(1) }
+
+  useLayoutEffect(() => {
+    // First paint or no anchor → nothing to restore
+    if (prevDayWRef.current === null) { prevDayWRef.current = dayW; return }
+    if (dayW === prevDayWRef.current) return
+    prevDayWRef.current = dayW
+
+    const wrapper = scrollWrapperRef.current
+    const anchor  = zoomAnchorRef.current
+    zoomAnchorRef.current = null
+    if (!wrapper || !anchor) return
+
+    // Where is the anchored day in the new (zoomed) timeline?
+    const newPlayheadX = NAME_COL_W + anchor.day * dayW + dayW / 2
+    // Target scrollLeft puts the anchored day at the same screen offset
+    // it had before zoom. Centering happens naturally when the original
+    // anchor was near the centre of the viewport.
+    const target = newPlayheadX - anchor.screenOffset
+    const maxScroll = wrapper.scrollWidth - wrapper.clientWidth
+    wrapper.scrollLeft = Math.max(0, Math.min(maxScroll, target))
+  }, [dayW, scrubDay])
 
   // Keyboard shortcuts — + / - zoom, 0 resets. Skipped when typing in an
   // input so we never fight a form (even though the prototype has none).
@@ -68,7 +121,8 @@ export function Gantt() {
     }
     globalThis.addEventListener('keydown', onKey)
     return () => globalThis.removeEventListener('keydown', onKey)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrubDay, dayW])
 
   // Sort productions by start date so the diagonal cascade reads top→down left→right
   const sortedProds = useMemo(
@@ -141,7 +195,7 @@ export function Gantt() {
             />
             <Legend hoveredProd={hoveredProd} setHoveredProd={setHoveredProd} />
 
-            <div className="overflow-x-auto">
+            <div ref={scrollWrapperRef} className="overflow-x-auto">
               <svg
                 width={TOTAL_W}
                 height={svgHeight}
