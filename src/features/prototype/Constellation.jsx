@@ -2555,6 +2555,7 @@ function Stat({ label, value, color }) {
 const MIN_RANGE_SPAN = 1
 
 function TimeScrubber({ mode, setMode, day, setDay, range, setRange }) {
+  const { WINDOW_DAYS } = useConstellation()
   const trackRef = useRef(null)
   const dragRef = useRef(null)        // 'day' | 'start' | 'end' | 'span' | null
   const spanDragOrigin = useRef(null) // { startX, startWindow } for span drag
