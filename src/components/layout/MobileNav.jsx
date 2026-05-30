@@ -1,14 +1,21 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, BarChart3, Users } from 'lucide-react'
+import { LayoutDashboard, Film, Calendar, CheckSquare, Users } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
 
+// Mobile bottom nav — capped at 5 items for usability. Crew sees the four
+// screens they actually use; admin/sup also get Crew (contractors). Team,
+// Analytics, Coming Soon, Prototype are intentionally desktop-only — they're
+// either admin tools or canvas-heavy views that don't read well on phones.
+//
+// Bumped order so Tasks sits second (between Home and Jobs) — the highest-
+// signal mobile screen for crew. Previously Tasks wasn't here at all.
 const NAV_ITEMS = [
   { to: '/dashboard',   icon: LayoutDashboard, label: 'Home'     },
-  { to: '/productions', icon: Film,             label: 'Jobs'     },
-  { to: '/schedule',    icon: Calendar,         label: 'Schedule' },
-  { to: '/contractors', icon: Users,            label: 'Crew',    adminOrSup: true },
-  { to: '/analytics',   icon: BarChart3,        label: 'Data',    adminOnly: true  },
+  { to: '/tasks',       icon: CheckSquare,     label: 'Tasks'    },
+  { to: '/productions', icon: Film,            label: 'Jobs'     },
+  { to: '/schedule',    icon: Calendar,        label: 'Schedule' },
+  { to: '/contractors', icon: Users,           label: 'Crew',    adminOrSup: true },
 ]
 
 export function MobileNav() {
@@ -36,14 +43,14 @@ export function MobileNav() {
           <NavLink
             key={to}
             to={to}
-            className="flex-1 flex flex-col items-center justify-center py-2.5 gap-1 transition-colors"
+            className="flex-1 flex flex-col items-center justify-center py-3 gap-1 transition-colors"
             style={({ isActive }) => ({
               color: isActive ? 'var(--orbital-text)' : 'var(--orbital-subtle)',
-              borderTop: isActive ? '1px solid #3b82f6' : '1px solid transparent',
+              borderTop: isActive ? '2px solid #3b82f6' : '2px solid transparent',
             })}
           >
-            <Icon size={17} />
-            <span className="text-[10px] font-medium">{label}</span>
+            <Icon size={19} />
+            <span className="text-[11px] font-medium">{label}</span>
           </NavLink>
         ))}
       </div>

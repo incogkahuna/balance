@@ -42,11 +42,12 @@ export function AppShell() {
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* pb on mobile clears the fixed bottom MobileNav (~52px) plus the
-            iPhone home-indicator safe-area inset, otherwise the last list
-            row is hidden under the nav. lg:pb-0 because the sidebar
-            replaces the bottom nav at desktop widths. */}
-        <main className="flex-1 pb-[calc(60px+env(safe-area-inset-bottom))] lg:pb-0">
+        {/* pb on mobile clears the fixed bottom MobileNav (~64px after the
+            mobile-pass sizing bump) plus the iPhone home-indicator safe
+            area inset, otherwise the last list row is hidden under the
+            nav. lg:pb-0 because the sidebar replaces the bottom nav at
+            desktop widths. */}
+        <main className="flex-1 pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-0">
           <Outlet />
         </main>
       </div>
