@@ -80,26 +80,45 @@ export async function markAllNotificationsReadFor(recipientId: string): Promise<
 // ─── Realtime ──────────────────────────────────────────────────────────────
 // Subscribes to INSERTs and UPDATEs for a specific recipient. Returns an
 // unsubscribe function.
+//
+// The channel name includes a per-call random suffix so React strict-mode's
+// double-invoke can't collide on a still-subscribed channel from the
+// previous mount (which would throw "cannot add callbacks after subscribe").
+// We also wrap the subscribe in a try/catch so a transient supabase error
+// (e.g. table not migrated yet) can't crash the parent component.
 export function subscribeToNotificationsFor(
   recipientId: string,
   handler: (event: { type: 'INSERT' | 'UPDATE' | 'DELETE'; row: AppNotification | { id: string } }) => void,
 ): () => void {
   if (!recipientId) return () => {}
-  const channel = supabase
-    .channel(`notifications:${recipientId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${recipientId}` },
-      (payload) => {
-        if (payload.eventType === 'INSERT') {
-          handler({ type: 'INSERT', row: fromRow(payload.new as NotificationRow) })
-        } else if (payload.eventType === 'UPDATE') {
-          handler({ type: 'UPDATE', row: fromRow(payload.new as NotificationRow) })
-        } else if (payload.eventType === 'DELETE') {
-          handler({ type: 'DELETE', row: { id: (payload.old as { id: string }).id } })
-        }
-      },
-    )
-    .subscribe()
-  return () => { supabase.removeChannel(channel) }
+  let channel: ReturnType<typeof supabase.channel> | null = null
+  try {
+    const suffix = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2)
+    channel = supabase
+      .channel(`notifications:${recipientId}:${suffix}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${recipientId}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            handler({ type: 'INSERT', row: fromRow(payload.new as NotificationRow) })
+          } else if (payload.eventType === 'UPDATE') {
+            handler({ type: 'UPDATE', row: fromRow(payload.new as NotificationRow) })
+          } else if (payload.eventType === 'DELETE') {
+            handler({ type: 'DELETE', row: { id: (payload.old as { id: string }).id } })
+          }
+        },
+      )
+      .subscribe()
+  } catch (err) {
+    console.error('[notifications] subscribe failed:', err)
+    channel = null
+  }
+  return () => {
+    if (channel) {
+      try { supabase.removeChannel(channel) } catch { /* noop */ }
+    }
+  }
 }

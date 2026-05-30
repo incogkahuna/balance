@@ -30,29 +30,39 @@ export function NotificationBell({ layout = 'compact' }) {
   const panelRef = useRef(null)
   const buttonRef = useRef(null)
 
-  // Load + subscribe
+  // Load + subscribe. Every call is wrapped so a transient backend issue
+  // (table not migrated yet, network blip, etc.) can't crash the page —
+  // the bell just goes silent until the next reload.
   useEffect(() => {
     if (!recipientId) return
     let cancelled = false
+    let unsub = () => {}
     listNotificationsFor(recipientId, 50)
       .then(rows => { if (!cancelled) setItems(rows) })
       .catch(err => console.error('[NotificationBell] load failed', err))
-    const unsub = subscribeToNotificationsFor(recipientId, (event) => {
-      setItems(prev => {
-        if (event.type === 'INSERT') {
-          if (prev.some(i => i.id === event.row.id)) return prev
-          return [event.row, ...prev].slice(0, 50)
-        }
-        if (event.type === 'UPDATE') {
-          return prev.map(i => i.id === event.row.id ? event.row : i)
-        }
-        if (event.type === 'DELETE') {
-          return prev.filter(i => i.id !== event.row.id)
-        }
-        return prev
+    try {
+      unsub = subscribeToNotificationsFor(recipientId, (event) => {
+        setItems(prev => {
+          if (event.type === 'INSERT') {
+            if (prev.some(i => i.id === event.row.id)) return prev
+            return [event.row, ...prev].slice(0, 50)
+          }
+          if (event.type === 'UPDATE') {
+            return prev.map(i => i.id === event.row.id ? event.row : i)
+          }
+          if (event.type === 'DELETE') {
+            return prev.filter(i => i.id !== event.row.id)
+          }
+          return prev
+        })
       })
-    })
-    return () => { cancelled = true; unsub() }
+    } catch (err) {
+      console.error('[NotificationBell] subscribe failed', err)
+    }
+    return () => {
+      cancelled = true
+      try { unsub() } catch { /* noop */ }
+    }
   }, [recipientId])
 
   // Close on outside click
