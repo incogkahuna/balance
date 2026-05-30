@@ -1,14 +1,21 @@
-import { useState, useMemo, createContext, useContext } from 'react'
+import { useState, useMemo, useEffect, createContext, useContext } from 'react'
 import { format, addDays } from 'date-fns'
+import { Minus, Plus, Maximize2 } from 'lucide-react'
 import { usePrototypeData } from './dataSource.js'
 
 // ── Visual dimensions (constant regardless of data) ─────────────────────────
 const NAME_COL_W = 220
-const DAY_W      = 22
+const BASE_DAY_W = 22                    // base px per day at zoom = 1.0
 const ROW_H      = 48                    // bumped from 42 — gives bars more presence
 const ROW_GAP    = 2
 const AXIS_H     = 56
 const DOT_SIZE   = 8                     // avatar dot diameter for in-bar resources
+
+// Zoom bounds + multiplicative step. 1.0 = base; <1 zooms out (more days
+// fit, narrower bars); >1 zooms in (fewer days visible, wider bars).
+const ZOOM_MIN  = 0.4
+const ZOOM_MAX  = 4.0
+const ZOOM_STEP = 1.5
 
 // File-scope context — holds the live (or seed-fallback) dataset and the
 // derived layout dimensions. Sub-components pull from this rather than
@@ -37,10 +44,31 @@ export function Gantt() {
   const [scrubDay, setScrubDay]       = useState(0)
   const [groupBy, setGroupBy]         = useState('production')
   const [filter, setFilter]           = useState('all')
+  const [zoomLevel, setZoomLevel]     = useState(1)
 
-  // Layout dimensions that depend on windowDays
-  const TIMELINE_W = windowDays * DAY_W
+  // Dynamic day width drives the entire timeline scale. Bumped/dropped by
+  // the zoom controls in the toolbar (and the +/- keyboard shortcuts).
+  const dayW       = BASE_DAY_W * zoomLevel
+  const TIMELINE_W = windowDays * dayW
   const TOTAL_W    = NAME_COL_W + TIMELINE_W
+
+  const zoomIn  = () => setZoomLevel(z => Math.min(ZOOM_MAX, +(z * ZOOM_STEP).toFixed(3)))
+  const zoomOut = () => setZoomLevel(z => Math.max(ZOOM_MIN, +(z / ZOOM_STEP).toFixed(3)))
+  const zoomReset = () => setZoomLevel(1)
+
+  // Keyboard shortcuts — + / - zoom, 0 resets. Skipped when typing in an
+  // input so we never fight a form (even though the prototype has none).
+  useEffect(() => {
+    const onKey = (e) => {
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === '+' || (e.key === '=' && e.shiftKey)) { e.preventDefault(); zoomIn() }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomOut() }
+      else if (e.key === '0') { e.preventDefault(); zoomReset() }
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => globalThis.removeEventListener('keydown', onKey)
+  }, [])
 
   // Sort productions by start date so the diagonal cascade reads top→down left→right
   const sortedProds = useMemo(
@@ -88,6 +116,7 @@ export function Gantt() {
     dayIndex,
     dateAtDayIndex,
     windowDays,
+    dayW,
     TIMELINE_W,
     TOTAL_W,
     filter,
@@ -107,6 +136,8 @@ export function Gantt() {
             <Toolbar
               groupBy={groupBy} setGroupBy={setGroupBy}
               filter={filter} setFilter={setFilter}
+              zoomLevel={zoomLevel}
+              zoomIn={zoomIn} zoomOut={zoomOut} zoomReset={zoomReset}
             />
             <Legend hoveredProd={hoveredProd} setHoveredProd={setHoveredProd} />
 
@@ -192,8 +223,11 @@ function Header({ scrubDate }) {
   )
 }
 
-// ── Toolbar: group-by toggle + resource filter chips ────────────────────────
-function Toolbar({ groupBy, setGroupBy, filter, setFilter }) {
+// ── Toolbar: group-by toggle + resource filter chips + zoom controls ───────
+function Toolbar({ groupBy, setGroupBy, filter, setFilter, zoomLevel, zoomIn, zoomOut, zoomReset }) {
+  const zoomPct = Math.round(zoomLevel * 100)
+  const atMax = zoomLevel >= ZOOM_MAX - 0.001
+  const atMin = zoomLevel <= ZOOM_MIN + 0.001
   return (
     <div
       className="flex items-center justify-between gap-4 px-3 py-2 flex-wrap"
@@ -246,6 +280,53 @@ function Toolbar({ groupBy, setGroupBy, filter, setFilter }) {
             </button>
           )
         })}
+      </div>
+
+      {/* Zoom controls */}
+      <div className="flex items-center gap-2">
+        <span className="hud-label">ZOOM</span>
+        <div
+          className="inline-flex items-center"
+          style={{ border: '1px solid var(--orbital-border)', background: 'var(--orbital-muted)' }}
+        >
+          <button
+            onClick={zoomOut}
+            disabled={atMin}
+            className="px-2 py-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ color: atMin ? 'var(--orbital-dim)' : 'var(--orbital-subtle)' }}
+            title="Zoom out (−)"
+          >
+            <Minus size={11} />
+          </button>
+          <span
+            className="px-2 font-telemetry text-[10px] tracking-wider text-orbital-text tabular-nums select-none"
+            style={{ minWidth: 42, textAlign: 'center' }}
+          >
+            {zoomPct}%
+          </span>
+          <button
+            onClick={zoomIn}
+            disabled={atMax}
+            className="px-2 py-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ color: atMax ? 'var(--orbital-dim)' : 'var(--orbital-subtle)' }}
+            title="Zoom in (+)"
+          >
+            <Plus size={11} />
+          </button>
+        </div>
+        <button
+          onClick={zoomReset}
+          disabled={zoomLevel === 1}
+          className="inline-flex items-center gap-1 px-2 py-1 font-telemetry text-[10px] tracking-wider transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          style={{
+            border: '1px solid var(--orbital-border)',
+            color: 'var(--orbital-subtle)',
+          }}
+          title="Reset zoom (0)"
+        >
+          <Maximize2 size={10} />
+          FIT
+        </button>
       </div>
     </div>
   )
@@ -301,11 +382,11 @@ function Legend({ hoveredProd, setHoveredProd }) {
 
 // ── Background grid: vertical lines every week, horizontal rows ─────────────
 function Grid({ rowCount }) {
-  const { windowDays, TOTAL_W } = useGantt()
+  const { windowDays, TOTAL_W, dayW } = useGantt()
   const weekCount = Math.ceil(windowDays / 7)
   const weekLines = []
   for (let w = 0; w <= weekCount; w++) {
-    const x = NAME_COL_W + Math.min(w * 7, windowDays) * DAY_W
+    const x = NAME_COL_W + Math.min(w * 7, windowDays) * dayW
     weekLines.push(
       <line
         key={`w${w}`}
@@ -341,12 +422,12 @@ function Grid({ rowCount }) {
 
 // ── Timeline axis: week labels + day ticks ──────────────────────────────────
 function TimelineAxis() {
-  const { groupBy, productions, filteredResources, windowDays, dateAtDayIndex, TOTAL_W } = useGantt()
+  const { groupBy, productions, filteredResources, windowDays, dateAtDayIndex, TOTAL_W, dayW } = useGantt()
   const weekCount = Math.ceil(windowDays / 7)
   const weekLabels = []
   for (let w = 0; w < weekCount; w++) {
     const startDate = dateAtDayIndex(w * 7)
-    const x = NAME_COL_W + w * 7 * DAY_W
+    const x = NAME_COL_W + w * 7 * dayW
     weekLabels.push(
       <g key={`wl${w}`}>
         <text
@@ -372,7 +453,7 @@ function TimelineAxis() {
 
   const dayTicks = []
   for (let d = 0; d <= windowDays; d++) {
-    const x = NAME_COL_W + d * DAY_W
+    const x = NAME_COL_W + d * dayW
     const major = d % 7 === 0
     dayTicks.push(
       <line
@@ -420,7 +501,8 @@ function TimelineAxis() {
 
 // ── Now line — vertical accent at today's column ────────────────────────────
 function NowLine({ idx, rowCount }) {
-  const x = NAME_COL_W + idx * DAY_W + DAY_W / 2
+  const { dayW } = useGantt()
+  const x = NAME_COL_W + idx * dayW + dayW / 2
   const bottom = AXIS_H + rowCount * (ROW_H + ROW_GAP)
   return (
     <g>
@@ -447,7 +529,8 @@ function NowLine({ idx, rowCount }) {
 
 // ── Scrub line — vertical line at the playhead day ──────────────────────────
 function ScrubLine({ idx, rowCount }) {
-  const x = NAME_COL_W + idx * DAY_W + DAY_W / 2
+  const { dayW } = useGantt()
+  const x = NAME_COL_W + idx * dayW + dayW / 2
   const bottom = AXIS_H + rowCount * (ROW_H + ROW_GAP)
   return (
     <line
@@ -465,12 +548,12 @@ function ScrubLine({ idx, rowCount }) {
 // dots inside the bar represent committed resources (filtered by the toolbar
 // chip), giving an at-a-glance read of "who's on this".
 function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
-  const { commitments, resources, filteredResources, dayIndex, filter } = useGantt()
+  const { commitments, resources, filteredResources, dayIndex, filter, dayW } = useGantt()
   const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
   const startIdx = dayIndex(prod.start)
   const endIdx   = dayIndex(prod.end)
-  const barX     = NAME_COL_W + startIdx * DAY_W
-  const barW     = (endIdx - startIdx + 1) * DAY_W
+  const barX     = NAME_COL_W + startIdx * dayW
+  const barW     = (endIdx - startIdx + 1) * dayW
   const barY     = y + 10
   const barH     = ROW_H - 20
 
@@ -598,7 +681,7 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
 // resource is on, colored by that production. Overlapping commitments earn a
 // red conflict marker on the name column.
 function ResourceRow({ resource, rowIdx, dimmed, scrubDay }) {
-  const { commitments, productions, dayIndex } = useGantt()
+  const { commitments, productions, dayIndex, dayW } = useGantt()
   const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
 
   const myCommitments = useMemo(
@@ -668,8 +751,8 @@ function ResourceRow({ resource, rowIdx, dimmed, scrubDay }) {
         if (!prod) return null
         const startIdx = dayIndex(c.start)
         const endIdx   = dayIndex(c.end)
-        const barX = NAME_COL_W + startIdx * DAY_W
-        const barW = (endIdx - startIdx + 1) * DAY_W
+        const barX = NAME_COL_W + startIdx * dayW
+        const barW = (endIdx - startIdx + 1) * dayW
         const barY = y + 12
         const barH = ROW_H - 24
         return (
