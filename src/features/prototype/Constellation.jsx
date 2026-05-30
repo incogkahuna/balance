@@ -530,8 +530,10 @@ export function Constellation() {
     setSelectedPlanet(null)
     setSelectedPerson(null)
     setScrubMode('day')
-    setScrubDay(7)
-    setScrubRange({ start: 4, end: 18 })
+    // Sensible defaults that scale with the live window size — middle of
+    // the window for day mode, full window for range mode.
+    setScrubDay(Math.floor(WINDOW_DAYS / 2))
+    setScrubRange({ start: 0, end: WINDOW_DAYS })
     setFilter('all')
     setManualAssignments({})
   }
@@ -2642,10 +2644,19 @@ function TimeScrubber({ mode, setMode, day, setDay, range, setRange }) {
     }
   }, [dayFromX, setDay, setRange, range.start, range.end])
 
-  const weeks = Array.from({ length: 7 }, (_, i) => i)
-  const dayPct   = (day / WINDOW_DAYS) * 100
-  const startPct = (range.start / WINDOW_DAYS) * 100
-  const endPct   = (range.end / WINDOW_DAYS) * 100
+  // Tick marks: cap at 7 but use however many fit cleanly given the live
+  // window size. e.g. a 9-day window gets 4 ticks; a 42-day window gets 7.
+  // Each tick i sits at left = (i / (tickCount - 1)) * 100% and labels
+  // dateAtDayIndex(round(i / (tickCount - 1) * WINDOW_DAYS)) — guarantees
+  // the rightmost tick lines up with the actual end of the window.
+  const tickCount = Math.max(2, Math.min(7, WINDOW_DAYS + 1))
+  const ticks = Array.from({ length: tickCount }, (_, i) => ({
+    pct: (i / (tickCount - 1)) * 100,
+    dayIdx: Math.round((i / (tickCount - 1)) * WINDOW_DAYS),
+  }))
+  const dayPct   = WINDOW_DAYS > 0 ? (day / WINDOW_DAYS) * 100 : 0
+  const startPct = WINDOW_DAYS > 0 ? (range.start / WINDOW_DAYS) * 100 : 0
+  const endPct   = WINDOW_DAYS > 0 ? (range.end / WINDOW_DAYS) * 100 : 0
 
   return (
     <div className="px-6 pt-4 pb-5"
@@ -2711,22 +2722,23 @@ function TimeScrubber({ mode, setMode, day, setDay, range, setRange }) {
         <div className="absolute inset-x-0 top-1/2 -translate-y-1/2"
           style={{ height: 2, background: 'var(--orbital-border)' }} />
 
-        {/* Week tick marks */}
-        {weeks.map(i => (
-          <div key={i}
+        {/* Tick marks (scale-aware) */}
+        {ticks.map((t, i) => (
+          <div key={`tick-${i}`}
             className="absolute top-1/2 -translate-y-1/2"
             style={{
-              left: `${(i / 6) * 100}%`,
+              left: `${t.pct}%`,
               width: 1, height: 8, background: 'var(--orbital-chrome)',
             }} />
         ))}
 
-        {/* Date labels */}
-        {weeks.map(i => (
-          <span key={i}
-            className="absolute -bottom-1 -translate-x-1/2 font-telemetry text-[9px] text-orbital-subtle tracking-wider"
-            style={{ left: `${(i / 6) * 100}%` }}>
-            {format(dateAtDayIndex(i * 7), 'MMM d')}
+        {/* Date labels — each label sits directly above its tick, showing
+            the date for the day index that tick actually represents. */}
+        {ticks.map((t, i) => (
+          <span key={`label-${i}`}
+            className="absolute -bottom-1 -translate-x-1/2 font-telemetry text-[9px] text-orbital-subtle tracking-wider whitespace-nowrap"
+            style={{ left: `${t.pct}%` }}>
+            {format(dateAtDayIndex(t.dayIdx), 'MMM d')}
           </span>
         ))}
 
