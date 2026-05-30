@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { ROLES } from '../../data/models.js'
 import { DevProfileSwitcher } from '../dev/DevProfileSwitcher.jsx'
+import { NotificationBell } from './NotificationBell.jsx'
 
 const NAV_ITEMS = [
   { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard'   },
@@ -94,11 +95,12 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* ── Theme toggle ── */}
+      {/* ── Notifications + theme toggle ── */}
       <div
-        className="px-3 py-2 flex-shrink-0"
+        className="px-3 py-2 flex-shrink-0 space-y-1"
         style={{ borderTop: '1px solid var(--orbital-sidebar-border)' }}
       >
+        <NotificationBell layout="labeled" />
         <button
           onClick={toggleTheme}
           className="w-full flex items-center gap-2 px-1 py-1.5 text-xs text-orbital-subtle hover:text-orbital-text transition-colors"

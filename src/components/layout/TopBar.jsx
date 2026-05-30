@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { LogOut, Sun, Moon } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
+import { NotificationBell } from './NotificationBell.jsx'
 
 const ROLE_LABEL = {
   admin:      'Admin',
@@ -31,8 +32,9 @@ export function TopBar() {
         <span className="text-xs text-orbital-subtle">/ Orbital</span>
       </div>
 
-      {/* Right — theme toggle + user + logout */}
+      {/* Right — notifications + theme toggle + user + logout */}
       <div className="flex items-center">
+        <NotificationBell layout="compact" />
         <button
           onClick={toggleTheme}
           className="w-11 h-11 flex items-center justify-center text-orbital-subtle hover:text-orbital-text transition-colors"
