@@ -10,6 +10,10 @@ import {
   subscribeToNotificationsFor,
 } from '../../lib/data/notifications.ts'
 
+// Module-level latch so we only log the "table missing" warning once per
+// session, even though React mounts the bell on every page.
+let loggedLoadFailureOnce = false
+
 /**
  * Bell + dropdown panel for in-app notifications.
  *
@@ -32,14 +36,28 @@ export function NotificationBell({ layout = 'compact' }) {
 
   // Load + subscribe. Every call is wrapped so a transient backend issue
   // (table not migrated yet, network blip, etc.) can't crash the page —
-  // the bell just goes silent until the next reload.
+  // the bell just goes silent until the next reload. The "load failed" log
+  // is rate-limited to once per session so a missing migration doesn't
+  // spam the console on every mount.
   useEffect(() => {
     if (!recipientId) return
     let cancelled = false
     let unsub = () => {}
     listNotificationsFor(recipientId, 50)
       .then(rows => { if (!cancelled) setItems(rows) })
-      .catch(err => console.error('[NotificationBell] load failed', err))
+      .catch(err => {
+        if (!loggedLoadFailureOnce) {
+          loggedLoadFailureOnce = true
+          const msg = err?.message || ''
+          if (msg.includes('Could not find the table') || msg.includes('PGRST205')) {
+            console.warn(
+              '[NotificationBell] notifications table missing — run the phase6e migration in Supabase to enable the bell. Suppressing further errors for this session.'
+            )
+          } else {
+            console.error('[NotificationBell] load failed', err)
+          }
+        }
+      })
     try {
       unsub = subscribeToNotificationsFor(recipientId, (event) => {
         setItems(prev => {
