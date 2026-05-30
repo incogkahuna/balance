@@ -15,7 +15,7 @@ insert into public.role_assignments (email, role, display_name, display_color) v
   ('wilder@orbitalvs.com',     'crew',  'Wilder', '#f59e0b'),
   ('mike@orbitalvs.com',       'crew',  'Mike',   '#06b6d4'),
   ('geo@orbitalvs.com',        'crew',  'Geo',    '#ec4899'),
-  ('brian@orbitalvs.com',      'crew',  'Nitz',   '#14b8a6')
+  ('brian@orbitalvs.com',      'crew',  'Brian Nitzkin', '#14b8a6')
 on conflict (email) do update
   set role          = excluded.role,
       display_name  = excluded.display_name,
