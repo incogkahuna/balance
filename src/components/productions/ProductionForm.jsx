@@ -339,10 +339,20 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
                     <p className="text-sm font-medium">{user.name}</p>
                     <p className="text-xs opacity-60 capitalize">{user.role}</p>
                   </div>
-                  {assigned && (
-                    <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
+                  {/* Icon matches the click action so the visual is honest:
+                      a Plus when the row is "click to add", a remove-style
+                      X-in-circle when the row is "click to remove". The
+                      previous checkmark here read as "confirm/save" but
+                      actually unassigned the user — a visual contradiction. */}
+                  {assigned ? (
+                    <span
+                      className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center bg-blue-500/15 text-blue-400"
+                      aria-label="Remove from team"
+                    >
+                      <X size={12} strokeWidth={2.5} />
+                    </span>
+                  ) : (
+                    <Plus size={14} className="text-orbital-dim flex-shrink-0" />
                   )}
                 </button>
                 {assigned && (
