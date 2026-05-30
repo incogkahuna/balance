@@ -155,8 +155,14 @@ export function NotificationBell({ layout = 'compact' }) {
           ref={panelRef}
           className={
             layout === 'labeled'
+              // Desktop sidebar — drop up from the bottom-anchored bell
               ? 'absolute bottom-full left-0 mb-2 z-50 w-[340px] max-h-[480px] flex flex-col rounded-lg'
-              : 'absolute top-full right-0 mt-1 z-50 w-[320px] max-h-[480px] flex flex-col rounded-lg'
+              // Compact (TopBar). On mobile we sit as a full-width sheet
+              // just under the TopBar — anchoring to the bell's right edge
+              // with a fixed 320px width pushed the left edge off-screen
+              // (the bell sits ~120px from the screen's right side on a
+              // 375px phone). At sm+ we revert to the anchored dropdown.
+              : 'fixed inset-x-2 top-12 max-h-[70vh] sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[340px] sm:max-h-[480px] z-50 flex flex-col rounded-lg'
           }
           style={{
             background: 'var(--orbital-surface)',
