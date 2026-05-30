@@ -9,7 +9,7 @@ import { usePrototypeData } from './dataSource.js'
 // ── Visual dimensions (constant regardless of data) ─────────────────────────
 const NAME_COL_W = 220
 const BASE_DAY_W = 22                    // base px per day at zoom = 1.0
-const ROW_H      = 48                    // bumped from 42 — gives bars more presence
+const BASE_ROW_H = 48                    // base px per row — actual rowH grows when the user drags the chart taller than its natural fit
 const ROW_GAP    = 2
 const AXIS_H     = 56
 const DOT_SIZE   = 8                     // avatar dot diameter for in-bar resources
@@ -171,12 +171,10 @@ export function Gantt() {
       if (!start) return
       const cy = e.clientY ?? e.touches?.[0]?.clientY
       const dy = cy - start.startY
-      // Cap at the chart's natural SVG height — dragging past it just
-      // creates an empty void below the rows (the SVG has a fixed height
-      // computed from row count and doesn't auto-fill the wrapper). Pulling
-      // past the cap should feel like hitting a stop, not painting black.
-      const max  = svgHeightRef.current || Number.POSITIVE_INFINITY
-      const next = Math.min(max, Math.max(MIN_CHART_HEIGHT, start.startHeight + dy))
+      // No upper cap — past the chart's natural height the row height
+      // grows to absorb the extra space, so user gets more breathing room
+      // per bar instead of an empty void below the rows.
+      const next = Math.max(MIN_CHART_HEIGHT, start.startHeight + dy)
       setChartHeight(next)
     }
     const onUp = () => {
@@ -248,19 +246,26 @@ export function Gantt() {
 
   // Which rows we render depends on groupBy mode.
   const rows = groupBy === 'production' ? sortedProds : sortedResources
-  const svgHeight = AXIS_H + Math.max(rows.length, 1) * (ROW_H + ROW_GAP)
+  const rowCount = Math.max(rows.length, 1)
+  // Natural height = chart's auto-fit size at the base row height. Below
+  // this the wrapper scrolls vertically; above this the rows stretch to
+  // fill the wrapper.
+  const naturalH = AXIS_H + rowCount * (BASE_ROW_H + ROW_GAP)
+  // Effective row height — stretches above the base when the user drags
+  // the chart taller than its natural fit. This is what fills the new
+  // space (instead of painting an empty void below the last row, the
+  // previous behaviour).
+  const rowH = (chartHeight !== null && chartHeight > naturalH)
+    ? Math.max(BASE_ROW_H, (chartHeight - AXIS_H - rowCount * ROW_GAP) / rowCount)
+    : BASE_ROW_H
+  const svgHeight = AXIS_H + rowCount * (rowH + ROW_GAP)
 
-  // Keep the resize-drag cap in sync with the current SVG height. Refs the
-  // drag listener above (it has empty deps and can't see svgHeight directly).
-  // If a saved chartHeight from localStorage is now larger than the natural
-  // height (because rows were removed), pull it back down so we don't paint
-  // the void again on the next session.
+  // svgHeight ref is no longer used as a hard cap — the drag listener now
+  // lets chartHeight grow unbounded and the rows stretch to absorb the
+  // extra space. Keeping the ref around in case a future tweak needs it.
   useEffect(() => {
     svgHeightRef.current = svgHeight
-    if (chartHeight !== null && chartHeight > svgHeight) {
-      setChartHeight(svgHeight)
-    }
-  }, [svgHeight, chartHeight])
+  }, [svgHeight])
 
   // ── Bar click → ProductionQuickView popup ───────────────────────────────
   // Look up the full Production from AppContext (the prototype's projection
@@ -315,6 +320,7 @@ export function Gantt() {
     filter,
     groupBy,
     source: data.source,
+    rowH,
   }
 
   return (
@@ -663,7 +669,7 @@ function Legend({ hoveredProd, setHoveredProd }) {
 
 // ── Background grid: vertical lines every week, horizontal rows ─────────────
 function Grid({ rowCount }) {
-  const { windowDays, TOTAL_W, dayW } = useGantt()
+  const { windowDays, TOTAL_W, dayW, rowH } = useGantt()
   const weekCount = Math.ceil(windowDays / 7)
   const weekLines = []
   for (let w = 0; w <= weekCount; w++) {
@@ -672,7 +678,7 @@ function Grid({ rowCount }) {
       <line
         key={`w${w}`}
         x1={x} x2={x}
-        y1={0} y2={AXIS_H + rowCount * (ROW_H + ROW_GAP)}
+        y1={0} y2={AXIS_H + rowCount * (rowH + ROW_GAP)}
         stroke="rgba(255,255,255,0.05)"
         strokeWidth={1}
       />
@@ -680,7 +686,7 @@ function Grid({ rowCount }) {
   }
   const rowSeparators = []
   for (let r = 0; r < rowCount; r++) {
-    const y = AXIS_H + r * (ROW_H + ROW_GAP) + ROW_H
+    const y = AXIS_H + r * (rowH + ROW_GAP) + rowH
     rowSeparators.push(
       <line
         key={`r${r}`}
@@ -693,7 +699,7 @@ function Grid({ rowCount }) {
   }
   return (
     <g>
-      <rect x={0} y={0} width={NAME_COL_W} height={AXIS_H + rowCount * (ROW_H + ROW_GAP)}
+      <rect x={0} y={0} width={NAME_COL_W} height={AXIS_H + rowCount * (rowH + ROW_GAP)}
         fill="rgba(0,0,0,0.18)" />
       {weekLines}
       {rowSeparators}
@@ -810,9 +816,9 @@ function TimelineAxis() {
 
 // ── Now line — vertical accent at today's column ────────────────────────────
 function NowLine({ idx, rowCount }) {
-  const { dayW } = useGantt()
+  const { dayW, rowH } = useGantt()
   const x = NAME_COL_W + idx * dayW + dayW / 2
-  const bottom = AXIS_H + rowCount * (ROW_H + ROW_GAP)
+  const bottom = AXIS_H + rowCount * (rowH + ROW_GAP)
   return (
     <g>
       <line
@@ -838,9 +844,9 @@ function NowLine({ idx, rowCount }) {
 
 // ── Scrub line — vertical line at the playhead day ──────────────────────────
 function ScrubLine({ idx, rowCount }) {
-  const { dayW } = useGantt()
+  const { dayW, rowH } = useGantt()
   const x = NAME_COL_W + idx * dayW + dayW / 2
-  const bottom = AXIS_H + rowCount * (ROW_H + ROW_GAP)
+  const bottom = AXIS_H + rowCount * (rowH + ROW_GAP)
   return (
     <line
       x1={x} x2={x}
@@ -857,14 +863,14 @@ function ScrubLine({ idx, rowCount }) {
 // dots inside the bar represent committed resources (filtered by the toolbar
 // chip), giving an at-a-glance read of "who's on this".
 function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, onClick, scrubDay }) {
-  const { commitments, resources, filteredResources, dayIndex, filter, dayW } = useGantt()
-  const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
+  const { commitments, resources, filteredResources, dayIndex, filter, dayW, rowH } = useGantt()
+  const y = AXIS_H + rowIdx * (rowH + ROW_GAP)
   const startIdx = dayIndex(prod.start)
   const endIdx   = dayIndex(prod.end)
   const barX     = NAME_COL_W + startIdx * dayW
   const barW     = (endIdx - startIdx + 1) * dayW
   const barY     = y + 10
-  const barH     = ROW_H - 20
+  const barH     = rowH - 20
 
   const isLive   = scrubDay >= startIdx && scrubDay <= endIdx
 
@@ -1006,8 +1012,8 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, onClick, scru
 // resource is on, colored by that production. Overlapping commitments earn a
 // red conflict marker on the name column.
 function ResourceRow({ resource, rowIdx, dimmed, onCommitmentClick, scrubDay }) {
-  const { commitments, productions, dayIndex, dayW } = useGantt()
-  const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
+  const { commitments, productions, dayIndex, dayW, rowH } = useGantt()
+  const y = AXIS_H + rowIdx * (rowH + ROW_GAP)
 
   const myCommitments = useMemo(
     () => commitments.filter(c => c.resourceId === resource.id),
@@ -1044,7 +1050,7 @@ function ResourceRow({ resource, rowIdx, dimmed, onCommitmentClick, scrubDay }) 
       {hasConflict && (
         <rect
           x={0} y={y}
-          width={3} height={ROW_H}
+          width={3} height={rowH}
           fill="#ef4444"
           opacity={0.9}
         />
@@ -1079,7 +1085,7 @@ function ResourceRow({ resource, rowIdx, dimmed, onCommitmentClick, scrubDay }) 
         const barX = NAME_COL_W + startIdx * dayW
         const barW = (endIdx - startIdx + 1) * dayW
         const barY = y + 12
-        const barH = ROW_H - 24
+        const barH = rowH - 24
         return (
           <g
             key={i}
