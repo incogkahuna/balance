@@ -219,7 +219,13 @@ export function ProductionsPage() {
             )}
           />
         ) : (
-          <div className="grid md:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4">
+          // grid-cols-1 is REQUIRED on mobile — without it, `display:grid`
+          // has no explicit column template and the single column sizes
+          // by content, letting wide flex children push the whole row past
+          // the viewport (cards bled off the right edge before this).
+          // `minmax(0, 1fr)` inside grid-cols-1 is what actually bounds
+          // the column to the parent's width.
+          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 sm:gap-4">
             {sortedFiltered.map(prod => (
               <ProductionCard
                 key={prod.id}
