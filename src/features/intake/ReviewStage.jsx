@@ -132,7 +132,7 @@ function EditableField({ label, icon: Icon, value, confidence, source, onSave, p
       {!editing && type !== 'select' && (
         <button
           onClick={() => { setDraft(value || ''); setEditing(true) }}
-          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-white/10 text-orbital-subtle hover:text-orbital-text transition-all flex-shrink-0"
+          className="sm:opacity-0 sm:group-hover:opacity-100 p-1.5 rounded-lg hover:bg-white/10 text-orbital-subtle hover:text-orbital-text transition-all flex-shrink-0"
         >
           <Edit3 size={13} />
         </button>
@@ -140,7 +140,7 @@ function EditableField({ label, icon: Icon, value, confidence, source, onSave, p
       {!editing && type === 'select' && (
         <button
           onClick={() => setEditing(true)}
-          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-white/10 text-orbital-subtle hover:text-orbital-text transition-all flex-shrink-0"
+          className="sm:opacity-0 sm:group-hover:opacity-100 p-1.5 rounded-lg hover:bg-white/10 text-orbital-subtle hover:text-orbital-text transition-all flex-shrink-0"
         >
           <Edit3 size={13} />
         </button>

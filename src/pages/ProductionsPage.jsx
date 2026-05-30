@@ -390,7 +390,7 @@ function ProductionCard({
       )}
 
       {/* Hover controls: colour picker + drag handle */}
-      <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         {canCustomize && (
           <div className="relative">
             <button

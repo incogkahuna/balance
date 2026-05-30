@@ -96,7 +96,7 @@ export function AssignedTeamMember({ assignment, productionId, isAdminOrSup }) {
         {isAdminOrSup && (
           <button
             onClick={() => removeContractor(productionId, assignment.contractorId)}
-            className="p-1 rounded hover:bg-red-500/10 text-orbital-subtle hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+            className="p-1 rounded hover:bg-red-500/10 text-orbital-subtle hover:text-red-400 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
             title="Remove from production"
           >
             <X size={14} />

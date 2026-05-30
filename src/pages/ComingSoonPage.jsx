@@ -251,7 +251,7 @@ function ComingSoonRow({ item, canEdit, canDelete, done, onToggleDone, onDelete 
         <button
           onClick={handleDelete}
           disabled={busy}
-          className="mt-0.5 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="mt-0.5 p-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
           style={{ color: 'var(--orbital-subtle)' }}
           title="Delete"
         >

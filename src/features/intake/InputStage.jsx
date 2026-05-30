@@ -283,9 +283,10 @@ export function InputStage({ onNext }) {
               )}
               <button
                 onClick={() => removeInput(input.id)}
-                className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 text-orbital-subtle hover:text-orbital-text transition-all"
+                aria-label={`Remove ${input.fileName}`}
+                className="p-1.5 rounded sm:opacity-0 sm:group-hover:opacity-100 hover:bg-white/10 text-orbital-subtle hover:text-orbital-text transition-all"
               >
-                <X size={13} />
+                <X size={14} />
               </button>
             </div>
           ))}

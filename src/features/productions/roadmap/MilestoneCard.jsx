@@ -74,7 +74,7 @@ export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
 
         {/* Edit/Delete — only visible to admins/sups on hover */}
         {canEdit && (
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
             <button
               onClick={onEdit}
               className="p-1.5 rounded hover:bg-orbital-surface text-orbital-subtle hover:text-orbital-text transition-colors"

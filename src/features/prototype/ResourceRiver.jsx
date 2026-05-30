@@ -48,7 +48,7 @@ export function ResourceRiver() {
 
   return (
     <RiverCtx.Provider value={data}>
-      <div className="px-6 py-5">
+      <div className="px-3 sm:px-6 py-4 sm:py-5">
         <Header scrubDate={scrubDate} />
 
         {data.productions.length === 0 ? (
@@ -76,17 +76,17 @@ export function ResourceRiver() {
 // ── Header ─────────────────────────────────────────────────────────────────
 function Header({ scrubDate }) {
   return (
-    <div className="flex items-end justify-between">
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-4">
       <div>
         <p className="hud-label mb-1">RESOURCE RIVER</p>
-        <h1 className="text-2xl font-semibold text-orbital-text tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-semibold text-orbital-text tracking-tight">
           Who's on what, when
         </h1>
         <p className="text-sm text-orbital-subtle mt-0.5">
           One row per resource. Where blocks stack, that resource is double-booked.
         </p>
       </div>
-      <div className="text-right">
+      <div className="sm:text-right">
         <p className="hud-label mb-1">PLAYHEAD</p>
         <p className="font-telemetry text-sm text-orbital-text tracking-wider">
           {format(scrubDate, 'EEE · MMM d, yyyy').toUpperCase()}

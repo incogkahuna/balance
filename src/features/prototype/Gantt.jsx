@@ -248,7 +248,7 @@ export function Gantt() {
 
   return (
     <GanttCtx.Provider value={ctxValue}>
-      <div className="px-6 py-5">
+      <div className="px-3 sm:px-6 py-4 sm:py-5">
         <Header scrubDate={scrubDate} />
 
         {sortedProds.length === 0 ? (
@@ -338,17 +338,17 @@ export function Gantt() {
 // ── Header (top of page) ─────────────────────────────────────────────────────
 function Header({ scrubDate }) {
   return (
-    <div className="flex items-end justify-between">
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-4">
       <div>
         <p className="hud-label mb-1">PROJECT GANTT</p>
-        <h1 className="text-2xl font-semibold text-orbital-text tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-semibold text-orbital-text tracking-tight">
           Every production on one timeline
         </h1>
         <p className="text-sm text-orbital-subtle mt-0.5">
           One row per production. Bars are date ranges. Overlap reveals where the studio is stacked.
         </p>
       </div>
-      <div className="text-right">
+      <div className="sm:text-right">
         <p className="hud-label mb-1">PLAYHEAD</p>
         <p className="font-telemetry text-sm text-orbital-text tracking-wider">
           {format(scrubDate, 'EEE · MMM d, yyyy').toUpperCase()}
