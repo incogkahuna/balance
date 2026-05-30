@@ -126,7 +126,10 @@ export default function App() {
             <Route path="/contractors"       element={wrap(<ContractorsPage />)} />
             <Route path="/team"              element={wrap(<TeamPage />)} />
             <Route path="/coming-soon"       element={wrap(<ComingSoonPage />)} />
-            <Route path="/prototype/resources" element={wrap(<PrototypePage />)} />
+            {/* New canonical URL for the Resources view (formerly called Prototype). */}
+            <Route path="/resources"            element={wrap(<PrototypePage />)} />
+            {/* Backward-compat — old bookmarks to the prototype URL still land. */}
+            <Route path="/prototype/resources"  element={<Navigate to="/resources" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

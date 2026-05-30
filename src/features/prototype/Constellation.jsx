@@ -621,10 +621,17 @@ export function Constellation() {
         />
 
         <div
-          className="relative select-none"
+          className="relative select-none w-full"
           style={{
             background: 'radial-gradient(ellipse at center, #0a0e1f 0%, #050608 70%)',
-            height: 720,
+            // Maintain the SVG's 1280×720 (16:9) aspect ratio so it scales
+            // cleanly across viewport widths. Capped at 720px so it doesn't
+            // dominate the screen on ultra-wide displays. Min height keeps
+            // the canvas usable on tiny phones where 56.25vw alone would
+            // be too cramped (≈210px on a 375px viewport).
+            aspectRatio: `${VIEW_W} / ${VIEW_H}`,
+            maxHeight: 720,
+            minHeight: 360,
             cursor: draggingId ? 'grabbing' : undefined,
           }}
           onClick={() => {
@@ -896,9 +903,10 @@ function Toolbar({ scrubMode, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, 
   const orbitCount    = orbiterStates.filter(s => s.mode === 'orbit').length
   return (
     <div style={{ borderBottom: '1px solid var(--orbital-border)' }}>
-      {/* Row 1 — playhead/window + status badges + reset */}
-      <div className="flex items-center justify-between px-4 py-2.5 gap-4">
-        <div className="flex items-center gap-3">
+      {/* Row 1 — playhead/window + status badges + reset. flex-wrap so the
+          row stacks naturally on a phone instead of horizontally overflowing. */}
+      <div className="flex items-center justify-between px-4 py-2.5 gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           {scrubMode === 'day' ? (
             <>
               <span className="hud-label">PLAYHEAD</span>
@@ -919,7 +927,7 @@ function Toolbar({ scrubMode, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, 
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <BadgeStat label="ON STATION" value={orbiterStates.filter(s => s.mode === 'home').length}
             color="#60a5fa" />
           <BadgeStat label="DEPLOYED" value={orbitCount}

@@ -17,23 +17,24 @@ export function PrototypePage() {
 
   return (
     <div className="min-h-screen pb-12">
-      {/* ── View switcher ─────────────────────────────────────────────── */}
+      {/* ── View switcher — wraps to two rows on mobile so the view tabs
+              get a full-width track underneath the page label. */}
       <div
-        className="sticky top-0 z-20 flex items-center justify-between px-6 py-3"
+        className="sticky top-0 z-20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3"
         style={{
           background: 'var(--orbital-bg)',
           borderBottom: '1px solid var(--orbital-border)',
         }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="font-telemetry text-[9px] text-orbital-subtle tracking-[0.25em]">
-            PROTOTYPE · RESOURCE ALLOCATION
+            RESOURCES · LIVE ALLOCATION
           </span>
           <DataSourceBadge source={data.source} />
         </div>
 
         <div
-          className="relative flex items-center"
+          className="flex items-center overflow-x-auto"
           style={{
             background: 'var(--orbital-muted)',
             border: '1px solid var(--orbital-border)',
@@ -43,7 +44,7 @@ export function PrototypePage() {
             <button
               key={v.id}
               onClick={() => setView(v.id)}
-              className="relative px-4 py-1.5 text-[12px] font-medium tracking-wide transition-colors"
+              className="relative px-4 py-2 sm:py-1.5 text-[12px] font-medium tracking-wide whitespace-nowrap transition-colors flex-1 sm:flex-initial"
               style={{
                 color: view === v.id ? '#fff' : 'var(--orbital-subtle)',
                 background: view === v.id ? '#2563eb' : 'transparent',

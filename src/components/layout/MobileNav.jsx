@@ -1,21 +1,18 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, CheckSquare, Users } from 'lucide-react'
+import { LayoutDashboard, Film, Calendar, CheckSquare, Sparkles } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
 
-// Mobile bottom nav — capped at 5 items for usability. Crew sees the four
-// screens they actually use; admin/sup also get Crew (contractors). Team,
-// Analytics, Coming Soon, Prototype are intentionally desktop-only — they're
-// either admin tools or canvas-heavy views that don't read well on phones.
-//
-// Bumped order so Tasks sits second (between Home and Jobs) — the highest-
-// signal mobile screen for crew. Previously Tasks wasn't here at all.
+// Mobile bottom nav — capped at 5 items for usability. Everyone gets the
+// same 5: Home / Tasks / Jobs / Schedule / Resources. Crew (contractors),
+// Team, Analytics, Coming Soon are intentionally desktop-only — they're
+// either admin-heavy directories or low-traffic informational pages.
 const NAV_ITEMS = [
-  { to: '/dashboard',   icon: LayoutDashboard, label: 'Home'     },
-  { to: '/tasks',       icon: CheckSquare,     label: 'Tasks'    },
-  { to: '/productions', icon: Film,            label: 'Jobs'     },
-  { to: '/schedule',    icon: Calendar,        label: 'Schedule' },
-  { to: '/contractors', icon: Users,           label: 'Crew',    adminOrSup: true },
+  { to: '/dashboard',   icon: LayoutDashboard, label: 'Home'      },
+  { to: '/tasks',       icon: CheckSquare,     label: 'Tasks'     },
+  { to: '/productions', icon: Film,            label: 'Jobs'      },
+  { to: '/schedule',    icon: Calendar,        label: 'Schedule'  },
+  { to: '/resources',   icon: Sparkles,        label: 'Resources' },
 ]
 
 export function MobileNav() {

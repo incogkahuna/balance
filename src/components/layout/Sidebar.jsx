@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { to: '/contractors', icon: Users,            label: 'Contractors', adminOrSup: true },
   { to: '/analytics',   icon: BarChart3,        label: 'Analytics',   adminOnly: true  },
   { to: '/coming-soon', icon: Rocket,         label: 'Coming Soon'  },
-  { to: '/prototype/resources', icon: Sparkles, label: 'Prototype'   },
+  { to: '/resources',           icon: Sparkles, label: 'Resources'   },
 ]
 
 const ROLE_LABEL = {
