@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ResourceRiver } from '../features/prototype/ResourceRiver.jsx'
 import { Constellation } from '../features/prototype/Constellation.jsx'
 import { Gantt } from '../features/prototype/Gantt.jsx'
 import { usePrototypeData } from '../features/prototype/dataSource.js'
@@ -7,7 +6,6 @@ import { Radio, Database } from 'lucide-react'
 
 const VIEWS = [
   { id: 'constellation', label: 'Constellation' },
-  { id: 'river',         label: 'Resource River' },
   { id: 'gantt',         label: 'Gantt' },
 ]
 
@@ -62,7 +60,6 @@ export function PrototypePage() {
 
       {/* ── Content ───────────────────────────────────────────────────── */}
       <div className="animate-hud-in" key={view}>
-        {view === 'river' && <ResourceRiver />}
         {view === 'constellation' && <Constellation />}
         {view === 'gantt' && <Gantt />}
       </div>
@@ -127,7 +124,7 @@ function LiveSnapshot({ data }) {
         />
       </div>
       <p className="text-[11px] text-orbital-dim leading-relaxed">
-        <strong className="text-orbital-subtle">Gantt and Resource River</strong> render live data
+        <strong className="text-orbital-subtle">Gantt</strong> renders live data
         — switch tabs to see your real productions and milestone assignments.{' '}
         <strong className="text-orbital-subtle">Constellation</strong> still uses the curated demo
         dataset (its 4-corner layout is hardcoded for 4 productions; refactoring it to handle
