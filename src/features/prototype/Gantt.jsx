@@ -1,6 +1,9 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, createContext, useContext } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { format, addDays } from 'date-fns'
 import { Minus, Plus, Maximize2 } from 'lucide-react'
+import { useApp } from '../../context/AppContext.jsx'
+import { ProductionQuickView } from '../../components/productions/ProductionQuickView.jsx'
 import { usePrototypeData } from './dataSource.js'
 
 // ── Visual dimensions (constant regardless of data) ─────────────────────────
@@ -40,11 +43,18 @@ export function Gantt() {
   const data = usePrototypeData()
   const { productions, commitments, resources, dayIndex, dateAtDayIndex, windowDays } = data
 
+  // Real productions from AppContext — needed to look up the full Production
+  // object (with roadmap, contractors, addons, concerns) when a bar is
+  // clicked, since the prototype's projection only carries the visual fields.
+  const { productions: appProductions } = useApp()
+  const navigate = useNavigate()
+
   const [hoveredProd, setHoveredProd] = useState(null)
   const [scrubDay, setScrubDay]       = useState(0)
   const [groupBy, setGroupBy]         = useState('production')
   const [filter, setFilter]           = useState('all')
   const [zoomLevel, setZoomLevel]     = useState(1)
+  const [clickedProdId, setClickedProdId] = useState(null)
 
   // Chart height: null = auto-fit all rows. A number = explicit pixel
   // height the user dragged the bottom handle to. Persisted per-browser so
@@ -230,6 +240,45 @@ export function Gantt() {
   const rows = groupBy === 'production' ? sortedProds : sortedResources
   const svgHeight = AXIS_H + Math.max(rows.length, 1) * (ROW_H + ROW_GAP)
 
+  // ── Bar click → ProductionQuickView popup ───────────────────────────────
+  // Look up the full Production from AppContext (the prototype's projection
+  // only carries the visual fields; the popup needs roadmap, addons,
+  // concerns, etc. for the rich preview).
+  const clickedProd = useMemo(
+    () => clickedProdId ? appProductions.find(p => p.id === clickedProdId) : null,
+    [clickedProdId, appProductions]
+  )
+
+  // Compute conflicts for the clicked production: which resources committed
+  // here are ALSO committed to another production during overlapping dates.
+  // Surfaced as a red panel in the popup so issues are obvious at a glance.
+  const clickedConflicts = useMemo(() => {
+    if (!clickedProdId) return []
+    const myCs = commitments.filter(c => c.productionId === clickedProdId)
+    const out  = []
+    const seen = new Set()
+    for (const c of myCs) {
+      const others = commitments.filter(o =>
+        o.resourceId === c.resourceId &&
+        o.productionId !== clickedProdId &&
+        c.start <= o.end && o.start <= c.end
+      )
+      for (const o of others) {
+        const key = `${c.resourceId}:${o.productionId}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        const resource = resources.find(r => r.id === c.resourceId)
+        const otherProd = productions.find(p => p.id === o.productionId)
+        if (!resource || !otherProd) continue
+        out.push({
+          resourceName:        resource.name,
+          otherProductionName: otherProd.name,
+        })
+      }
+    }
+    return out
+  }, [clickedProdId, commitments, resources, productions])
+
   const ctxValue = {
     productions: sortedProds,
     commitments,
@@ -289,6 +338,7 @@ export function Gantt() {
                         dimmed={hoveredProd && hoveredProd !== prod.id}
                         onHover={() => setHoveredProd(prod.id)}
                         onUnhover={() => setHoveredProd(null)}
+                        onClick={() => setClickedProdId(prod.id)}
                         scrubDay={scrubDay}
                       />
                     ))
@@ -300,6 +350,7 @@ export function Gantt() {
                         dimmed={hoveredProd && !commitments.some(c => c.resourceId === res.id && c.productionId === hoveredProd)}
                         onHover={() => {}}
                         onUnhover={() => {}}
+                        onCommitmentClick={(prodId) => setClickedProdId(prodId)}
                         scrubDay={scrubDay}
                       />
                     ))
@@ -331,6 +382,17 @@ export function Gantt() {
           </div>
         )}
       </div>
+
+      <ProductionQuickView
+        production={clickedProd}
+        conflicts={clickedConflicts}
+        onClose={() => setClickedProdId(null)}
+        onOpenFull={() => {
+          const id = clickedProdId
+          setClickedProdId(null)
+          if (id) navigate(`/productions/${id}`)
+        }}
+      />
     </GanttCtx.Provider>
   )
 }
@@ -754,7 +816,7 @@ function ScrubLine({ idx, rowCount }) {
 // Each row is one production. Bar spans its start→end dates. Mini avatar
 // dots inside the bar represent committed resources (filtered by the toolbar
 // chip), giving an at-a-glance read of "who's on this".
-function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
+function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, onClick, scrubDay }) {
   const { commitments, resources, filteredResources, dayIndex, filter, dayW } = useGantt()
   const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
   const startIdx = dayIndex(prod.start)
@@ -793,6 +855,7 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
     <g
       onMouseEnter={onHover}
       onMouseLeave={onUnhover}
+      onClick={onClick}
       style={{ cursor: 'pointer', opacity: dimmed ? 0.25 : 1, transition: 'opacity 200ms ease' }}
     >
       <text
@@ -887,7 +950,7 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, scrubDay }) {
 // Each row is one resource. Bars are commitments — one per production this
 // resource is on, colored by that production. Overlapping commitments earn a
 // red conflict marker on the name column.
-function ResourceRow({ resource, rowIdx, dimmed, scrubDay }) {
+function ResourceRow({ resource, rowIdx, dimmed, onCommitmentClick, scrubDay }) {
   const { commitments, productions, dayIndex, dayW } = useGantt()
   const y = AXIS_H + rowIdx * (ROW_H + ROW_GAP)
 
@@ -963,7 +1026,11 @@ function ResourceRow({ resource, rowIdx, dimmed, scrubDay }) {
         const barY = y + 12
         const barH = ROW_H - 24
         return (
-          <g key={i}>
+          <g
+            key={i}
+            onClick={() => onCommitmentClick?.(c.productionId)}
+            style={{ cursor: onCommitmentClick ? 'pointer' : 'default' }}
+          >
             <rect
               x={barX} y={barY}
               width={barW} height={barH}
