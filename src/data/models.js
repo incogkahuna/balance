@@ -309,6 +309,76 @@ export function createFeedback(overrides = {}) {
   }
 }
 
+// ─── LED Walls ────────────────────────────────────────────────────────────────
+// Top-level gear-database entity. Scope intentionally narrow for v1: just LED
+// walls + their supporting hardware as a single line (no per-panel/per-
+// processor tracking). Each wall has an `assignments` array tracking which
+// productions it's been on or is going on, with date ranges so conflicts are
+// detectable.
+//
+// localStorage-only for v1 — when this proves out, port to a Supabase table
+// with RLS, realtime, and a proper assignments join table.
+
+export const LED_WALL_STATUS = {
+  IN_SERVICE:     'In Service',
+  IN_MAINTENANCE: 'In Maintenance',
+  RETIRED:        'Retired',
+}
+
+export function createLedWall(overrides = {}) {
+  return {
+    id: crypto.randomUUID(),
+    name: '',
+    description: '',                // freeform spec — pixel pitch, dimensions, panel make, processor
+    status: LED_WALL_STATUS.IN_SERVICE,
+    notes: '',
+    // [{ id, productionId, startDate, endDate, notes, createdAt, createdBy }]
+    // No "this wall has multiple panels and each is bookable separately" —
+    // the wall as a whole is the bookable unit. Two assignments overlapping
+    // in date is a conflict; surfaced in the UI.
+    assignments: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+export function createWallAssignment(overrides = {}) {
+  return {
+    id: crypto.randomUUID(),
+    productionId: '',
+    startDate: '',                  // YYYY-MM-DD
+    endDate:   '',                  // YYYY-MM-DD
+    notes: '',
+    createdAt: new Date().toISOString(),
+    createdBy: '',
+    ...overrides,
+  }
+}
+
+// Seed inventory — three real-ish Orbital walls so the page is populated on
+// first load. Replace with real spec once Danny audits.
+export const LED_WALLS_SEED = [
+  createLedWall({
+    id: 'wall-main-volume',
+    name: 'Main Volume Stage A',
+    description: 'Curved ROE Black Pearl 2.8mm · 30m × 5m · Brompton Tessera SX40 processor',
+    notes: 'Permanently installed on the main stage. Not mobile.',
+  }),
+  createLedWall({
+    id: 'wall-mobile-1',
+    name: 'Mobile Wall 1',
+    description: 'Modular ROE BO2 panels · 16×9 config · 4m × 2.25m · Brompton 4K processor',
+    notes: 'Standard mobile build kit — fits in one truck.',
+  }),
+  createLedWall({
+    id: 'wall-popup-cyc',
+    name: 'Pop-Up Cyc',
+    description: 'INFiLED ER2.6 panels · 8m × 3m curved cyc · includes Disguise rx',
+    notes: 'For smaller mobile builds and CAR process plates.',
+  }),
+]
+
 export function createContractor(overrides = {}) {
   return {
     id: crypto.randomUUID(),

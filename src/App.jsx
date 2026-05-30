@@ -55,6 +55,7 @@ const AnalyticsPage  = lazyWithRetry(() => import('./pages/AnalyticsPage.jsx').t
 const SchedulePage   = lazyWithRetry(() => import('./pages/SchedulePage.jsx').then(m => ({ default: m.SchedulePage })))
 const IntakePage     = lazyWithRetry(() => import('./pages/IntakePage.jsx').then(m => ({ default: m.IntakePage })))
 const PrototypePage  = lazyWithRetry(() => import('./pages/PrototypePage.jsx').then(m => ({ default: m.PrototypePage })))
+const GearPage       = lazyWithRetry(() => import('./pages/GearPage.jsx').then(m => ({ default: m.GearPage })))
 
 // ── Per-page error boundary — keeps sidebar alive if one page crashes ─────────
 class PageBoundary extends Component {
@@ -130,6 +131,8 @@ export default function App() {
             <Route path="/resources"            element={wrap(<PrototypePage />)} />
             {/* Backward-compat — old bookmarks to the prototype URL still land. */}
             <Route path="/prototype/resources"  element={<Navigate to="/resources" replace />} />
+            {/* Gear database — v1 just tracks LED walls + their assignments */}
+            <Route path="/gear"                 element={wrap(<GearPage />)} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

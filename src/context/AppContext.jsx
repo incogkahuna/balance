@@ -1,5 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
-import { USERS } from '../data/models.js'
+import { USERS, LED_WALLS_SEED, createWallAssignment } from '../data/models.js'
 import { useAuth } from './AuthContext.tsx'
 import {
   listProductions as listProductionsApi,
@@ -45,6 +45,28 @@ export function AppProvider({ children }) {
   const [contractors, setContractorsState]           = useState([])
   const [contractorsLoading, setContractorsLoading]  = useState(true)
   const [contractorsError, setContractorsError]      = useState(null)
+
+  // ─── LED Walls ─────────────────────────────────────────────────────────────
+  // v1 is localStorage-backed (no Supabase table yet). Seeded with three
+  // demo walls on first load so the /gear page isn't empty out of the box.
+  // When Danny is happy with the data model, port to a Postgres table with
+  // RLS + realtime in the same shape as productions/tasks.
+  const LED_WALLS_KEY = 'balance_led_walls_v1'
+  const [ledWalls, setLedWallsState] = useState(() => {
+    if (typeof window === 'undefined') return LED_WALLS_SEED
+    try {
+      const raw = window.localStorage.getItem(LED_WALLS_KEY)
+      if (!raw) return LED_WALLS_SEED
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : LED_WALLS_SEED
+    } catch { return LED_WALLS_SEED }
+  })
+  // Persist on every change. Cheap (small data) and survives refresh.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LED_WALLS_KEY, JSON.stringify(ledWalls))
+    } catch { /* quota / private mode — ignore */ }
+  }, [ledWalls])
 
   // ─── Dev profile switcher ──────────────────────────────────────────────────
   // In dev only, allows overriding `currentUser` to any of the five known
@@ -616,6 +638,58 @@ export function AppProvider({ children }) {
     })
   }, [])
 
+  // ─── LED Walls — CRUD + assignment ─────────────────────────────────────────
+  const addLedWall = useCallback((wall) => {
+    setLedWallsState(prev => [...prev, wall])
+  }, [])
+
+  const updateLedWall = useCallback((id, patch) => {
+    setLedWallsState(prev => prev.map(w =>
+      w.id === id ? { ...w, ...patch, updatedAt: new Date().toISOString() } : w
+    ))
+  }, [])
+
+  const deleteLedWall = useCallback((id) => {
+    setLedWallsState(prev => prev.filter(w => w.id !== id))
+  }, [])
+
+  // Add an assignment to a wall (wall is committed to a production for a date range)
+  const assignWall = useCallback((wallId, assignment) => {
+    const a = createWallAssignment({
+      ...assignment,
+      createdBy: currentUser?.id || '',
+    })
+    setLedWallsState(prev => prev.map(w =>
+      w.id === wallId
+        ? { ...w, assignments: [...(w.assignments || []), a], updatedAt: new Date().toISOString() }
+        : w
+    ))
+  }, [currentUser])
+
+  const updateWallAssignment = useCallback((wallId, assignmentId, patch) => {
+    setLedWallsState(prev => prev.map(w => {
+      if (w.id !== wallId) return w
+      return {
+        ...w,
+        assignments: (w.assignments || []).map(a =>
+          a.id === assignmentId ? { ...a, ...patch } : a
+        ),
+        updatedAt: new Date().toISOString(),
+      }
+    }))
+  }, [])
+
+  const unassignWall = useCallback((wallId, assignmentId) => {
+    setLedWallsState(prev => prev.map(w => {
+      if (w.id !== wallId) return w
+      return {
+        ...w,
+        assignments: (w.assignments || []).filter(a => a.id !== assignmentId),
+        updatedAt: new Date().toISOString(),
+      }
+    }))
+  }, [])
+
   const value = {
     // Auth
     currentUser,
@@ -684,6 +758,15 @@ export function AppProvider({ children }) {
     addConcern,
     updateConcern,
     deleteConcern,
+
+    // LED Walls (gear DB v1 — localStorage-backed)
+    ledWalls,
+    addLedWall,
+    updateLedWall,
+    deleteLedWall,
+    assignWall,
+    updateWallAssignment,
+    unassignWall,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
