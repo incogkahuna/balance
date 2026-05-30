@@ -120,7 +120,7 @@ export function AnalyticsPage() {
           <SummaryCard label="Avg Rating" value={avgRating ? `${avgRating}/5` : '—'} />
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Productions per month */}
           <div className="card p-5">
             <h3 className="font-semibold text-orbital-text mb-4">Productions per Month</h3>

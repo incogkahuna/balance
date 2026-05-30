@@ -358,7 +358,7 @@ function TeamMemberDetail({ user }) {
   }, [tasksWithTurnaround])
 
   return (
-    <div className="grid lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* ── Hero card ─────────────────────────────────────────────────── */}
       <div
         className="lg:col-span-1 card-elevated p-5 self-start"
@@ -442,7 +442,7 @@ function TeamMemberDetail({ user }) {
         )}
 
         {/* Two-column section: productions + recent completions */}
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Productions list */}
           <div className="card-elevated">
             <div className="px-4 py-2.5" style={{ borderBottom: '1px solid var(--orbital-border)' }}>

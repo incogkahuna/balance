@@ -295,7 +295,7 @@ export function HandoffSummary({ production, bible, currentUserRole }) {
         {/* Key Players */}
         {b.keyPlayers?.length > 0 && (
           <SummarySection title="Key Players">
-            <div className="grid sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {b.keyPlayers.map(p => (
                 <div key={p.id} className="p-3 rounded-lg bg-orbital-muted border border-orbital-border print:border-gray-200 print:bg-gray-50">
                   <p className="font-medium text-sm text-orbital-text print:text-black">{p.name}</p>

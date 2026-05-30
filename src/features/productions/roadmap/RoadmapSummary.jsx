@@ -72,7 +72,7 @@ export function RoadmapSummary({ roadmap, production, canEdit, onEdit, onDelete,
               </button>
             )}
           </div>
-          <div className="grid sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {next3.map((m, i) => {
               const typeCfg = MILESTONE_TYPE_CONFIG[m.type] || MILESTONE_TYPE_CONFIG['Pre-Production']
               const owner   = m.ownerId ? resolveAssignee(m.ownerId) : null
