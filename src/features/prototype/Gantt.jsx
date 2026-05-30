@@ -505,6 +505,33 @@ function TimelineAxis() {
     )
   }
 
+  // Day number labels above the ticks. Density adapts to zoom: at high
+  // zoom every day is labelled; at low zoom we skip days to keep labels
+  // from overlapping. MIN_LABEL_SPACING ≈ 14px is enough for a 2-digit
+  // number in our font without crowding.
+  const MIN_LABEL_SPACING = 14
+  const labelStep = Math.max(1, Math.ceil(MIN_LABEL_SPACING / dayW))
+  const dayLabels = []
+  for (let d = 0; d <= windowDays; d++) {
+    // Always show on week boundaries even if the step would skip — keeps
+    // a date visible at each WEEK column for orientation.
+    const isWeekBoundary = d % 7 === 0
+    if (!isWeekBoundary && d % labelStep !== 0) continue
+    const x = NAME_COL_W + d * dayW + dayW / 2
+    dayLabels.push(
+      <text
+        key={`dn${d}`}
+        x={x} y={48}
+        fill={isWeekBoundary ? 'var(--orbital-subtle)' : 'var(--orbital-dim)'}
+        fontSize={9}
+        fontFamily="'Space Mono', monospace"
+        textAnchor="middle"
+      >
+        {format(dateAtDayIndex(d), 'd')}
+      </text>
+    )
+  }
+
   const dayTicks = []
   for (let d = 0; d <= windowDays; d++) {
     const x = NAME_COL_W + d * dayW
@@ -543,6 +570,7 @@ function TimelineAxis() {
         {sub}
       </text>
       {weekLabels}
+      {dayLabels}
       {dayTicks}
       <line
         x1={0} x2={TOTAL_W}
