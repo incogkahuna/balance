@@ -153,6 +153,7 @@ export const USERS = [
   { id: 'brian',  name: 'Brian',  email: 'brodriguez@orbitalvs.com', role: ROLES.CREW,       avatar: 'B',  color: '#10b981' },
   { id: 'wilder', name: 'Wilder', email: 'wilder@orbitalvs.com',     role: ROLES.CREW,       avatar: 'W',  color: '#f59e0b' },
   { id: 'mike',   name: 'Mike',   email: 'mike@orbitalvs.com',       role: ROLES.CREW,       avatar: 'MS', color: '#06b6d4' },
+  { id: 'geo',    name: 'Geo',    email: 'geo@orbitalvs.com',        role: ROLES.CREW,       avatar: 'G',  color: '#ec4899' },
 ]
 
 // ─── Factory functions ────────────────────────────────────────────────────────
