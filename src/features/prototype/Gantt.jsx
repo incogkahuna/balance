@@ -322,7 +322,25 @@ export function Gantt() {
               <svg
                 width={TOTAL_W}
                 height={svgHeight}
-                style={{ display: 'block', background: 'var(--orbital-panel)' }}
+                style={{ display: 'block', background: 'var(--orbital-panel)', cursor: 'crosshair' }}
+                // Click anywhere in the chart to jump the playhead to that
+                // day. Production rows stopPropagation so clicking a bar
+                // opens the popup instead of moving the playhead — empty
+                // space (between rows, in the axis area, anywhere except
+                // a bar) drives the scrub. Converts client coords to SVG
+                // coords so it works under any scroll/zoom transform.
+                onClick={(e) => {
+                  const svgEl = e.currentTarget
+                  const pt = svgEl.createSVGPoint()
+                  pt.x = e.clientX
+                  pt.y = e.clientY
+                  const ctm = svgEl.getScreenCTM()
+                  if (!ctm) return
+                  const svgPt = pt.matrixTransform(ctm.inverse())
+                  if (svgPt.x < NAME_COL_W) return  // ignore name-column clicks
+                  const dayIdx = Math.floor((svgPt.x - NAME_COL_W) / dayW)
+                  setScrubDay(Math.max(0, Math.min(windowDays, dayIdx)))
+                }}
               >
                 <Grid rowCount={rows.length} />
                 <TimelineAxis />
@@ -855,7 +873,10 @@ function ProductionRow({ prod, rowIdx, dimmed, onHover, onUnhover, onClick, scru
     <g
       onMouseEnter={onHover}
       onMouseLeave={onUnhover}
-      onClick={onClick}
+      // Stop propagation so the SVG-level click handler (which moves the
+      // playhead on background clicks) doesn't ALSO fire when a bar is
+      // tapped — the bar should open the popup, not scrub the date.
+      onClick={(e) => { e.stopPropagation(); onClick?.() }}
       style={{ cursor: 'pointer', opacity: dimmed ? 0.25 : 1, transition: 'opacity 200ms ease' }}
     >
       <text
@@ -1028,7 +1049,10 @@ function ResourceRow({ resource, rowIdx, dimmed, onCommitmentClick, scrubDay }) 
         return (
           <g
             key={i}
-            onClick={() => onCommitmentClick?.(c.productionId)}
+            // stopPropagation so the SVG-level scrub-on-click doesn't ALSO
+            // fire — clicking a commitment bar should open the popup, not
+            // move the playhead.
+            onClick={(e) => { e.stopPropagation(); onCommitmentClick?.(c.productionId) }}
             style={{ cursor: onCommitmentClick ? 'pointer' : 'default' }}
           >
             <rect
