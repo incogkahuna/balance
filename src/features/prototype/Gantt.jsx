@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, createContext, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, addDays } from 'date-fns'
-import { Minus, Plus, Maximize2 } from 'lucide-react'
+import { Minus, Plus, Maximize2, Crosshair } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ProductionQuickView } from '../../components/productions/ProductionQuickView.jsx'
 import { usePrototypeData } from './dataSource.js'
@@ -267,6 +267,28 @@ export function Gantt() {
     svgHeightRef.current = svgHeight
   }, [svgHeight])
 
+  // ── Jump to date — used by the toolbar's TODAY button + date picker ─────
+  // Scrolls the chart so the target day lands centered in the viewport AND
+  // moves the playhead onto it (so the date the user navigated to becomes
+  // the focused day). Clamps to the window edges if the target is outside
+  // the chart range — never jumps past the data.
+  const jumpToDate = useCallback((targetDate) => {
+    if (!targetDate) return
+    const rawIdx = dayIndex(targetDate)
+    const clamped = Math.max(0, Math.min(windowDays, rawIdx))
+    setScrubDay(clamped)
+    const wrapper = scrollWrapperRef.current
+    if (!wrapper) return
+    const targetX  = NAME_COL_W + clamped * dayW + dayW / 2
+    const visibleW = wrapper.clientWidth - NAME_COL_W
+    const desired  = Math.max(0, targetX - NAME_COL_W - visibleW / 2)
+    const maxScroll = wrapper.scrollWidth - wrapper.clientWidth
+    wrapper.scrollTo({
+      left: Math.min(maxScroll, desired),
+      behavior: 'smooth',
+    })
+  }, [dayIndex, windowDays, dayW])
+
   // ── Bar click → ProductionQuickView popup ───────────────────────────────
   // Look up the full Production from AppContext (the prototype's projection
   // only carries the visual fields; the popup needs roadmap, addons,
@@ -337,6 +359,9 @@ export function Gantt() {
               filter={filter} setFilter={setFilter}
               zoomLevel={zoomLevel}
               zoomIn={zoomIn} zoomOut={zoomOut} zoomReset={zoomReset}
+              jumpToDate={jumpToDate}
+              windowStart={data.windowStart}
+              windowEnd={data.windowEnd}
             />
             <Legend hoveredProd={hoveredProd} setHoveredProd={setHoveredProd} />
 
@@ -511,10 +536,18 @@ function ResizeHandle({ onMouseDown, onTouchStart, onDoubleClick, isCustom }) {
 }
 
 // ── Toolbar: group-by toggle + resource filter chips + zoom controls ───────
-function Toolbar({ groupBy, setGroupBy, filter, setFilter, zoomLevel, zoomIn, zoomOut, zoomReset }) {
+function Toolbar({
+  groupBy, setGroupBy, filter, setFilter,
+  zoomLevel, zoomIn, zoomOut, zoomReset,
+  jumpToDate, windowStart, windowEnd,
+}) {
   const zoomPct = Math.round(zoomLevel * 100)
   const atMax = zoomLevel >= ZOOM_MAX - 0.001
   const atMin = zoomLevel <= ZOOM_MIN + 0.001
+  // YYYY-MM-DD bounds for the date input — keeps the native picker from
+  // letting users pick a date outside the chart's window.
+  const minDateStr = windowStart ? format(windowStart, 'yyyy-MM-dd') : undefined
+  const maxDateStr = windowEnd   ? format(windowEnd,   'yyyy-MM-dd') : undefined
   return (
     <div
       className="flex items-center justify-between gap-4 px-3 py-2 flex-wrap"
@@ -614,6 +647,48 @@ function Toolbar({ groupBy, setGroupBy, filter, setFilter, zoomLevel, zoomIn, zo
           <Maximize2 size={10} />
           FIT
         </button>
+      </div>
+
+      {/* Jump-to-date controls — TODAY button + a date picker. Both call
+          jumpToDate which smoothly scrolls the chart and parks the playhead
+          on the target day. Combined into one group so navigation lives
+          alongside zoom rather than buried in the scrubber below. */}
+      <div className="flex items-center gap-2">
+        <span className="hud-label">JUMP</span>
+        <button
+          onClick={() => jumpToDate(new Date())}
+          className="inline-flex items-center gap-1 px-2 py-1 font-telemetry text-[10px] tracking-wider transition-colors"
+          style={{
+            border: '1px solid var(--orbital-border)',
+            background: 'var(--orbital-muted)',
+            color: 'var(--orbital-subtle)',
+          }}
+          title="Jump to today (and centre the chart on now)"
+        >
+          <Crosshair size={10} />
+          TODAY
+        </button>
+        <input
+          type="date"
+          min={minDateStr}
+          max={maxDateStr}
+          onChange={(e) => {
+            const v = e.target.value
+            if (!v) return
+            // Parse as local-noon so the timezone offset doesn't tip the
+            // date back a day on browsers that interpret bare YYYY-MM-DD
+            // as UTC midnight.
+            const parts = v.split('-').map(Number)
+            const target = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0)
+            jumpToDate(target)
+          }}
+          className="font-telemetry text-[10px] tracking-wider px-2 py-1 bg-transparent text-orbital-subtle"
+          style={{
+            border: '1px solid var(--orbital-border)',
+            colorScheme: 'dark',
+          }}
+          title={`Pick any date between ${minDateStr || 'window start'} and ${maxDateStr || 'window end'}`}
+        />
       </div>
     </div>
   )
