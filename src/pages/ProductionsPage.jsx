@@ -485,6 +485,22 @@ function ProductionCard({
           </div>
           <div className="flex-shrink-0 flex flex-col items-end gap-1.5 mt-0.5">
             <StatusBadge status={prod.status} />
+            {/* Draft chip — production not yet visible to crew. Admin/sup
+                are the only ones who can see this card at all when it's
+                a draft (RLS-enforced), so the chip is a reminder rather
+                than a permissions hint. */}
+            {prod.published === false && (
+              <span
+                className="text-[10px] font-medium px-1.5 py-0.5 font-telemetry tracking-wider uppercase"
+                style={{
+                  color: '#fbbf24',
+                  background: 'rgba(251,191,36,0.1)',
+                  border: '1px solid rgba(251,191,36,0.35)',
+                }}
+              >
+                Draft
+              </span>
+            )}
             {health !== 'On Track' && HEALTH_CONFIG[health] && (
               <span
                 className="text-[11px] font-medium px-2 py-0.5"

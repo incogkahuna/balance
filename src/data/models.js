@@ -198,6 +198,11 @@ export function createProduction(overrides = {}) {
       milestones:          [],
       logisticalConcerns:  [],
     },
+    // false = draft (admin/sup only). New productions default to draft so
+    // the creator can iron out details before crew sees them. They can flip
+    // to true via the Publish action on the production detail page.
+    // Existing DB rows default to true at the schema level for backfill.
+    published: false,
     createdBy: '',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

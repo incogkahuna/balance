@@ -4,7 +4,7 @@ import { format, parseISO } from 'date-fns'
 import {
   ArrowLeft, Edit, Trash2, Plus, MapPin, Calendar,
   Film, Users, Package, AlertTriangle, Star, ChevronRight,
-  CheckSquare, FileText, MessageSquare, BarChart2
+  CheckSquare, FileText, MessageSquare, BarChart2, Eye, EyeOff,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS, USERS } from '../data/models.js'
@@ -96,6 +96,20 @@ export function ProductionDetailPage() {
               <div className="flex items-center gap-3 flex-wrap mb-1">
                 <h1 className="text-xl font-bold text-orbital-text">{production.name}</h1>
                 <StatusBadge status={production.status} />
+                {production.published === false && (
+                  <span
+                    className="text-[10px] font-medium px-1.5 py-0.5 font-telemetry tracking-wider uppercase inline-flex items-center gap-1"
+                    style={{
+                      color: '#fbbf24',
+                      background: 'rgba(251,191,36,0.1)',
+                      border: '1px solid rgba(251,191,36,0.35)',
+                    }}
+                    title="This production is a draft — crew can't see it yet. Click Publish to make it visible."
+                  >
+                    <EyeOff size={10} />
+                    Draft
+                  </span>
+                )}
               </div>
               <p className="text-orbital-subtle">{production.client}</p>
 
@@ -125,7 +139,33 @@ export function ProductionDetailPage() {
             </div>
 
             {canEdit && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {/* Publish / Unpublish — flips production.published. Draft
+                    means crew can't see it (RLS-enforced); publishing makes
+                    it visible to the whole salary roster. Unpublishing a
+                    live production yanks it from crew view — confirm
+                    before doing that since it's a meaningful action. */}
+                {production.published === false ? (
+                  <button
+                    onClick={() => updateProduction(id, { published: true })}
+                    className="btn-primary"
+                    title="Make this production visible to the whole salary roster"
+                  >
+                    <Eye size={15} /> Publish
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Unpublish "${production.name}"? Crew won't be able to see it until you publish it again.`)) {
+                        updateProduction(id, { published: false })
+                      }
+                    }}
+                    className="btn-ghost"
+                    title="Hide this production from crew (revert to draft)"
+                  >
+                    <EyeOff size={15} /> Unpublish
+                  </button>
+                )}
                 <button onClick={() => setShowEdit(true)} className="btn-ghost">
                   <Edit size={15} /> Edit
                 </button>

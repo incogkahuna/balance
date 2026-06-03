@@ -99,6 +99,18 @@ export function ProductionQuickView({ production, onClose, onOpenFull, conflicts
         <p className="text-sm text-orbital-subtle">{prod.client}</p>
         <div className="flex items-center gap-2 mt-2 flex-wrap">
           <StatusBadge status={prod.status} />
+          {prod.published === false && (
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 font-telemetry tracking-wider uppercase"
+              style={{
+                color: '#fbbf24',
+                background: 'rgba(251,191,36,0.1)',
+                border: '1px solid rgba(251,191,36,0.35)',
+              }}
+            >
+              Draft
+            </span>
+          )}
           {health !== 'On Track' && HEALTH_CONFIG[health] && (
             <span
               className="text-[11px] font-medium px-2 py-0.5 inline-flex items-center gap-1"

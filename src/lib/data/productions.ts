@@ -57,6 +57,11 @@ export interface Production {
     milestones: Array<Record<string, unknown>>
     logisticalConcerns: Array<Record<string, unknown>>
   }
+  // false = draft (only admin/sup can see), true = visible to all salary roster.
+  // Drives visibility at the RLS layer; UI shows a DRAFT chip on unpublished
+  // productions. New productions default to draft so admin can iron things
+  // out before crew sees them ("like a social media post" model).
+  published: boolean
   createdBy: string | null
   createdAt: string
   updatedAt: string
@@ -89,6 +94,7 @@ interface ProductionRow {
   instruction_package: Production['instructionPackage']
   bible: Production['bible']
   roadmap: Production['roadmap']
+  published: boolean
   created_by: string | null
   created_at: string
   updated_at: string
@@ -115,6 +121,10 @@ function rowToProduction(r: ProductionRow): Production {
     instructionPackage:  r.instruction_package ?? { files: [], voiceMemos: [], notes: '' },
     bible:               r.bible ?? { keyPlayers: [], documents: [], concerns: [], frictionAndFlow: [] },
     roadmap:             r.roadmap ?? { milestones: [], logisticalConcerns: [] },
+    // Existing rows ship without `published` because the column was added
+    // in a later migration with default true. Treat undefined as true so
+    // old/cached rows render normally rather than appearing as drafts.
+    published:           r.published ?? true,
     createdBy:           r.created_by,
     createdAt:           r.created_at,
     updatedAt:           r.updated_at,
@@ -155,6 +165,7 @@ function productionToRow(p: NewProduction): Partial<ProductionRow> {
   if (p.instructionPackage  !== undefined) row.instruction_package  = p.instructionPackage
   if (p.bible               !== undefined) row.bible                = p.bible
   if (p.roadmap             !== undefined) row.roadmap              = p.roadmap
+  if (p.published           !== undefined) row.published            = p.published
   if (p.createdBy           !== undefined) row.created_by           = asUuidOrNull(p.createdBy)
   return row
 }
