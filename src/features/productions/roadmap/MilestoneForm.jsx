@@ -4,8 +4,8 @@ import { useApp } from '../../../context/AppContext.jsx'
 import { useAutoSave } from '../../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
-  MILESTONE_TYPE, MILESTONE_STATUS, TASK_PRIORITY, TASK_STATUS,
-  createMilestone, createTask, USERS,
+  MILESTONE_TYPE, MILESTONE_STATUS,
+  createMilestone, USERS,
 } from '../../../data/models.js'
 
 // Selectable people for milestone owner / participant lookups. Per Danny:
@@ -33,7 +33,7 @@ function useProductionTeam(production) {
 }
 
 export function MilestoneForm({ production, initial, onClose }) {
-  const { currentUser, addMilestone, updateMilestone, deleteMilestone, addTask } = useApp()
+  const { currentUser, addMilestone, updateMilestone, deleteMilestone } = useApp()
   const team = useProductionTeam(production)
 
   // Eager-create flow: if there's no `initial`, we create a placeholder
@@ -102,40 +102,12 @@ export function MilestoneForm({ production, initial, onClose }) {
     { enabled, delay: 600 }
   )
 
-  // ── Auto-create tasks when team members get assigned ──────────────────────
-  // Track who's already had a task created during this form session so we
-  // don't double-create on every keystroke. Initial assignees (loaded with
-  // an existing milestone) are seeded in so we don't generate retroactive
-  // tasks for people already on the record.
-  const assigneesWithTasksRef = useRef(new Set([
-    ...(initial?.ownerId ? [initial.ownerId] : []),
-    ...(initial?.participantIds || []),
-  ]))
-
-  useEffect(() => {
-    if (!workingIdRef.current) return
-    const assigned = [form.ownerId, ...form.participantIds].filter(Boolean)
-    for (const personId of assigned) {
-      if (assigneesWithTasksRef.current.has(personId)) continue
-      assigneesWithTasksRef.current.add(personId)
-      const person = team.find(p => p.id === personId)
-      const milestoneLabel = form.title.trim() || 'Untitled milestone'
-      const task = createTask({
-        productionId: production.id,
-        title:        `Milestone: ${milestoneLabel}`,
-        description:  person
-          ? `Auto-created when ${person.name} was assigned to the milestone.`
-          : 'Auto-created from milestone assignment.',
-        assigneeId:   personId,
-        assignedBy:   currentUser?.id || '',
-        dueDate:      form.date ? form.date.slice(0, 10) : '',
-        priority:     TASK_PRIORITY.MEDIUM,
-        status:       TASK_STATUS.NOT_STARTED,
-      })
-      addTask(task)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.ownerId, form.participantIds, form.title, form.date])
+  // Per Danny: the milestone IS the task — no need to auto-create a parallel
+  // task record every time an owner/participant is added. The previous
+  // behaviour produced noise tasks titled "Milestone: <name>" with
+  // generic auto-created descriptions. Users mark milestones complete from
+  // the timeline checkbox now; if a dedicated task is wanted, create one
+  // through the Tasks tab.
 
   // ── Close behaviour ───────────────────────────────────────────────────────
   // If the user closes without ever typing a title AND we created the
@@ -338,7 +310,7 @@ export function MilestoneForm({ production, initial, onClose }) {
             </div>
 
             <p className="text-[11px] text-orbital-dim mt-2">
-              Owners and participants each get a task auto-created when first added — visible on their Team page.
+              Owners and participants are notified about this milestone. Mark it complete from the timeline when done — no separate task needed.
             </p>
           </div>
 
