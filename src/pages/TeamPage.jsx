@@ -3,6 +3,7 @@ import { format, parseISO, differenceInCalendarDays } from 'date-fns'
 import {
   Mail, MapPin, Briefcase, CheckCircle2, Activity, Film,
   Clock, Target, AlertOctagon, Zap, ArrowRight, Plus, X, Loader2,
+  UserSquare2,
 } from 'lucide-react'
 import { USERS, ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { useApp } from '../context/AppContext.jsx'
@@ -55,8 +56,11 @@ export function TeamPage() {
   // The result is the canonical team list shown in the tab strip.
   const members = useMemo(() => buildMembers(assignments), [assignments])
 
-  const [selectedId, setSelectedId] = useState(USERS[0].id)
-  const selected = members.find(m => m.id === selectedId) || members[0]
+  // Default to nothing selected per Wilder's feedback — the page should
+  // open inviting the user to pick someone rather than auto-spotlighting
+  // Mark every time.
+  const [selectedId, setSelectedId] = useState(null)
+  const selected = selectedId ? members.find(m => m.id === selectedId) : null
 
   const [showAdd, setShowAdd] = useState(false)
   const handleAdded = async () => {
@@ -142,7 +146,26 @@ export function TeamPage() {
         })}
       </div>
 
-      {selected && <TeamMemberDetail user={selected} />}
+      {selected ? (
+        <TeamMemberDetail user={selected} />
+      ) : (
+        <div
+          className="card-elevated px-6 py-10 text-center"
+          style={{ borderStyle: 'dashed' }}
+        >
+          <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center rounded-full"
+            style={{ background: 'var(--orbital-muted)', border: '1px solid var(--orbital-border)' }}
+          >
+            <UserSquare2 size={20} className="text-orbital-subtle" />
+          </div>
+          <p className="text-sm text-orbital-text font-medium mb-1">
+            Pick a team member to see their stats
+          </p>
+          <p className="text-xs text-orbital-subtle">
+            Tap any card above to view assigned productions, task completion, and activity.
+          </p>
+        </div>
+      )}
 
       <Modal
         open={showAdd}
