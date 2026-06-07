@@ -8,21 +8,27 @@ import {
   createMilestone, createTask, USERS,
 } from '../../../data/models.js'
 
-// Collects all team members (staff + contractors) for a production into one list
+// Selectable people for milestone owner / participant lookups. Per Danny:
+// the entire salary roster should be eligible regardless of whether they're
+// explicitly assigned to this production — milestones often need owners
+// from outside the production team. Contractors on THIS production are
+// layered in afterward since they're production-specific additions rather
+// than always-on-the-roster.
 function useProductionTeam(production) {
   const { resolveAssignee } = useApp()
   return useMemo(() => {
-    const ids = [
-      ...production.assignedMembers.map(m => m.userId),
+    const result = [...USERS]
+    const seen = new Set(USERS.map(u => u.id))
+    const contractorIds = [
       ...(production.assignedContractors || []).map(a => a.contractorId),
       production.stageManagerId,
     ].filter(Boolean)
-    // Deduplicate
-    const seen = new Set()
-    return ids
-      .filter(id => { if (seen.has(id)) return false; seen.add(id); return true })
-      .map(id => resolveAssignee(id))
-      .filter(Boolean)
+    for (const cid of contractorIds) {
+      if (seen.has(cid)) continue
+      const c = resolveAssignee(cid)
+      if (c) { result.push(c); seen.add(cid) }
+    }
+    return result
   }, [production, resolveAssignee])
 }
 

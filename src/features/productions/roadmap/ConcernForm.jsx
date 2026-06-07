@@ -4,22 +4,28 @@ import { useApp } from '../../../context/AppContext.jsx'
 import { useAutoSave } from '../../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
-  CONCERN_CATEGORY, CONCERN_IMPACT, CONCERN_STATUS, createLogisticalConcern
+  CONCERN_CATEGORY, CONCERN_IMPACT, CONCERN_STATUS, createLogisticalConcern, USERS,
 } from '../../../data/models.js'
 
+// Selectable people for concern owner. Per Danny: the entire salary roster
+// is eligible regardless of whether they're on this production. Contractors
+// who ARE on this production get layered in afterward since they're
+// production-specific additions.
 function useProductionTeam(production) {
   const { resolveAssignee } = useApp()
   return useMemo(() => {
-    const ids = [
-      ...production.assignedMembers.map(m => m.userId),
+    const result = [...USERS]
+    const seen = new Set(USERS.map(u => u.id))
+    const contractorIds = [
       ...(production.assignedContractors || []).map(a => a.contractorId),
       production.stageManagerId,
     ].filter(Boolean)
-    const seen = new Set()
-    return ids
-      .filter(id => { if (seen.has(id)) return false; seen.add(id); return true })
-      .map(id => resolveAssignee(id))
-      .filter(Boolean)
+    for (const cid of contractorIds) {
+      if (seen.has(cid)) continue
+      const c = resolveAssignee(cid)
+      if (c) { result.push(c); seen.add(cid) }
+    }
+    return result
   }, [production, resolveAssignee])
 }
 
