@@ -1,6 +1,6 @@
 // Prototype data adapter.
 //
-// The Constellation / Resource River / Gantt views were originally built
+// The Grav Map / Gantt views were originally built
 // against a hand-crafted set of constants in sampleData.js. This module
 // wraps that source so the visualizations can transparently render either:
 //

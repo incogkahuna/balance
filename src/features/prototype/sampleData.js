@@ -168,7 +168,7 @@ export function statusAtDay(resourceId, dayIdx) {
 }
 
 // Total committed days across the window for a resource — drives line thickness
-// in the Constellation view.
+// in the Grav Map view.
 export function commitmentLoad(resourceId, productionId) {
   const c = COMMITMENTS.find(x => x.resourceId === resourceId && x.productionId === productionId)
   if (!c) return 0

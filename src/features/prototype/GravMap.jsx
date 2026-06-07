@@ -22,9 +22,9 @@ const SMOOTH_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 // ── File-scope context for the live data + derived layout maps ───────────
 // Every sub-component below that needs PRODUCTIONS / RESOURCES / COMMITMENTS
 // / PLANET_POS / etc. reads from this context. The provider lives at the
-// top of <Constellation>.
-const ConstellationCtx = createContext(null)
-const useConstellation = () => useContext(ConstellationCtx)
+// top of <GravMap>.
+const GravMapCtx = createContext(null)
+const useGravMap = () => useContext(GravMapCtx)
 
 // Lay N production planets evenly around the CENTER on a circle of
 // PLANET_ORBIT_R, starting at the top (12 o'clock) and going clockwise.
@@ -153,7 +153,7 @@ const FILTER_OPTIONS = [
 // ══════════════════════════════════════════════════════════════════════════
 // Component
 // ══════════════════════════════════════════════════════════════════════════
-export function Constellation() {
+export function GravMap() {
   // ── Live data + derived layout maps ─────────────────────────────────────
   const data = usePrototypeData()
   const PRODUCTIONS = data.productions
@@ -574,7 +574,7 @@ export function Constellation() {
   const draggingResource = draggingId ? RESOURCES.find(r => r.id === draggingId) : null
 
   // ── Render ───────────────────────────────────────────────────────────
-  // Wrap everything in ConstellationCtx so the deeply-nested sub-components
+  // Wrap everything in GravMapCtx so the deeply-nested sub-components
   // (tooltip, mini-gantt, production card, etc.) can read live data without
   // prop-drilling.
   const ctxValue = {
@@ -585,7 +585,7 @@ export function Constellation() {
 
   if (PRODUCTIONS.length === 0) {
     return (
-      <ConstellationCtx.Provider value={ctxValue}>
+      <GravMapCtx.Provider value={ctxValue}>
         <div className="px-6 py-5">
           <Header />
           <div className="card-elevated mt-4 px-6 py-12 text-center">
@@ -593,16 +593,16 @@ export function Constellation() {
               NO PRODUCTIONS WITH DATE BOUNDS
             </p>
             <p className="text-sm text-orbital-dim max-w-md mx-auto">
-              Add a production with start and end dates to populate the constellation.
+              Add a production with start and end dates to populate the grav map.
             </p>
           </div>
         </div>
-      </ConstellationCtx.Provider>
+      </GravMapCtx.Provider>
     )
   }
 
   return (
-    <ConstellationCtx.Provider value={ctxValue}>
+    <GravMapCtx.Provider value={ctxValue}>
     <div className="px-6 py-5">
       <Header />
 
@@ -876,7 +876,7 @@ export function Constellation() {
         />
       </div>
     </div>
-    </ConstellationCtx.Provider>
+    </GravMapCtx.Provider>
   )
 }
 
@@ -1025,7 +1025,7 @@ function adjustColor(hex, percent) {
 }
 
 function PlanetDefs() {
-  const { PRODUCTIONS } = useConstellation()
+  const { PRODUCTIONS } = useGravMap()
   return (
     <defs>
       {/* ── Home planet gradients ─────────────────────────────────── */}
@@ -1486,7 +1486,7 @@ function FocusLock({ focusedProduction, isHome, onReturn }) {
 // Drag banner — shown while a resource is being dragged
 // ══════════════════════════════════════════════════════════════════════════
 function DragBanner({ resource, targetId }) {
-  const { PRODUCTIONS } = useConstellation()
+  const { PRODUCTIONS } = useGravMap()
   const targetProd = targetId && targetId !== 'home'
     ? PRODUCTIONS.find(p => p.id === targetId)
     : null
@@ -1526,7 +1526,7 @@ function DragBanner({ resource, targetId }) {
 // Tooltip
 // ══════════════════════════════════════════════════════════════════════════
 function ResourceTooltip({ resourceId, states, scrubMode, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, expanded, onClose }) {
-  const { PRODUCTIONS, COMMITMENTS, productionsForResource } = useConstellation()
+  const { PRODUCTIONS, COMMITMENTS, productionsForResource } = useGravMap()
   if (!resourceId) return null
   const state = states.find(s => s.resource.id === resourceId)
   if (!state) return null
@@ -1689,7 +1689,7 @@ function SectionDivider() {
 // Detailed list of every commitment with date range, day count, location.
 // At-scrubber status is annotated as ACTIVE / UPCOMING / WRAPPED.
 function AssignmentsDetail({ resourceId, activeProds, scrubStart, scrubEnd }) {
-  const { PRODUCTIONS, COMMITMENTS } = useConstellation()
+  const { PRODUCTIONS, COMMITMENTS } = useGravMap()
   const myCommitments = COMMITMENTS
     .filter(c => c.resourceId === resourceId)
     .sort((a, b) => a.start - b.start)
@@ -1744,7 +1744,7 @@ function AssignmentsDetail({ resourceId, activeProds, scrubStart, scrubEnd }) {
 // Breakdown of every overlap pair for a TORN resource — which two productions
 // contest them, the exact overlap window, and the duration.
 function ConflictsBreakdown({ resourceId }) {
-  const { PRODUCTIONS, COMMITMENTS } = useConstellation()
+  const { PRODUCTIONS, COMMITMENTS } = useGravMap()
   const myCommitments = COMMITMENTS.filter(c => c.resourceId === resourceId)
   const overlaps = []
   for (let i = 0; i < myCommitments.length; i++) {
@@ -1806,7 +1806,7 @@ function ConflictsBreakdown({ resourceId }) {
 // Visual utilization bar — what % of the current scrubber window this
 // resource is committed for, with overcommitment shown as a red overflow.
 function UtilizationBar({ resourceId, scrubStartDay, scrubEndDay }) {
-  const { COMMITMENTS, dateAtDayIndex } = useConstellation()
+  const { COMMITMENTS, dateAtDayIndex } = useGravMap()
   // For each day in the window, count active commitments
   const span = Math.max(1, scrubEndDay - scrubStartDay)
   let totalCommittedDays = 0
@@ -1936,7 +1936,7 @@ function TipStat({ label, value, color }) {
 // Mini horizontal Gantt — one row per production this resource touches,
 // commitment rendered as a colored bar inside the 6-week window track.
 function MiniGantt({ resourceId, scrubStartDay, scrubEndDay, scrubMode }) {
-  const { PRODUCTIONS, COMMITMENTS, WINDOW_DAYS, dayIndex, dateAtDayIndex } = useConstellation()
+  const { PRODUCTIONS, COMMITMENTS, WINDOW_DAYS, dayIndex, dateAtDayIndex } = useGravMap()
   const myCommitments = COMMITMENTS.filter(c => c.resourceId === resourceId)
   const productions = [...new Set(myCommitments.map(c => c.productionId))]
     .map(id => PRODUCTIONS.find(p => p.id === id))
@@ -2015,7 +2015,7 @@ function MiniGantt({ resourceId, scrubStartDay, scrubEndDay, scrubMode }) {
 
 // Peers — other resources on the same active production(s)
 function PeersSection({ resourceId, activeProds }) {
-  const { PRODUCTIONS, RESOURCES, COMMITMENTS } = useConstellation()
+  const { PRODUCTIONS, RESOURCES, COMMITMENTS } = useGravMap()
   if (activeProds.length === 0) return null
   const blocks = activeProds.map(prodId => {
     const prod = PRODUCTIONS.find(p => p.id === prodId)
@@ -2078,7 +2078,7 @@ function PeersSection({ resourceId, activeProds }) {
 // Production card — shown when a planet is selected
 // ══════════════════════════════════════════════════════════════════════════
 function ProductionCard({ planetId, orbiterStates, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, scrubMode, onClose }) {
-  const { PRODUCTIONS, RESOURCES, COMMITMENTS, PRODUCTION_LOCATION } = useConstellation()
+  const { PRODUCTIONS, RESOURCES, COMMITMENTS, PRODUCTION_LOCATION } = useGravMap()
   if (planetId === 'home') {
     return (
       <HomeBaseCard
@@ -2244,7 +2244,7 @@ function ProductionCard({ planetId, orbiterStates, scrubStart, scrubEnd, scrubSt
 }
 
 function ProductionTimelineStrip({ production, scrubStartDay, scrubEndDay, scrubMode }) {
-  const { WINDOW_DAYS, dayIndex, dateAtDayIndex } = useConstellation()
+  const { WINDOW_DAYS, dayIndex, dateAtDayIndex } = useGravMap()
   const W = 530
   const H = 22
   const total = WINDOW_DAYS
@@ -2363,7 +2363,7 @@ function RosterSection({ title, resources, active }) {
 }
 
 function ProductionConflictsBlock({ production, conflicts }) {
-  const { PRODUCTIONS, RESOURCES } = useConstellation()
+  const { PRODUCTIONS, RESOURCES } = useGravMap()
   return (
     <div>
       <p className="font-telemetry text-[10px] tracking-[0.22em] mb-2"
@@ -2421,7 +2421,7 @@ function ProductionConflictsBlock({ production, conflicts }) {
 // Home base card — shown when the home planet is selected
 // ══════════════════════════════════════════════════════════════════════════
 function HomeBaseCard({ orbiterStates, scrubStart, scrubEnd, scrubStartDay, scrubEndDay, scrubMode, onClose }) {
-  const { PRODUCTIONS, PRODUCTION_LOCATION } = useConstellation()
+  const { PRODUCTIONS, PRODUCTION_LOCATION } = useGravMap()
   const onStation     = orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'people')
   const inStorage     = orbiterStates.filter(s => s.mode === 'home' && s.resource.kind === 'gear')
   const peopleDeployed = orbiterStates.filter(s => s.mode !== 'home' && s.resource.kind === 'people').length
@@ -2565,7 +2565,7 @@ function Stat({ label, value, color }) {
 const MIN_RANGE_SPAN = 1
 
 function TimeScrubber({ mode, setMode, day, setDay, range, setRange }) {
-  const { WINDOW_DAYS, dateAtDayIndex } = useConstellation()
+  const { WINDOW_DAYS, dateAtDayIndex } = useGravMap()
   const trackRef = useRef(null)
   const dragRef = useRef(null)        // 'day' | 'start' | 'end' | 'span' | null
   const spanDragOrigin = useRef(null) // { startX, startWindow } for span drag

@@ -51,7 +51,7 @@ function lazyWithRetry(loader) {
 //  - AnalyticsPage pulls in Recharts (~150kB gzipped, admin-only)
 //  - SchedulePage pulls in the Gantt rendering paths (admin-flavoured)
 //  - IntakePage will eventually pull in Whisper/Claude clients
-//  - PrototypePage carries the Constellation/River SVG experiments
+//  - PrototypePage carries the Grav Map SVG experiments
 const AnalyticsPage  = lazyWithRetry(() => import('./pages/AnalyticsPage.jsx').then(m => ({ default: m.AnalyticsPage })))
 const SchedulePage   = lazyWithRetry(() => import('./pages/SchedulePage.jsx').then(m => ({ default: m.SchedulePage })))
 const IntakePage     = lazyWithRetry(() => import('./pages/IntakePage.jsx').then(m => ({ default: m.IntakePage })))

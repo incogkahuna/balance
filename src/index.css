@@ -322,7 +322,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   SPACE TRAVEL — keyframes for the Constellation prototype starfield
+   SPACE TRAVEL — keyframes for the Grav Map starfield
    ══════════════════════════════════════════════════════════════════════════════ */
 @keyframes star-drift {
   from { transform: translate3d(0, 0, 0); }

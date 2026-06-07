@@ -142,7 +142,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
   // Single source of truth: turn current form state into a production object.
   // Both the submit handler and the auto-save effect consume this.
   // Note: dateRanges is saved as-is; startDate/endDate are derived as the
-  // min/max envelope so card / Gantt / Constellation views that read
+  // min/max envelope so card / Gantt / Grav Map views that read
   // start/end continue to render the full project span correctly.
   const cleanRanges = form.dateRanges.filter(r => r.start || r.end)
   const buildProd = () => createProduction({
@@ -309,7 +309,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
       {/* Date ranges — one row by default; add more for projects that span
           weeks but only run on certain days. The overall envelope (min start,
           max end) is auto-derived and saved as startDate/endDate so card /
-          Gantt / Constellation views render the full span. */}
+          Gantt / Grav Map views render the full span. */}
       <div>
         <div className="flex items-baseline justify-between mb-1.5">
           <label className="label mb-0">Date Range{form.dateRanges.length > 1 ? 's' : ''}</label>
