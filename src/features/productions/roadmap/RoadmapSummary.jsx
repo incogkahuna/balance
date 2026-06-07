@@ -1,7 +1,7 @@
 import { format, parseISO, isFuture, isPast, isToday } from 'date-fns'
-import { AlertTriangle, Calendar, ChevronRight } from 'lucide-react'
+import { AlertTriangle, Calendar, ChevronRight, Clock } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
-import { MILESTONE_STATUS, CONCERN_STATUS } from '../../../data/models.js'
+import { MILESTONE_STATUS, CONCERN_STATUS, CONCERN_IMPACT } from '../../../data/models.js'
 import {
   MILESTONE_TYPE_CONFIG, MILESTONE_STATUS_CONFIG,
   CONCERN_IMPACT_CONFIG, getUpcomingMilestones
@@ -9,7 +9,11 @@ import {
 import { MilestoneCard } from './MilestoneCard.jsx'
 import clsx from 'clsx'
 
-export function RoadmapSummary({ roadmap, production, canEdit, onEdit, onDelete, onSetSubTab }) {
+export function RoadmapSummary({
+  roadmap, production, canEdit,
+  onEdit, onDelete, onToggleComplete,
+  onEditConcern, onSetSubTab,
+}) {
   const { resolveAssignee } = useApp()
   const milestones = roadmap.milestones || []
   const concerns   = roadmap.logisticalConcerns || []
@@ -31,6 +35,31 @@ export function RoadmapSummary({ roadmap, production, canEdit, onEdit, onDelete,
     (c.impactLevel === 'Critical' || c.impactLevel === 'High') &&
     c.status !== CONCERN_STATUS.RESOLVED && c.status !== CONCERN_STATUS.ACCEPTED
   ).sort((a, b) => a.impactLevel === 'Critical' ? -1 : 1)
+
+  // At-risk items — surfaces what's actually behind the "At Risk" health
+  // indicator on the production. Per Wilder's feedback: when the user sees
+  // an At Risk badge, clicking through should reveal the actual offending
+  // items (overdue milestones + critical concerns), each clickable so they
+  // can be acted on directly.
+  const now = new Date()
+  const overdueMilestones = milestones.filter(m =>
+    m.date && new Date(m.date) < now && m.status !== MILESTONE_STATUS.COMPLETE
+  )
+  const atRiskMilestones = milestones.filter(m =>
+    m.status === MILESTONE_STATUS.AT_RISK
+  )
+  const criticalConcerns = concerns.filter(c =>
+    c.impactLevel === CONCERN_IMPACT.CRITICAL &&
+    c.status !== CONCERN_STATUS.RESOLVED && c.status !== CONCERN_STATUS.ACCEPTED
+  )
+  // Deduplicate (a milestone could be both overdue AND status=AT_RISK).
+  const atRiskMilestoneIds = new Set()
+  const atRiskMilestonesAll = [...overdueMilestones, ...atRiskMilestones]
+    .filter(m => {
+      if (atRiskMilestoneIds.has(m.id)) return false
+      atRiskMilestoneIds.add(m.id); return true
+    })
+  const atRiskCount = atRiskMilestonesAll.length + criticalConcerns.length
 
   const isEmpty = milestones.length === 0 && concerns.length === 0
 
@@ -57,6 +86,65 @@ export function RoadmapSummary({ roadmap, production, canEdit, onEdit, onDelete,
 
   return (
     <div className="space-y-6">
+
+      {/* At Risk alert — only renders when there's something actually wrong.
+          Lists overdue milestones, at-risk-status milestones, and open
+          critical concerns. Each row is clickable to open the relevant
+          edit form (milestones) or jump to the concerns tab — per Wilder:
+          clicking the at-risk indicator should reveal what's at risk. */}
+      {atRiskCount > 0 && (
+        <div
+          className="rounded-lg p-4"
+          style={{
+            background: 'rgba(239,68,68,0.06)',
+            border: '1px solid rgba(239,68,68,0.4)',
+          }}
+        >
+          <h3 className="font-semibold text-sm flex items-center gap-2 mb-3" style={{ color: '#fca5a5' }}>
+            <AlertTriangle size={14} />
+            {atRiskCount} item{atRiskCount === 1 ? '' : 's'} at risk
+          </h3>
+          <ul className="space-y-1.5">
+            {atRiskMilestonesAll.map(m => {
+              const date = m.date ? parseISO(m.date) : null
+              const isOverdue = date && date < now
+              return (
+                <li key={`m-${m.id}`}>
+                  <button
+                    onClick={() => onEdit?.(m)}
+                    className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left transition-colors hover:bg-red-500/10"
+                  >
+                    <Clock size={12} className="text-red-400 flex-shrink-0" />
+                    <span className="text-xs font-mono text-red-400/80 flex-shrink-0">
+                      {isOverdue ? 'OVERDUE' : 'AT RISK'}
+                    </span>
+                    <span className="text-sm text-orbital-text truncate flex-1">{m.title}</span>
+                    {date && (
+                      <span className="text-xs text-orbital-subtle font-mono flex-shrink-0">
+                        {format(date, 'MMM d')}
+                      </span>
+                    )}
+                    <ChevronRight size={12} className="text-orbital-dim flex-shrink-0" />
+                  </button>
+                </li>
+              )
+            })}
+            {criticalConcerns.map(c => (
+              <li key={`c-${c.id}`}>
+                <button
+                  onClick={() => onEditConcern ? onEditConcern(c) : onSetSubTab('Concerns')}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left transition-colors hover:bg-red-500/10"
+                >
+                  <AlertTriangle size={12} className="text-red-400 flex-shrink-0" />
+                  <span className="text-xs font-mono text-red-400/80 flex-shrink-0">CRITICAL</span>
+                  <span className="text-sm text-orbital-text truncate flex-1">{c.title}</span>
+                  <ChevronRight size={12} className="text-orbital-dim flex-shrink-0" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Priority strip — next 3 milestones */}
       {next3.length > 0 && (
@@ -170,6 +258,7 @@ export function RoadmapSummary({ roadmap, production, canEdit, onEdit, onDelete,
                 canEdit={canEdit}
                 onEdit={() => onEdit(m)}
                 onDelete={() => onDelete(m.id)}
+                onToggleComplete={onToggleComplete}
               />
             ))}
             {upcoming.length > 8 && (
@@ -196,6 +285,7 @@ export function RoadmapSummary({ roadmap, production, canEdit, onEdit, onDelete,
                 canEdit={canEdit}
                 onEdit={() => onEdit(m)}
                 onDelete={() => onDelete(m.id)}
+                onToggleComplete={onToggleComplete}
               />
             ))}
           </div>

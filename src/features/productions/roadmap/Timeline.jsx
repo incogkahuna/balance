@@ -44,7 +44,7 @@ function groupMilestones(milestones) {
   return groups
 }
 
-export function Timeline({ milestones, canEdit, onEdit, onDelete, onAdd }) {
+export function Timeline({ milestones, canEdit, onEdit, onDelete, onToggleComplete, onAdd }) {
   const groups = useMemo(() => groupMilestones(milestones), [milestones])
 
   if (milestones.length === 0) {
@@ -135,6 +135,7 @@ export function Timeline({ milestones, canEdit, onEdit, onDelete, onAdd }) {
                       canEdit={canEdit}
                       onEdit={() => onEdit(milestone)}
                       onDelete={() => onDelete(milestone.id)}
+                      onToggleComplete={onToggleComplete}
                     />
                   </div>
                 )

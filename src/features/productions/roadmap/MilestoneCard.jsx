@@ -1,12 +1,12 @@
 import { format, parseISO, isToday, isPast, isFuture } from 'date-fns'
-import { Edit2, Trash2, AlertTriangle } from 'lucide-react'
+import { Edit2, Trash2, AlertTriangle, Circle, CheckCircle2 } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { MILESTONE_STATUS } from '../../../data/models.js'
 import { MILESTONE_TYPE_CONFIG, MILESTONE_STATUS_CONFIG } from './roadmapUtils.js'
 import { ContractorPhoto } from '../../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
-export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
+export function MilestoneCard({ milestone, canEdit, onEdit, onDelete, onToggleComplete }) {
   const { resolveAssignee } = useApp()
   const typeCfg   = MILESTONE_TYPE_CONFIG[milestone.type]   || MILESTONE_TYPE_CONFIG['Pre-Production']
   const statusCfg = MILESTONE_STATUS_CONFIG[milestone.status] || MILESTONE_STATUS_CONFIG['Upcoming']
@@ -72,21 +72,37 @@ export function MilestoneCard({ milestone, canEdit, onEdit, onDelete }) {
           {isAtRisk && <AlertTriangle size={13} className="text-amber-400 flex-shrink-0" />}
         </div>
 
-        {/* Edit/Delete — only visible to admins/sups on hover */}
+        {/* Complete toggle (always visible to admin/sup) + Edit/Delete
+            (hover-only on desktop). Per Wilder: there should be a fast way
+            to mark a timeline event complete without opening the edit
+            form. The checkbox icon stays visible at all times because
+            it's the most frequent action on a milestone. */}
         {canEdit && (
-          <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button
-              onClick={onEdit}
-              className="p-1.5 rounded hover:bg-orbital-surface text-orbital-subtle hover:text-orbital-text transition-colors"
-            >
-              <Edit2 size={13} />
-            </button>
-            <button
-              onClick={onDelete}
-              className="p-1.5 rounded hover:bg-red-500/10 text-orbital-subtle hover:text-red-400 transition-colors"
-            >
-              <Trash2 size={13} />
-            </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {onToggleComplete && (
+              <button
+                onClick={() => onToggleComplete(milestone)}
+                className="p-1.5 rounded hover:bg-orbital-surface transition-colors"
+                title={isComplete ? 'Mark as upcoming' : 'Mark complete'}
+                style={{ color: isComplete ? '#22c55e' : 'var(--orbital-subtle)' }}
+              >
+                {isComplete ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+              </button>
+            )}
+            <div className="flex gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={onEdit}
+                className="p-1.5 rounded hover:bg-orbital-surface text-orbital-subtle hover:text-orbital-text transition-colors"
+              >
+                <Edit2 size={13} />
+              </button>
+              <button
+                onClick={onDelete}
+                className="p-1.5 rounded hover:bg-red-500/10 text-orbital-subtle hover:text-red-400 transition-colors"
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
-import { ROLES } from '../../../data/models.js'
+import { ROLES, MILESTONE_STATUS } from '../../../data/models.js'
 import { RoadmapHealth } from './RoadmapHealth.jsx'
 import { RoadmapSummary } from './RoadmapSummary.jsx'
 import { Timeline } from './Timeline.jsx'
@@ -44,6 +44,16 @@ export function RoadmapTab({ production }) {
 
   const handleDeleteMilestone = (milestoneId) => {
     deleteMilestone(production.id, milestoneId)
+  }
+
+  // Toggle a milestone between Complete and Upcoming. Wired up to the
+  // checkbox button on MilestoneCard so users can mark events done from
+  // the Timeline/Summary without opening the edit form.
+  const handleToggleMilestoneComplete = (milestone) => {
+    const next = milestone.status === MILESTONE_STATUS.COMPLETE
+      ? MILESTONE_STATUS.UPCOMING
+      : MILESTONE_STATUS.COMPLETE
+    updateMilestone(production.id, milestone.id, { ...milestone, status: next })
   }
 
   // ─── Concern handlers ──────────────────────────────────────────────────────
@@ -131,6 +141,8 @@ export function RoadmapTab({ production }) {
           canEdit={canEdit}
           onEdit={openEditMilestone}
           onDelete={handleDeleteMilestone}
+          onToggleComplete={handleToggleMilestoneComplete}
+          onEditConcern={openEditConcern}
           onSetSubTab={setSubTab}
         />
       )}
@@ -141,6 +153,7 @@ export function RoadmapTab({ production }) {
           canEdit={canEdit}
           onEdit={openEditMilestone}
           onDelete={handleDeleteMilestone}
+          onToggleComplete={handleToggleMilestoneComplete}
           onAdd={openAddMilestone}
         />
       )}
