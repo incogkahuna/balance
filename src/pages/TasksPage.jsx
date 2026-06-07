@@ -6,7 +6,6 @@ import { useApp } from '../context/AppContext.jsx'
 import { ROLES, TASK_STATUS } from '../data/models.js'
 import { TaskCard } from '../components/tasks/TaskCard.jsx'
 import { EmptyState } from '../components/ui/EmptyState.jsx'
-import { TopBar } from '../components/layout/TopBar.jsx'
 import clsx from 'clsx'
 
 // ─── Filter definitions ────────────────────────────────────────────────────
@@ -82,7 +81,6 @@ export function TasksPage() {
 
   return (
     <div>
-      <TopBar />
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
         <h1 className="text-xl font-bold text-orbital-text mb-6">Tasks</h1>
 

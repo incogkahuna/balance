@@ -1,6 +1,7 @@
 import { Outlet, Navigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar.jsx'
 import { MobileNav } from './MobileNav.jsx'
+import { TopBar } from './TopBar.jsx'
 import { Breadcrumbs } from './Breadcrumbs.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAuth } from '../../context/AuthContext.tsx'
@@ -49,6 +50,11 @@ export function AppShell() {
             nav. lg:pb-0 because the sidebar replaces the bottom nav at
             desktop widths. */}
         <main className="flex-1 pb-[calc(72px+env(safe-area-inset-bottom))] lg:pb-0">
+          {/* TopBar — sticky top of the content area on every viewport.
+              Holds the user cluster (avatar / theme / sign out / bell)
+              per Wilder's feedback. On mobile it also shows the Balance
+              brand on the left since there's no sidebar. */}
+          <TopBar />
           {/* Breadcrumbs — shows the navigation path so users can hop back
               to where they came from. Hidden when there's only one entry
               in the trail (i.e. you just landed somewhere). */}

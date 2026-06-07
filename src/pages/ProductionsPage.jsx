@@ -12,7 +12,6 @@ import { Modal } from '../components/ui/Modal.jsx'
 import { ProductionForm } from '../components/productions/ProductionForm.jsx'
 import { ProductionQuickView } from '../components/productions/ProductionQuickView.jsx'
 import { EmptyState } from '../components/ui/EmptyState.jsx'
-import { TopBar } from '../components/layout/TopBar.jsx'
 import clsx from 'clsx'
 
 // ── Card color palette ────────────────────────────────────────────────────────
@@ -131,7 +130,6 @@ export function ProductionsPage() {
 
   return (
     <div>
-      <TopBar />
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-5">
 
         {/* ── Header ── */}

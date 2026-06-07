@@ -17,7 +17,7 @@ export function TopBar() {
 
   return (
     <header
-      className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-2"
+      className="sticky top-0 z-30 flex items-center justify-between px-2"
       style={{
         height: 48,
         background: 'var(--orbital-sidebar-bg)',
@@ -25,14 +25,22 @@ export function TopBar() {
         paddingTop: 'env(safe-area-inset-top)',
       }}
     >
-      {/* Left — app name */}
-      <div className="flex items-center gap-3 px-2">
+      {/* Left — app name. Hidden on desktop because the Sidebar already
+          shows "Balance / Orbital" in its header. Mobile has no sidebar
+          so this is the only place the brand renders there. */}
+      <div className="flex items-center gap-3 px-2 lg:hidden">
         <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-indicator-pulse" />
         <span className="text-sm font-semibold text-orbital-text">Balance</span>
         <span className="text-xs text-orbital-subtle">/ Orbital</span>
       </div>
 
-      {/* Right — notifications + theme toggle + user + logout */}
+      {/* Spacer on desktop so the user cluster stays right-aligned even
+          with the brand label hidden. */}
+      <div className="hidden lg:block" />
+
+      {/* Right — notifications + theme toggle + sign-out + user avatar.
+          Per Wilder's feedback: user profile + settings live top-right
+          on every viewport now, not buried in the bottom of the sidebar. */}
       <div className="flex items-center">
         <NotificationBell layout="compact" />
         <button

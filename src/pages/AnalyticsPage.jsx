@@ -8,7 +8,6 @@ import {
 } from 'recharts'
 import { useApp } from '../context/AppContext.jsx'
 import { USERS, ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
-import { TopBar } from '../components/layout/TopBar.jsx'
 import { Navigate } from 'react-router-dom'
 
 const CHART_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ef4444']
@@ -108,7 +107,6 @@ export function AnalyticsPage() {
 
   return (
     <div>
-      <TopBar />
       <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
         <h1 className="text-xl font-bold text-orbital-text mb-6">Analytics</h1>
 

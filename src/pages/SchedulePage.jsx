@@ -11,7 +11,6 @@ import { useApp } from '../context/AppContext.jsx'
 import { USERS, PRODUCTION_STATUS } from '../data/models.js'
 import { MILESTONE_TYPE_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
-import { TopBar } from '../components/layout/TopBar.jsx'
 import { ContractorPhoto } from '../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
@@ -153,7 +152,6 @@ export function SchedulePage() {
 
   return (
     <div>
-      <TopBar />
       <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">

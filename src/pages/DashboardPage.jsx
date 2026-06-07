@@ -5,7 +5,6 @@ import { useApp } from '../context/AppContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { StatusBadge, TaskStatusBadge, PriorityBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
-import { TopBar } from '../components/layout/TopBar.jsx'
 import { UpcomingMilestones } from '../features/productions/roadmap/UpcomingMilestones.jsx'
 import { TickerBanner } from '../components/ui/TickerBanner.jsx'
 
@@ -79,7 +78,6 @@ export function DashboardPage() {
 
   return (
     <div>
-      <TopBar />
 
       {/* ── Live feed ticker ── */}
       <div className="-mx-0">

@@ -4,7 +4,6 @@ import {
   Plus, Monitor, AlertTriangle, X, Edit2, Trash2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { TopBar } from '../components/layout/TopBar.jsx'
 import { ROLES, createLedWall, LED_WALL_STATUS } from '../data/models.js'
 import { Modal } from '../components/ui/Modal.jsx'
 
@@ -25,7 +24,6 @@ export function GearPage() {
 
   return (
     <div>
-      <TopBar />
       <div className="max-w-5xl mx-auto px-3 sm:px-4 lg:px-6 py-5">
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between mb-2">

@@ -22,7 +22,6 @@ import { InstructionPackage } from '../components/instructions/InstructionPackag
 import { ProductionBible } from '../features/productionBible/ProductionBible.jsx'
 import { TeamAssignment } from '../features/productions/team/TeamAssignment.jsx'
 import { RoadmapTab } from '../features/productions/roadmap/RoadmapTab.jsx'
-import { TopBar } from '../components/layout/TopBar.jsx'
 import { StoredImage } from '../components/files/StoredImage.tsx'
 import { ContractorPhoto } from '../components/files/ContractorPhoto.tsx'
 import { BUCKETS } from '../lib/storage.ts'
@@ -79,7 +78,6 @@ export function ProductionDetailPage() {
 
   return (
     <div>
-      <TopBar />
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
         {/* Back */}
         <button

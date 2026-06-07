@@ -4,7 +4,6 @@ import { Plus, Search, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES, AVAILABILITY_STATUS, CONTRACTOR_FLAG } from '../../data/models.js'
 import { Modal } from '../../components/ui/Modal.jsx'
-import { TopBar } from '../../components/layout/TopBar.jsx'
 import { ContractorCard } from './ContractorCard.jsx'
 import { ContractorForm } from './ContractorForm.jsx'
 import { ContractorProfile } from './ContractorProfile.jsx'
@@ -66,7 +65,6 @@ export function ContractorsPage() {
 
   return (
     <div>
-      <TopBar />
       <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
 
         {/* Page header */}

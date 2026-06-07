@@ -1,10 +1,8 @@
-import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, LogOut, Sun, Moon, Sparkles, Rocket, Monitor } from 'lucide-react'
+import { NavLink } from 'react-router-dom'
+import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
-import { useTheme } from '../../context/ThemeContext.jsx'
 import { ROLES } from '../../data/models.js'
 import { DevProfileSwitcher } from '../dev/DevProfileSwitcher.jsx'
-import { NotificationBell } from './NotificationBell.jsx'
 
 const NAV_ITEMS = [
   { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard'   },
@@ -18,16 +16,8 @@ const NAV_ITEMS = [
   { to: '/resources',           icon: Sparkles, label: 'Resources'   },
 ]
 
-const ROLE_LABEL = {
-  admin:      'Administrator',
-  supervisor: 'Supervisor',
-  crew:       'Crew Member',
-}
-
 export function Sidebar() {
-  const { currentUser, logout } = useApp()
-  const { theme, toggleTheme }  = useTheme()
-  const navigate = useNavigate()
+  const { currentUser } = useApp()
 
   const visibleItems = NAV_ITEMS.filter(item => {
     if (item.adminOnly)  return currentUser?.role === ROLES.ADMIN
@@ -87,6 +77,10 @@ export function Sidebar() {
       </nav>
 
       {/* ── Dev profile switcher (DEV ONLY) ── */}
+      {/* Notifications + theme toggle + user panel + sign out moved to
+          TopBar per Wilder's feedback — user profile + settings live
+          top-right of the page on every viewport now. Sidebar's job is
+          purely identity + nav. */}
       {import.meta.env.DEV && (
         <div
           className="px-3 py-2 flex-shrink-0"
@@ -95,54 +89,6 @@ export function Sidebar() {
           <DevProfileSwitcher />
         </div>
       )}
-
-      {/* ── Notifications + theme toggle ── */}
-      <div
-        className="px-3 py-2 flex-shrink-0 space-y-1"
-        style={{ borderTop: '1px solid var(--orbital-sidebar-border)' }}
-      >
-        <NotificationBell layout="labeled" />
-        <button
-          onClick={toggleTheme}
-          className="w-full flex items-center gap-2 px-1 py-1.5 text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        >
-          {theme === 'dark'
-            ? <><Sun size={12} /> Light mode</>
-            : <><Moon size={12} /> Dark mode</>
-          }
-        </button>
-      </div>
-
-      {/* ── User panel ── */}
-      <div
-        className="flex-shrink-0 px-3 py-3"
-        style={{ borderTop: '1px solid var(--orbital-sidebar-border)' }}
-      >
-        <div className="flex items-center gap-2.5 mb-2 px-1">
-          <div
-            className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
-            style={{ backgroundColor: currentUser?.color }}
-          >
-            {currentUser?.avatar}
-          </div>
-          <div className="min-w-0">
-            <p className="text-[13px] font-medium text-orbital-text truncate leading-tight">
-              {currentUser?.name}
-            </p>
-            <p className="text-[10px] text-orbital-subtle leading-none mt-0.5">
-              {ROLE_LABEL[currentUser?.role] || 'Crew'}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => { logout(); navigate('/login') }}
-          className="w-full flex items-center gap-2 px-1 py-1.5 text-xs text-orbital-subtle transition-colors hover:text-orbital-text"
-        >
-          <LogOut size={12} />
-          Sign out
-        </button>
-      </div>
     </aside>
   )
 }
