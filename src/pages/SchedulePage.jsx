@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth,
@@ -28,6 +28,21 @@ export function SchedulePage() {
   const navigate = useNavigate()
 
   const { productions, contractors } = useApp()
+
+  // Hidden date input that the date label triggers — gives us a native
+  // calendar popover for free (mobile gets a date wheel; desktop gets the
+  // browser's calendar UI). Lets us keep the nicely-formatted visible
+  // label ("May 27 – Jun 2, 2026") and still open a calendar on click,
+  // per Wilder's feedback that arrow-stepping is slow for big jumps.
+  const dateInputRef = useRef(null)
+  const openDatePicker = () => {
+    const el = dateInputRef.current
+    if (!el) return
+    if (typeof el.showPicker === 'function') {
+      try { el.showPicker(); return } catch { /* not supported in this context, fall through */ }
+    }
+    el.click()
+  }
 
   // Date range
   const range = useMemo(() => {
@@ -196,16 +211,42 @@ export function SchedulePage() {
             </div>
 
             {/* Navigation */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 relative">
               <button onClick={() => navigate_('prev')} className="btn-ghost p-2">
                 <ChevronLeft size={16} />
               </button>
-              <span className="text-sm font-medium text-orbital-text px-2 whitespace-nowrap">
+              {/* Date label is a button — click to open a calendar and jump
+                  to any date. Arrows stay for one-week/one-month nudges
+                  which are faster than opening the calendar each time. */}
+              <button
+                onClick={openDatePicker}
+                className="text-sm font-medium text-orbital-text px-2 py-1.5 rounded hover:bg-orbital-muted transition-colors whitespace-nowrap"
+                title="Click to jump to any date"
+              >
                 {view === 'week'
                   ? `${format(range.start, 'MMM d')} – ${format(range.end, 'MMM d, yyyy')}`
                   : format(reference, 'MMMM yyyy')
                 }
-              </span>
+              </button>
+              {/* Hidden native date input — sr-only + positioned at the
+                  label so the calendar popover anchors near the click
+                  on browsers that don't support showPicker(). */}
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={format(reference, 'yyyy-MM-dd')}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (!v) return
+                  // Parse as local-noon so the timezone offset doesn't
+                  // tip the date back a day on browsers that interpret
+                  // bare YYYY-MM-DD as UTC midnight.
+                  const [y, m, d] = v.split('-').map(Number)
+                  setReference(new Date(y, m - 1, d, 12, 0, 0))
+                }}
+                aria-label="Jump to date"
+                className="absolute opacity-0 pointer-events-none left-1/2 top-full w-0 h-0"
+              />
               <button onClick={() => navigate_('next')} className="btn-ghost p-2">
                 <ChevronRight size={16} />
               </button>
