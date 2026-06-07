@@ -690,6 +690,54 @@ export function AppProvider({ children }) {
     }))
   }, [])
 
+  // Production form auto-sync: when a user picks a wall (or changes the
+  // picked wall / clears it / edits dates) on a production, sync the wall
+  // assignments so the gear database stays in lockstep — no more two-step
+  // 'create production then go to /gear to book the wall' dance.
+  //
+  // Behaviour:
+  //  - Removes any prior assignment on OTHER walls that pointed to this
+  //    production (handles the wall-switch case)
+  //  - On the target wall, ensures exactly one assignment for this
+  //    production with the current dates (creates or updates in place)
+  //  - If wallId is null/empty, just cleans up prior assignments
+  const syncProductionWallAssignment = useCallback((productionId, wallId, startDate, endDate) => {
+    if (!productionId) return
+    setLedWallsState(prev => prev.map(w => {
+      const existing  = w.assignments || []
+      const otherAss  = existing.filter(a => a.productionId !== productionId)
+      const myExisting = existing.find(a => a.productionId === productionId)
+
+      // Wall is NOT the target — strip any auto-linked assignment we'd
+      // previously planted here.
+      if (w.id !== wallId) {
+        if (otherAss.length === existing.length) return w
+        return { ...w, assignments: otherAss, updatedAt: new Date().toISOString() }
+      }
+
+      // Wall IS the target. Ensure one assignment with current dates.
+      // No dates yet → can't meaningfully assign; leave any existing
+      // entry alone so we don't churn while the user is still typing
+      // the production dates.
+      if (!startDate) return w
+
+      const newAssignment = myExisting
+        ? { ...myExisting, startDate, endDate: endDate || '' }
+        : createWallAssignment({
+            productionId,
+            startDate,
+            endDate: endDate || '',
+            notes:   'Auto-linked from production',
+            createdBy: currentUser?.id || '',
+          })
+      return {
+        ...w,
+        assignments: [...otherAss, newAssignment],
+        updatedAt: new Date().toISOString(),
+      }
+    }))
+  }, [currentUser])
+
   const value = {
     // Auth
     currentUser,
@@ -767,6 +815,7 @@ export function AppProvider({ children }) {
     assignWall,
     updateWallAssignment,
     unassignWall,
+    syncProductionWallAssignment,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

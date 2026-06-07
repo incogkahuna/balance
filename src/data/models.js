@@ -183,6 +183,11 @@ export function createProduction(overrides = {}) {
     // window, use startDate/endDate directly.
     dateRanges: [],
     stageManagerId: null,      // contractorId of stage manager (first-class field)
+    // Foreign key into ledWalls (localStorage entity). When set, the form
+    // auto-syncs a wall assignment so picking a wall here actually reserves
+    // it in the gear database. productionType still mirrors the wall's
+    // name for backwards-compat display sites that read the type string.
+    ledWallId: null,
     assignedMembers: [],       // [{ userId, roleOnProduction }] — Orbital staff
     assignedContractors: [],   // [{ contractorId, role, assignedAt, assignedBy }]
     tasks: [],                 // task IDs

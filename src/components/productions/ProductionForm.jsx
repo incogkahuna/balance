@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react'
-import { Plus, X } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Plus, X, Monitor } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
 import {
-  PRODUCTION_STATUS, PRODUCTION_TYPE, PRODUCTION_TYPE_PRESETS, LOCATION_TYPE, ROLES,
+  PRODUCTION_STATUS, LOCATION_TYPE, ROLES,
   PRODUCTION_ROLE_PRESETS, normalizeAssignedMember,
   createProduction, USERS
 } from '../../data/models.js'
@@ -12,12 +12,11 @@ import {
 // Sentinel for the per-phase role dropdown "Other…" option.
 const CUSTOM_ROLE = '__custom_role__'
 
-// Sentinel for the "Custom…" dropdown option. The actual saved value is
-// whatever the user types in the free-form input below.
-const CUSTOM_TYPE = '__custom__'
+// Sentinel for the Wall picker "Other / None" option (no wall from gear).
+const NO_WALL = '__no_wall__'
 
 export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }) {
-  const { currentUser } = useApp()
+  const { currentUser, ledWalls = [], syncProductionWallAssignment } = useApp()
   const isEdit = Boolean(initial?.id)
   // Auto-save only when we have an existing record (something to update) AND
   // the parent has opted in. Create mode keeps the explicit submit button so
@@ -41,7 +40,12 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
     client: initial?.client || '',
     locationType: initial?.locationType || LOCATION_TYPE.IN_HOUSE,
     locationAddress: initial?.locationAddress || '',
-    productionType: initial?.productionType || PRODUCTION_TYPE.TVC_AOTO,
+    // productionType is now driven by the picked LED wall (kept in sync as
+    // the wall's name) so existing display sites that read it keep working.
+    // For productions without a wall (no LED setup, on-location shoots), the
+    // user can free-type a value via the "Other" option in the picker.
+    productionType: initial?.productionType || '',
+    ledWallId: initial?.ledWallId || null,
     status: initial?.status || PRODUCTION_STATUS.INCOMING,
     dateRanges: initialRanges,
     // Normalize each member to the new {userId, roles:{prep,production,post}}
@@ -83,11 +87,27 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
     }
   }, [form.dateRanges])
 
-  // Type dropdown UX: if the current productionType isn't one of the presets
-  // (e.g. legacy 'LED Volume', 'Other', or a custom string), the dropdown
-  // shows "Custom" and a text input below holds the actual value.
-  const isCustomType = form.productionType !== '' && !PRODUCTION_TYPE_PRESETS.includes(form.productionType)
-  const [showCustomType, setShowCustomType] = useState(isCustomType)
+  // Wall picker UX. If the production has a ledWallId pointing to a real
+  // wall, the dropdown shows that wall. Otherwise it falls back to "Other"
+  // mode with a free-form text input for productionType (covers
+  // on-location shoots with no wall and any legacy productionType strings
+  // from before walls were first-class).
+  const pickedWall = useMemo(
+    () => form.ledWallId ? ledWalls.find(w => w.id === form.ledWallId) : null,
+    [form.ledWallId, ledWalls]
+  )
+  const showCustomType = !form.ledWallId
+  const handleWallPick = (value) => {
+    if (value === NO_WALL) {
+      setForm(f => ({ ...f, ledWallId: null }))
+      // Don't clear productionType — let user edit it in the free-form input
+      // below. Helps with legacy values they might want to keep.
+      return
+    }
+    const wall = ledWalls.find(w => w.id === value)
+    if (!wall) return
+    setForm(f => ({ ...f, ledWallId: wall.id, productionType: wall.name }))
+  }
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
@@ -132,6 +152,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
     locationType: form.locationType,
     locationAddress: form.locationAddress,
     productionType: form.productionType,
+    ledWallId: form.ledWallId,
     status: form.status,
     startDate: envelopeStart,
     endDate:   envelopeEnd,
@@ -144,9 +165,39 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
     createdBy: initial?.createdBy || currentUser?.id,
   })
 
+  // ── Wall auto-assignment sync ─────────────────────────────────────────────
+  // Whenever the picked wall or the production's date envelope changes (and
+  // the production has been saved at least once so we have an ID), keep the
+  // gear database's wall assignments in lockstep. Idempotent — the sync
+  // helper finds and updates an existing auto-linked assignment if one
+  // exists, otherwise creates a fresh one.
+  //
+  // Quiet on the first render — `lastSyncedRef` lets us only fire on actual
+  // user changes, not the initial mount where the form is just hydrating
+  // from existing data.
+  const lastSyncedRef = useRef(null)
+  useEffect(() => {
+    if (!isEdit || !initial?.id) return
+    const key = `${form.ledWallId || ''}|${envelopeStart || ''}|${envelopeEnd || ''}`
+    if (lastSyncedRef.current === null) {
+      lastSyncedRef.current = key
+      return
+    }
+    if (lastSyncedRef.current === key) return
+    lastSyncedRef.current = key
+    syncProductionWallAssignment?.(initial.id, form.ledWallId, envelopeStart, envelopeEnd)
+  }, [form.ledWallId, envelopeStart, envelopeEnd, isEdit, initial?.id, syncProductionWallAssignment])
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    onSubmit(buildProd())
+    const prod = buildProd()
+    onSubmit(prod)
+    // On create, the useEffect-based wall sync below never fires (it's
+    // gated on isEdit). Sync once here so picking a wall on the create
+    // form actually books it. On edits the useEffect handles it.
+    if (!isEdit && prod.ledWallId && prod.startDate) {
+      syncProductionWallAssignment?.(prod.id, prod.ledWallId, prod.startDate, prod.endDate)
+    }
   }
 
   // ── Auto-save ──────────────────────────────────────────────────────────────
@@ -189,37 +240,43 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="label">Type</label>
+          <label className="label inline-flex items-center gap-1.5">
+            <Monitor size={11} className="text-orbital-subtle" />
+            LED Wall
+          </label>
           <select
             className="select"
-            value={showCustomType ? CUSTOM_TYPE : form.productionType}
-            onChange={e => {
-              if (e.target.value === CUSTOM_TYPE) {
-                setShowCustomType(true)
-                // Clear the value so the input below starts empty unless
-                // the existing value was already custom (preserve in that case)
-                if (PRODUCTION_TYPE_PRESETS.includes(form.productionType)) {
-                  set('productionType', '')
-                }
-              } else {
-                setShowCustomType(false)
-                set('productionType', e.target.value)
-              }
-            }}
+            value={form.ledWallId || NO_WALL}
+            onChange={e => handleWallPick(e.target.value)}
           >
-            {PRODUCTION_TYPE_PRESETS.map(t => (
-              <option key={t} value={t}>{t}</option>
+            {ledWalls.length === 0 && (
+              <option value={NO_WALL} disabled>
+                No walls in /gear yet
+              </option>
+            )}
+            <option value={NO_WALL}>— None / Other —</option>
+            {ledWalls.map(w => (
+              <option key={w.id} value={w.id}>{w.name}</option>
             ))}
-            <option value={CUSTOM_TYPE}>Custom…</option>
           </select>
-          {showCustomType && (
+          {showCustomType ? (
             <input
               className="input mt-2"
               value={form.productionType}
               onChange={e => set('productionType', e.target.value)}
-              placeholder="Type a custom production type"
-              autoFocus={!isCustomType}
+              placeholder="Type a description (e.g. Mobile shoot, On-location, etc.)"
             />
+          ) : (
+            // Visible reservation hint — picking a wall on the form
+            // auto-creates a matching assignment on that wall when dates
+            // are set, so the user sees what's about to happen instead of
+            // discovering a "phantom" assignment later in /gear.
+            <p className="text-[11px] text-orbital-dim mt-2 leading-relaxed">
+              {envelopeStart
+                ? <>This will reserve <span className="text-orbital-subtle">{pickedWall?.name}</span> for {envelopeStart}{envelopeEnd && envelopeEnd !== envelopeStart ? ` → ${envelopeEnd}` : ''}.</>
+                : <>Add a date range below to reserve this wall on the gear page.</>
+              }
+            </p>
           )}
         </div>
         <div>

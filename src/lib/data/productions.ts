@@ -62,6 +62,10 @@ export interface Production {
   // productions. New productions default to draft so admin can iron things
   // out before crew sees them ("like a social media post" model).
   published: boolean
+  // Reference to an LED wall in the gear database. Nullable. Frontend
+  // auto-syncs a matching wall assignment so picking a wall here actually
+  // reserves it in /gear.
+  ledWallId: string | null
   createdBy: string | null
   createdAt: string
   updatedAt: string
@@ -95,6 +99,7 @@ interface ProductionRow {
   bible: Production['bible']
   roadmap: Production['roadmap']
   published: boolean
+  led_wall_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -125,6 +130,7 @@ function rowToProduction(r: ProductionRow): Production {
     // in a later migration with default true. Treat undefined as true so
     // old/cached rows render normally rather than appearing as drafts.
     published:           r.published ?? true,
+    ledWallId:           r.led_wall_id ?? null,
     createdBy:           r.created_by,
     createdAt:           r.created_at,
     updatedAt:           r.updated_at,
@@ -166,6 +172,7 @@ function productionToRow(p: NewProduction): Partial<ProductionRow> {
   if (p.bible               !== undefined) row.bible                = p.bible
   if (p.roadmap             !== undefined) row.roadmap              = p.roadmap
   if (p.published           !== undefined) row.published            = p.published
+  if (p.ledWallId           !== undefined) row.led_wall_id          = p.ledWallId || null
   if (p.createdBy           !== undefined) row.created_by           = asUuidOrNull(p.createdBy)
   return row
 }
