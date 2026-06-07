@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { AppProvider } from './context/AppContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
+import { NavHistoryProvider } from './context/NavHistoryContext.jsx'
 import { AppShell } from './components/layout/AppShell.jsx'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage.jsx'
@@ -114,6 +115,7 @@ export default function App() {
     <AuthProvider>
     <AppProvider>
       <BrowserRouter>
+        <NavHistoryProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<AppShell />}>
@@ -136,6 +138,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        </NavHistoryProvider>
       </BrowserRouter>
     </AppProvider>
     </AuthProvider>
