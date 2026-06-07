@@ -1,10 +1,10 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   startOfWeek, endOfWeek, startOfMonth, endOfMonth,
   eachDayOfInterval, format, parseISO, isWithinInterval,
   addWeeks, subWeeks, addMonths, subMonths, isSameDay,
-  differenceInDays, max, min
+  differenceInDays, max, min, isSameMonth,
 } from 'date-fns'
 import { ChevronLeft, ChevronRight, Users, MapPin } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
@@ -29,20 +29,11 @@ export function SchedulePage() {
 
   const { productions, contractors } = useApp()
 
-  // Hidden date input that the date label triggers — gives us a native
-  // calendar popover for free (mobile gets a date wheel; desktop gets the
-  // browser's calendar UI). Lets us keep the nicely-formatted visible
-  // label ("May 27 – Jun 2, 2026") and still open a calendar on click,
-  // per Wilder's feedback that arrow-stepping is slow for big jumps.
-  const dateInputRef = useRef(null)
-  const openDatePicker = () => {
-    const el = dateInputRef.current
-    if (!el) return
-    if (typeof el.showPicker === 'function') {
-      try { el.showPicker(); return } catch { /* not supported in this context, fall through */ }
-    }
-    el.click()
-  }
+  // Calendar popover state — replaces the native date input so we can
+  // decorate days with event indicators (per Wilder: dates with stuff
+  // happening on them should show a marker). The native browser
+  // calendar can't be decorated; we render a small custom one instead.
+  const [calOpen, setCalOpen] = useState(false)
 
   // Date range
   const range = useMemo(() => {
@@ -71,6 +62,25 @@ export function SchedulePage() {
       setReference(r => dir === 'prev' ? subMonths(r, 1) : addMonths(r, 1))
     }
   }
+
+  // Days with at least one production scheduled. Used by MiniCalendar to
+  // paint a blue dot under each event day so the calendar shows where
+  // stuff is happening at a glance. Each production contributes every day
+  // in its start..end range.
+  const eventDays = useMemo(() => {
+    const set = new Set()
+    productions.forEach(p => {
+      if (!p.startDate || !p.endDate) return
+      const start = parseISO(p.startDate); start.setHours(12, 0, 0, 0)
+      const end   = parseISO(p.endDate);   end.setHours(12, 0, 0, 0)
+      const cursor = new Date(start)
+      while (cursor <= end) {
+        set.add(format(cursor, 'yyyy-MM-dd'))
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    })
+    return set
+  }, [productions])
 
   // Productions that overlap the visible range
   const visibleProductions = useMemo(() =>
@@ -215,11 +225,11 @@ export function SchedulePage() {
               <button onClick={() => navigate_('prev')} className="btn-ghost p-2">
                 <ChevronLeft size={16} />
               </button>
-              {/* Date label is a button — click to open a calendar and jump
-                  to any date. Arrows stay for one-week/one-month nudges
-                  which are faster than opening the calendar each time. */}
+              {/* Date label is a button — click to open a calendar with
+                  blue dots on days that have productions. Arrows stay for
+                  one-step nudges. */}
               <button
-                onClick={openDatePicker}
+                onClick={() => setCalOpen(o => !o)}
                 className="text-sm font-medium text-orbital-text px-2 py-1.5 rounded hover:bg-orbital-muted transition-colors whitespace-nowrap"
                 title="Click to jump to any date"
               >
@@ -228,25 +238,14 @@ export function SchedulePage() {
                   : format(reference, 'MMMM yyyy')
                 }
               </button>
-              {/* Hidden native date input — sr-only + positioned at the
-                  label so the calendar popover anchors near the click
-                  on browsers that don't support showPicker(). */}
-              <input
-                ref={dateInputRef}
-                type="date"
-                value={format(reference, 'yyyy-MM-dd')}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (!v) return
-                  // Parse as local-noon so the timezone offset doesn't
-                  // tip the date back a day on browsers that interpret
-                  // bare YYYY-MM-DD as UTC midnight.
-                  const [y, m, d] = v.split('-').map(Number)
-                  setReference(new Date(y, m - 1, d, 12, 0, 0))
-                }}
-                aria-label="Jump to date"
-                className="absolute opacity-0 pointer-events-none left-1/2 top-full w-0 h-0"
-              />
+              {calOpen && (
+                <MiniCalendar
+                  selected={reference}
+                  eventDays={eventDays}
+                  onPick={(d) => { setReference(d); setCalOpen(false) }}
+                  onClose={() => setCalOpen(false)}
+                />
+              )}
               <button onClick={() => navigate_('next')} className="btn-ghost p-2">
                 <ChevronRight size={16} />
               </button>
@@ -495,6 +494,133 @@ function GanttChart({ days, rows, mode, today, range, milestones = [], onClickPr
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// ─── MiniCalendar ────────────────────────────────────────────────────────────
+// Compact month-view date picker with a blue dot on any day that has events.
+// Replaces the native <input type="date"> because the browser calendar can't
+// be decorated. Anchored below the date label via absolute positioning.
+function MiniCalendar({ selected, eventDays, onPick, onClose }) {
+  // Month being displayed in the picker (independent of the selected date
+  // so the user can browse other months without committing).
+  const [month, setMonth] = useState(() => startOfMonth(selected))
+  const wrapperRef = useRef(null)
+
+  // Close on outside click. Delayed registration so the click that opened
+  // the picker doesn't immediately close it.
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        onClose()
+      }
+    }
+    const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 50)
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', onDocClick) }
+  }, [onClose])
+
+  // Grid days — start of week containing month start, end of week containing
+  // month end. Always renders 5 or 6 full weeks so the grid height is stable
+  // across months.
+  const gridStart = startOfWeek(startOfMonth(month), { weekStartsOn: 1 })
+  const gridEnd   = endOfWeek(endOfMonth(month),     { weekStartsOn: 1 })
+  const days = eachDayOfInterval({ start: gridStart, end: gridEnd })
+  const today = new Date()
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-30 w-[280px] p-3 rounded-lg shadow-xl"
+      style={{
+        background: 'var(--orbital-surface)',
+        border: '1px solid var(--orbital-border)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+      }}
+    >
+      {/* Month header with prev/next */}
+      <div className="flex items-center justify-between mb-2">
+        <button
+          onClick={() => setMonth(m => subMonths(m, 1))}
+          className="p-1 rounded hover:bg-orbital-muted text-orbital-subtle hover:text-orbital-text transition-colors"
+          aria-label="Previous month"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <span className="text-sm font-semibold text-orbital-text">
+          {format(month, 'MMMM yyyy')}
+        </span>
+        <button
+          onClick={() => setMonth(m => addMonths(m, 1))}
+          className="p-1 rounded hover:bg-orbital-muted text-orbital-subtle hover:text-orbital-text transition-colors"
+          aria-label="Next month"
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
+
+      {/* Day-of-week header */}
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
+        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+          <div
+            key={i}
+            className="text-[10px] font-mono text-orbital-dim text-center py-1 tracking-wider"
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Date grid */}
+      <div className="grid grid-cols-7 gap-0.5">
+        {days.map(day => {
+          const inMonth   = isSameMonth(day, month)
+          const isPicked  = isSameDay(day, selected)
+          const isToday   = isSameDay(day, today)
+          const hasEvent  = eventDays.has(format(day, 'yyyy-MM-dd'))
+          return (
+            <button
+              key={day.toISOString()}
+              onClick={() => onPick(day)}
+              className={clsx(
+                'relative h-8 rounded text-xs font-medium transition-colors flex items-center justify-center',
+                isPicked
+                  ? 'bg-blue-600 text-white'
+                  : isToday
+                  ? 'bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+                  : inMonth
+                  ? 'text-orbital-text hover:bg-orbital-muted'
+                  : 'text-orbital-dim hover:bg-orbital-muted'
+              )}
+            >
+              {format(day, 'd')}
+              {/* Event indicator — blue dot under the day number. Hidden
+                  on the picked day since the selected-state bg already
+                  signals "this day matters." */}
+              {hasEvent && !isPicked && (
+                <span
+                  className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
+                  style={{ background: '#3b82f6' }}
+                />
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Today shortcut */}
+      <div className="mt-2 pt-2 border-t border-orbital-border flex items-center justify-between">
+        <button
+          onClick={() => { onPick(new Date()); }}
+          className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+        >
+          Today
+        </button>
+        <span className="text-[10px] text-orbital-dim flex items-center gap-1.5">
+          <span className="w-1 h-1 rounded-full bg-blue-500" />
+          Day with production
+        </span>
       </div>
     </div>
   )
