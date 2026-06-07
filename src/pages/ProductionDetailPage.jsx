@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import {
   ArrowLeft, Edit, Trash2, Plus, MapPin, Calendar,
   Film, Users, Package, AlertTriangle, Star, ChevronRight,
   CheckSquare, FileText, MessageSquare, BarChart2, Eye, EyeOff,
+  ChevronDown, Check,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS, USERS } from '../data/models.js'
 import { computeRoadmapHealth, ROADMAP_HEALTH } from '../features/productions/roadmap/roadmapUtils.js'
-import { StatusBadge } from '../components/ui/StatusBadge.jsx'
+import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
@@ -93,7 +94,18 @@ export function ProductionDetailPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 flex-wrap mb-1">
                 <h1 className="text-xl font-bold text-orbital-text">{production.name}</h1>
-                <StatusBadge status={production.status} />
+                {/* Status badge — admin/sup can click to change status
+                    (Incoming → Active → Wrap → Completed). Crew see the
+                    static badge. Was a 4-click trip through the Edit
+                    form before; now one click. */}
+                {canEdit ? (
+                  <StatusPicker
+                    status={production.status}
+                    onChange={(next) => updateProduction(id, { status: next })}
+                  />
+                ) : (
+                  <StatusBadge status={production.status} />
+                )}
                 {production.published === false && (
                   <span
                     className="text-[10px] font-medium px-1.5 py-0.5 font-telemetry tracking-wider uppercase inline-flex items-center gap-1"
@@ -781,6 +793,76 @@ function DebriefTab({ production, canDebrief, onEdit }) {
           <p className="text-sm text-orbital-subtle">{value}</p>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ─── StatusPicker ────────────────────────────────────────────────────────────
+// Clickable status badge with a dropdown menu of the four production statuses
+// (Incoming / Active / Wrap / Completed). One click to flip — no more diving
+// into the Edit form just to mark a production complete.
+function StatusPicker({ status, onChange }) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef(null)
+
+  // Close on outside click. Slight delay on attach so the click that
+  // opened the menu doesn't also fire the close handler.
+  useEffect(() => {
+    if (!open) return
+    const onDocClick = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 50)
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', onDocClick) }
+  }, [open])
+
+  const dot = STATUS_COLOR[status] || '#52525b'
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded hover:bg-orbital-muted transition-colors"
+        style={{ color: 'var(--orbital-text)' }}
+        title="Click to change status"
+      >
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot }} />
+        {status}
+        <ChevronDown size={11} className="text-orbital-subtle" />
+      </button>
+      {open && (
+        <div
+          className="absolute top-full left-0 mt-1 z-20 min-w-[160px] py-1 rounded-md shadow-lg"
+          style={{
+            background: 'var(--orbital-surface)',
+            border: '1px solid var(--orbital-border)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+          }}
+        >
+          {Object.values(PRODUCTION_STATUS).map(s => {
+            const isCurrent = s === status
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => { onChange(s); setOpen(false) }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-orbital-muted transition-colors"
+                style={{ color: isCurrent ? 'var(--orbital-text)' : 'var(--orbital-subtle)' }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ background: STATUS_COLOR[s] || '#52525b' }}
+                />
+                <span className="flex-1 text-left">{s}</span>
+                {isCurrent && <Check size={11} className="text-blue-400" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
