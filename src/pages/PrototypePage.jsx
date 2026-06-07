@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import { Constellation } from '../features/prototype/Constellation.jsx'
 import { GravMap } from '../features/prototype/GravMap.jsx'
 import { Gantt } from '../features/prototype/Gantt.jsx'
 import { usePrototypeData } from '../features/prototype/dataSource.js'
 import { Radio, Database } from 'lucide-react'
 
 const VIEWS = [
-  { id: 'gravmap', label: 'Grav Map' },
-  { id: 'gantt',   label: 'Gantt' },
+  { id: 'gravmap',       label: 'Grav Map' },
+  { id: 'constellation', label: 'Constellation' },
+  { id: 'gantt',         label: 'Gantt' },
 ]
 
 export function PrototypePage() {
@@ -61,6 +63,7 @@ export function PrototypePage() {
       {/* ── Content ───────────────────────────────────────────────────── */}
       <div className="animate-hud-in" key={view}>
         {view === 'gravmap' && <GravMap />}
+        {view === 'constellation' && <Constellation />}
         {view === 'gantt' && <Gantt />}
       </div>
     </div>
@@ -124,11 +127,10 @@ function LiveSnapshot({ data }) {
         />
       </div>
       <p className="text-[11px] text-orbital-dim leading-relaxed">
-        <strong className="text-orbital-subtle">Gantt</strong> renders live data
-        — switch tabs to see your real productions and milestone assignments.{' '}
-        <strong className="text-orbital-subtle">Grav Map</strong> still uses the curated demo
-        dataset (its 4-corner layout is hardcoded for 4 productions; refactoring it to handle
-        arbitrary counts is the next step).
+        <strong className="text-orbital-subtle">Gantt</strong> and <strong className="text-orbital-subtle">Grav Map</strong> render
+        live data — switch tabs to see your real productions and milestone assignments.{' '}
+        <strong className="text-orbital-subtle">Constellation</strong> still uses the curated demo
+        dataset (its 4-corner layout is hardcoded for 4 productions).
       </p>
     </div>
   )
