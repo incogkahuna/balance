@@ -1,8 +1,8 @@
 import { format, parseISO, isToday, isPast, isFuture } from 'date-fns'
-import { Edit2, Trash2, AlertTriangle, Circle, CheckCircle2 } from 'lucide-react'
+import { Edit2, Trash2, AlertTriangle, Circle, CheckCircle2, Flame } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
-import { MILESTONE_STATUS } from '../../../data/models.js'
-import { MILESTONE_TYPE_CONFIG, MILESTONE_STATUS_CONFIG } from './roadmapUtils.js'
+import { MILESTONE_STATUS, MILESTONE_PRIORITY } from '../../../data/models.js'
+import { MILESTONE_TYPE_CONFIG, MILESTONE_STATUS_CONFIG, MILESTONE_PRIORITY_CONFIG } from './roadmapUtils.js'
 import { ContractorPhoto } from '../../../components/files/ContractorPhoto.tsx'
 import clsx from 'clsx'
 
@@ -48,6 +48,37 @@ export function MilestoneCard({ milestone, canEdit, onEdit, onDelete, onToggleCo
       {/* Top row */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+          {/* Priority chip — only render for Top Priority. Medium is the
+              default (most milestones are normal); Low is a visual signal
+              that doesn't need a chip up front. Top Priority gets a flame
+              icon + red treatment so it pops in a list. */}
+          {milestone.priority === MILESTONE_PRIORITY.TOP && (
+            <span
+              className={clsx(
+                'text-xs px-2 py-0.5 rounded border font-medium inline-flex items-center gap-1',
+                MILESTONE_PRIORITY_CONFIG[MILESTONE_PRIORITY.TOP].bg,
+                MILESTONE_PRIORITY_CONFIG[MILESTONE_PRIORITY.TOP].text,
+                MILESTONE_PRIORITY_CONFIG[MILESTONE_PRIORITY.TOP].border,
+              )}
+              title="Top priority"
+            >
+              <Flame size={11} />
+              Top Priority
+            </span>
+          )}
+          {milestone.priority === MILESTONE_PRIORITY.LOW && (
+            <span
+              className={clsx(
+                'text-xs px-2 py-0.5 rounded border font-medium',
+                MILESTONE_PRIORITY_CONFIG[MILESTONE_PRIORITY.LOW].bg,
+                MILESTONE_PRIORITY_CONFIG[MILESTONE_PRIORITY.LOW].text,
+                MILESTONE_PRIORITY_CONFIG[MILESTONE_PRIORITY.LOW].border,
+              )}
+              title="Low priority"
+            >
+              Low
+            </span>
+          )}
           {/* Type badge */}
           <span className={clsx('text-xs px-2 py-0.5 rounded border font-medium', typeCfg.bg, typeCfg.text, typeCfg.border)}>
             {milestone.type}

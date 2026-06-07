@@ -2,7 +2,7 @@
 // Pure functions and config objects shared across all roadmap components.
 // No React, no hooks — importable anywhere including non-component files.
 
-import { MILESTONE_TYPE, MILESTONE_STATUS, CONCERN_IMPACT, CONCERN_STATUS } from '../../../data/models.js'
+import { MILESTONE_TYPE, MILESTONE_STATUS, MILESTONE_PRIORITY, CONCERN_IMPACT, CONCERN_STATUS } from '../../../data/models.js'
 
 // ─── Milestone type visual config ─────────────────────────────────────────────
 export const MILESTONE_TYPE_CONFIG = {
@@ -49,6 +49,17 @@ export const MILESTONE_STATUS_CONFIG = {
   [MILESTONE_STATUS.IN_PROGRESS]: { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30' },
   [MILESTONE_STATUS.COMPLETE]:    { bg: 'bg-green-500/15', text: 'text-green-400', border: 'border-green-500/30' },
   [MILESTONE_STATUS.AT_RISK]:     { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30' },
+}
+
+// ─── Milestone priority visual config ─────────────────────────────────────────
+// Top Priority pops red so it's hard to miss in any list. Medium is neutral
+// (no chip rendered on cards to keep visual noise low when most milestones
+// are Medium). Low is dimmed so the user can tell at a glance "this is not
+// urgent."
+export const MILESTONE_PRIORITY_CONFIG = {
+  [MILESTONE_PRIORITY.TOP]:    { bg: 'bg-red-500/15',   text: 'text-red-400',    border: 'border-red-500/35',   dot: '#ef4444' },
+  [MILESTONE_PRIORITY.MEDIUM]: { bg: 'bg-orbital-muted', text: 'text-orbital-subtle', border: 'border-orbital-border', dot: '#71717a' },
+  [MILESTONE_PRIORITY.LOW]:    { bg: 'bg-zinc-600/15',  text: 'text-zinc-500',   border: 'border-zinc-600/30',  dot: '#52525b' },
 }
 
 // ─── Concern impact visual config ─────────────────────────────────────────────

@@ -64,6 +64,15 @@ export const MILESTONE_STATUS = {
   AT_RISK:     'At Risk',
 }
 
+// Importance / priority on a milestone. Used to highlight top-priority items
+// in lists. Defaults to Medium on createMilestone since most milestones are
+// just "normal" work items.
+export const MILESTONE_PRIORITY = {
+  TOP:    'Top Priority',
+  MEDIUM: 'Medium',
+  LOW:    'Low',
+}
+
 export const CONCERN_CATEGORY = {
   TRANSPORT: 'Transport & Shipping',
   POWER:     'Power & Infrastructure',
@@ -216,6 +225,7 @@ export function createMilestone(overrides = {}) {
     title: '',
     date: '',                           // datetime-local string e.g. "2024-06-12T09:00"
     type: MILESTONE_TYPE.PRE_PRODUCTION,
+    priority: MILESTONE_PRIORITY.MEDIUM,
     description: '',
     ownerId: '',                        // userId or contractorId (primary owner)
     participantIds: [],                 // additional people involved (each also gets a task)

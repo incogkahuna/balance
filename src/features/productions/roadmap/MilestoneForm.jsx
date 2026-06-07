@@ -4,7 +4,7 @@ import { useApp } from '../../../context/AppContext.jsx'
 import { useAutoSave } from '../../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
-  MILESTONE_TYPE, MILESTONE_STATUS,
+  MILESTONE_TYPE, MILESTONE_STATUS, MILESTONE_PRIORITY,
   createMilestone, USERS,
 } from '../../../data/models.js'
 
@@ -66,6 +66,7 @@ export function MilestoneForm({ production, initial, onClose }) {
     title:          initial?.title || '',
     date:           initial?.date  || '',
     type:           initial?.type  || MILESTONE_TYPE.PRE_PRODUCTION,
+    priority:       initial?.priority || MILESTONE_PRIORITY.MEDIUM,
     description:    initial?.description || '',
     ownerId:        initial?.ownerId || '',
     participantIds: initial?.participantIds || [],
@@ -187,14 +188,23 @@ export function MilestoneForm({ production, initial, onClose }) {
               </select>
             </div>
             <div>
-              <label className="label">Owner</label>
-              <select className="select" value={form.ownerId} onChange={e => set('ownerId', e.target.value)}>
-                <option value="">— Unassigned —</option>
-                {team.map(person => (
-                  <option key={person.id} value={person.id}>{person.name}</option>
+              <label className="label">Priority</label>
+              <select className="select" value={form.priority} onChange={e => set('priority', e.target.value)}>
+                {Object.values(MILESTONE_PRIORITY).map(p => (
+                  <option key={p} value={p}>{p}</option>
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="label">Owner</label>
+            <select className="select" value={form.ownerId} onChange={e => set('ownerId', e.target.value)}>
+              <option value="">— Unassigned —</option>
+              {team.map(person => (
+                <option key={person.id} value={person.id}>{person.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Participants — two-section roster: AVAILABLE / ASSIGNED.
