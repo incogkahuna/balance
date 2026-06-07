@@ -76,6 +76,23 @@ function toPrototypeResource(user) {
   }
 }
 
+// Convert an LED wall into a prototype Resource. Walls land under the GEAR
+// kind so the existing GEAR filter chip on the Gantt finds them. Description
+// becomes the row's role string (truncated by the UI as needed). Cyan is the
+// fixed colour for now so all walls read as the same kind of thing in the
+// row strip — could be parameterised per-wall later if Danny wants.
+function toPrototypeWallResource(wall) {
+  return {
+    id:      wall.id,
+    kind:    'gear',
+    name:    wall.name || 'Untitled wall',
+    role:    wall.description || '',
+    contractor: false,
+    color:   '#22d3ee',                                   // cyan = LED wall family
+    initial: (wall.name || 'W').trim().charAt(0).toUpperCase() || 'W',
+  }
+}
+
 // Build the COMMITMENTS list from real production / milestone assignments.
 // Each assignment becomes a commitment for that person's id on that
 // production's id, with start/end derived from either the milestone date
@@ -128,6 +145,30 @@ function deriveCommitments(productions) {
   return commitments
 }
 
+// Turn LED-wall assignments into the same commitment shape we use for
+// people (resourceId / productionId / start / end). Assignments without
+// a startDate get skipped — a wall with no dates can't appear on a Gantt
+// row anyway. Assignments whose production has since been deleted also
+// get skipped so we don't render orphan bars.
+function deriveWallCommitments(ledWalls, validProductionIds) {
+  const out = []
+  for (const wall of ledWalls || []) {
+    for (const a of (wall.assignments || [])) {
+      if (!a.startDate) continue
+      if (!validProductionIds.has(a.productionId)) continue
+      const start = new Date(a.startDate)
+      const end   = a.endDate ? new Date(a.endDate) : start
+      out.push({
+        resourceId:   wall.id,
+        productionId: a.productionId,
+        start,
+        end,
+      })
+    }
+  }
+  return out
+}
+
 // Compute the visualisation window from the earliest production start to
 // the latest production end, padded by a few days for visual breathing room.
 function deriveWindow(productions) {
@@ -149,7 +190,7 @@ function deriveWindow(productions) {
 
 // ── Public hook ──────────────────────────────────────────────────────────────
 export function usePrototypeData() {
-  const { productions = [] } = useApp() || {}
+  const { productions = [], ledWalls = [] } = useApp() || {}
 
   return useMemo(() => {
     // Prefer live data when at least one production has real date bounds
@@ -169,11 +210,19 @@ export function usePrototypeData() {
     }
 
     const protoProductions = liveCandidates.map(toPrototypeProduction)
-    // Real resources: just the salary roster for now. Gear/locations aren't
-    // first-class entities in the real schema yet, so we omit them rather
-    // than mix in seed gear.
-    const protoResources   = USERS.map(toPrototypeResource)
-    const commitments      = deriveCommitments(liveCandidates)
+    // Resources: salary roster + LED walls. Walls land under kind='gear'
+    // so the existing GEAR filter chip in Gantt picks them up. Locations
+    // and other gear categories aren't first-class entities yet so are
+    // still omitted from live mode.
+    const protoPeople      = USERS.map(toPrototypeResource)
+    const protoWalls       = (ledWalls || []).map(toPrototypeWallResource)
+    const protoResources   = [...protoPeople, ...protoWalls]
+    // People commitments come from production assignedMembers + milestone
+    // owners; wall commitments come from each wall's assignments array.
+    const validProdIds     = new Set(liveCandidates.map(p => p.id))
+    const peopleCommits    = deriveCommitments(liveCandidates)
+    const wallCommits      = deriveWallCommitments(ledWalls, validProdIds)
+    const commitments      = [...peopleCommits, ...wallCommits]
     const { start, end }   = deriveWindow(liveCandidates)
 
     return buildBundle({
@@ -184,7 +233,7 @@ export function usePrototypeData() {
       windowEnd:   end,
       source:      'live',
     })
-  }, [productions])
+  }, [productions, ledWalls])
 }
 
 // Wrap a raw dataset with the same helper functions sampleData used to
