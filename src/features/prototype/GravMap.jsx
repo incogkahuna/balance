@@ -792,46 +792,118 @@ function StudioCore() {
   )
 }
 
-// ── ProductionBody — coloured sphere on the ring with a floating label ──────
+// ── ProductionBody — photoreal-ish planet on the ring ──────────────────────
+// Layered build:
+//   1. Body sphere with custom shader (FBM noise terrain in accent colour)
+//   2. Atmosphere shell with Fresnel rim glow (Earth-from-space look)
+//   3. Cloud layer with drifting noise (subtle motion + scale)
+//   4. ClientBadge — floating circular logo plate billboarded at camera
+//   5. Production code label (existing — kept above the planet)
+//
+// Future: swap ClientBadge's initials for a real logo image when
+// production.logoUrl (or production.client.logoUrl) is populated. The
+// component already accepts a `logoUrl` prop and renders an <img> when
+// present, falling back to initials otherwise.
 function ProductionBody({ prod, position, isClicked, isFeatured, statusSpeed = 1, statusEmissive = 1, onClick }) {
-  const meshRef = useRef()
-  // Subtle bob so the bodies feel alive — small enough not to distract.
-  // Bob speed/amplitude scales with status: Active wobbles normally,
-  // Completed sits still, Incoming/Wrap somewhere in between.
-  const seed = useMemo(() => prod.id.charCodeAt(0), [prod.id])
+  const groupRef = useRef()
+  const bodyRef  = useRef()
+  const cloudRef = useRef()
+  const seed = useMemo(() => {
+    // Stable per-prod seed from id chars so terrain is unique per planet
+    // and doesn't reshuffle on re-render.
+    let h = 0
+    for (let i = 0; i < prod.id.length; i++) h = (h * 31 + prod.id.charCodeAt(i)) & 0xffff
+    return h
+  }, [prod.id])
+
+  // Shader uniforms — created once, mutated per frame. Recompute when
+  // colour/status changes (statusEmissive feeds the body brightness too).
+  const bodyUniforms = useMemo(() => ({
+    uColor:    { value: new THREE.Color(prod.color) },
+    uDeep:     { value: new THREE.Color(prod.color).multiplyScalar(0.35) },
+    uPeak:     { value: new THREE.Color(prod.color).multiplyScalar(1.4) },
+    uSeed:     { value: seed * 0.01 },
+    uEmissive: { value: statusEmissive * (isFeatured ? 1.0 : 0.65) },
+    uTime:     { value: 0 },
+  }), [prod.color, seed, statusEmissive, isFeatured])
+
+  const atmoUniforms = useMemo(() => ({
+    uColor:   { value: new THREE.Color(prod.color) },
+    uOpacity: { value: (isClicked ? 0.7 : isFeatured ? 0.55 : 0.35) * statusEmissive },
+  }), [prod.color, isClicked, isFeatured, statusEmissive])
+
+  const cloudUniforms = useMemo(() => ({
+    uColor: { value: new THREE.Color('#ffffff') },
+    uSeed:  { value: seed * 0.013 },
+    uTime:  { value: 0 },
+  }), [seed])
+
   useFrame((state) => {
-    if (!meshRef.current) return
+    if (!groupRef.current) return
     const t = state.clock.elapsedTime
-    meshRef.current.position.y = Math.sin(t * 0.4 + seed) * 0.15 * statusSpeed
-    meshRef.current.rotation.y += 0.003 * statusSpeed
+    // Bob the entire planet group (body + atmosphere + clouds together)
+    groupRef.current.position.y = Math.sin(t * 0.4 + seed) * 0.15 * statusSpeed
+    // Rotate the body and clouds at different rates for parallax
+    if (bodyRef.current)  bodyRef.current.rotation.y  += 0.0025 * statusSpeed
+    if (cloudRef.current) cloudRef.current.rotation.y += 0.0011 * statusSpeed
+    // Animate shader time uniforms for subtle surface motion
+    if (bodyUniforms)  bodyUniforms.uTime.value  = t * 0.03
+    if (cloudUniforms) cloudUniforms.uTime.value = t * 0.02
   })
+
   if (!position) return null
-  // Featured = closest to the scrub date. Bumps emissive + halo to draw
-  // the eye to the production the scrubber is currently spotlighting.
-  // statusEmissive further dims Completed/Wrap prods so they read as
-  // "less alive" even when not the featured one.
-  const baseEmissive = (isClicked ? 1.4 : (isFeatured ? 1.0 : 0.5)) * statusEmissive
-  const haloOpacity  = (isClicked ? 0.20 : (isFeatured ? 0.16 : 0.08)) * statusEmissive
+
   return (
-    <group position={position}>
-      <mesh ref={meshRef} onClick={onClick}>
-        <sphereGeometry args={[PROD_BODY_RADIUS, 32, 32]} />
-        <meshStandardMaterial
-          color={prod.color}
-          emissive={prod.color}
-          emissiveIntensity={baseEmissive}
-          metalness={0.4}
-          roughness={0.4}
+    <group ref={groupRef} position={position}>
+      {/* Body sphere with procedural shader */}
+      <mesh ref={bodyRef} onClick={onClick}>
+        <sphereGeometry args={[PROD_BODY_RADIUS, 64, 64]} />
+        <shaderMaterial
+          uniforms={bodyUniforms}
+          vertexShader={PLANET_VERT}
+          fragmentShader={PLANET_FRAG}
         />
       </mesh>
-      {/* Halo */}
-      <mesh>
-        <sphereGeometry args={[PROD_BODY_RADIUS * 1.7, 32, 32]} />
-        <meshBasicMaterial color={prod.color} transparent opacity={haloOpacity} />
+
+      {/* Cloud layer — slightly larger, slowly rotating */}
+      <mesh ref={cloudRef}>
+        <sphereGeometry args={[PROD_BODY_RADIUS * 1.02, 48, 48]} />
+        <shaderMaterial
+          uniforms={cloudUniforms}
+          vertexShader={CLOUD_VERT}
+          fragmentShader={CLOUD_FRAG}
+          transparent
+          depthWrite={false}
+        />
       </mesh>
-      {/* Label — DOM via drei's <Html>, transforms with the camera */}
+
+      {/* Atmosphere shell — Fresnel rim glow for the "Earth from space" look */}
+      <mesh scale={1.18}>
+        <sphereGeometry args={[PROD_BODY_RADIUS, 48, 48]} />
+        <shaderMaterial
+          uniforms={atmoUniforms}
+          vertexShader={ATMOSPHERE_VERT}
+          fragmentShader={ATMOSPHERE_FRAG}
+          transparent
+          side={THREE.BackSide}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+      {/* Client badge — circular plate billboarded at the camera, showing
+          the client name's initials. Slot-ready for a real logo when a
+          logoUrl is supplied. */}
+      <ClientBadge
+        client={prod.client || prod.summary?.split(' · ')[0] || prod.name}
+        logoUrl={prod.logoUrl || null}
+        accent={prod.color}
+        radius={PROD_BODY_RADIUS}
+      />
+
+      {/* Production code — kept above the planet, telemetry-style */}
       <Html
-        position={[0, PROD_BODY_RADIUS + 0.5, 0]}
+        position={[0, PROD_BODY_RADIUS + 0.55, 0]}
         center
         distanceFactor={10}
         style={{ pointerEvents: 'none', userSelect: 'none' }}
@@ -850,6 +922,190 @@ function ProductionBody({ prod, position, isClicked, isFeatured, statusSpeed = 1
     </group>
   )
 }
+
+// ── ClientBadge — floating circular plate near a planet showing the
+// client's logo (when a logoUrl is provided) or their initials. Uses
+// drei <Html> with sprite=false so it sits in 3D space and gets bloomed
+// like everything else. Always faces the camera via the Billboard
+// pattern (the Html element naturally renders facing the camera). ────
+function ClientBadge({ client, logoUrl, accent, radius }) {
+  // Initials — take the first letter of each word up to 2 letters.
+  const initials = useMemo(() => {
+    if (!client) return '?'
+    const parts = client.trim().split(/\s+/).slice(0, 2)
+    return parts.map(p => p.charAt(0).toUpperCase()).join('') || '?'
+  }, [client])
+
+  return (
+    <Html
+      // Slightly in front of the planet's centre on the camera-facing
+      // axis. Because the rotating ring spins around y, we offset along
+      // local +z so the badge sits on the side that's currently aimed at
+      // the camera when this prod is the featured one.
+      position={[0, 0, radius * 0.92]}
+      center
+      distanceFactor={radius * 9}
+      zIndexRange={[50, 0]}
+      style={{ pointerEvents: 'none', userSelect: 'none' }}
+    >
+      <div
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: '50%',
+          background: logoUrl ? '#ffffff' : `radial-gradient(circle at 30% 30%, ${accent}aa, ${accent}33 60%, transparent 80%)`,
+          border: `2px solid ${accent}`,
+          boxShadow: `0 0 18px ${accent}88, inset 0 0 12px rgba(0,0,0,0.4)`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          backdropFilter: 'blur(2px)',
+        }}
+      >
+        {logoUrl ? (
+          <img
+            src={logoUrl}
+            alt={client}
+            style={{ width: '85%', height: '85%', objectFit: 'contain' }}
+            draggable={false}
+          />
+        ) : (
+          <span
+            style={{
+              fontFamily: 'Space Mono, monospace',
+              fontSize: 22,
+              fontWeight: 700,
+              color: '#fff',
+              letterSpacing: 1,
+              textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+            }}
+          >
+            {initials}
+          </span>
+        )}
+      </div>
+    </Html>
+  )
+}
+
+// ── Shaders for the planet body, atmosphere shell, and cloud layer.
+// Inlined as strings so we don't need a build-time shader loader. All
+// three use cheap value noise (FBM) so they run on every device. ───────
+const FBM_SNIPPET = `
+  float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1,311.7,74.7))) * 43758.5453); }
+  float vnoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec3(1.,0.,0.));
+    float c = hash(i + vec3(0.,1.,0.));
+    float d = hash(i + vec3(1.,1.,0.));
+    float e1 = hash(i + vec3(0.,0.,1.));
+    float f1 = hash(i + vec3(1.,0.,1.));
+    float g1 = hash(i + vec3(0.,1.,1.));
+    float h1 = hash(i + vec3(1.,1.,1.));
+    float x1 = mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
+    float x2 = mix(mix(e1,f1,f.x), mix(g1,h1,f.x), f.y);
+    return mix(x1, x2, f.z);
+  }
+  float fbm(vec3 p) {
+    float v = 0.0; float a = 0.5;
+    for (int i = 0; i < 4; i++) { v += a * vnoise(p); p *= 2.07; a *= 0.5; }
+    return v;
+  }
+`
+
+const PLANET_VERT = `
+  varying vec3 vWorldNormal;
+  varying vec3 vLocalPos;
+  void main() {
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    vLocalPos    = position;
+    gl_Position  = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+
+const PLANET_FRAG = `
+  uniform vec3  uColor;
+  uniform vec3  uDeep;
+  uniform vec3  uPeak;
+  uniform float uSeed;
+  uniform float uEmissive;
+  uniform float uTime;
+  varying vec3  vWorldNormal;
+  varying vec3  vLocalPos;
+  ${FBM_SNIPPET}
+  void main() {
+    // Terrain elevation from layered noise on the sphere surface
+    vec3 p = vLocalPos * 2.5 + vec3(uSeed);
+    float terrain = fbm(p);
+    float mountains = fbm(p * 3.0 + vec3(uTime));
+    float h = terrain * 0.7 + mountains * 0.3;
+
+    // Three-tone colour ramp: deep (oceans), mid (land), peak (highlands)
+    vec3 col;
+    if (h < 0.45)      col = mix(uDeep,  uColor, smoothstep(0.30, 0.45, h));
+    else if (h < 0.70) col = mix(uColor, uPeak,  smoothstep(0.55, 0.70, h));
+    else               col = uPeak;
+
+    // Simple directional shading from above-front so the planet has form
+    vec3 lightDir = normalize(vec3(0.6, 0.7, 0.4));
+    float diffuse = max(dot(vWorldNormal, lightDir), 0.0);
+    float ambient = 0.32;
+    float lit = ambient + diffuse * 0.8;
+
+    // Emissive base lets bloom catch the planet even on the dark side
+    vec3 finalCol = col * lit + col * 0.15 * uEmissive;
+    gl_FragColor = vec4(finalCol, 1.0);
+  }
+`
+
+const CLOUD_VERT = PLANET_VERT
+const CLOUD_FRAG = `
+  uniform vec3  uColor;
+  uniform float uSeed;
+  uniform float uTime;
+  varying vec3  vWorldNormal;
+  varying vec3  vLocalPos;
+  ${FBM_SNIPPET}
+  void main() {
+    vec3 p = vLocalPos * 3.5 + vec3(uSeed + uTime, 0.0, 0.0);
+    float cloud = fbm(p);
+    float band = smoothstep(0.55, 0.78, cloud);
+    if (band < 0.02) discard;
+    // Soft edge falloff so clouds blend out at high latitudes
+    float lat = abs(vWorldNormal.y);
+    band *= 1.0 - smoothstep(0.85, 1.0, lat);
+    gl_FragColor = vec4(uColor, band * 0.55);
+  }
+`
+
+const ATMOSPHERE_VERT = `
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  void main() {
+    vNormal  = normalize(mat3(modelMatrix) * normal);
+    vec4 wp  = modelMatrix * vec4(position, 1.0);
+    vViewDir = normalize(cameraPosition - wp.xyz);
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`
+
+const ATMOSPHERE_FRAG = `
+  uniform vec3  uColor;
+  uniform float uOpacity;
+  varying vec3  vNormal;
+  varying vec3  vViewDir;
+  void main() {
+    // Fresnel — high at glancing angles, low when looking straight on.
+    // We use the back face (rendered with BackSide) so the rim glow sits
+    // OUTSIDE the body silhouette.
+    float fres = pow(1.0 - max(dot(vNormal, vViewDir), 0.0), 2.5);
+    gl_FragColor = vec4(uColor, fres * uOpacity);
+  }
+`
 
 // ── ResourceBody — small orbiting body around its active production ─────────
 function ResourceBody({ resource, productionPos, orbitSeed, isConflict, statusSpeed = 1 }) {
