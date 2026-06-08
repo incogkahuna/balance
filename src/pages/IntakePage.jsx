@@ -34,11 +34,13 @@ export function IntakePage() {
     extracted:    {},
     contacts:     [],
     concerns:     [],
+    detectedCrew: [],            // [{ userId, matchedAs, confidence, source, sourceName }]
     parsingSummary: [],
     answers:      {},
     edits:        {},
     contactEdits: {},   // { [contactId]: { name, role, included } }
     concernEdits: {},   // { [concernId]: { included } }
+    crewEdits:    {},   // { [userId]: { included } }
   })
 
   // Computed questions (recalculated after parsing)
@@ -51,10 +53,10 @@ export function IntakePage() {
   // Parse eagerly here — before the animation — so parsingSummary and extracted
   // fields are fully populated when ParsingStage renders and displays them.
   const handleInputsReady = useCallback((inputs) => {
-    const { extracted, contacts, concerns, parsingSummary } = mockParseInputs(inputs)
+    const { extracted, contacts, concerns, detectedCrew, parsingSummary } = mockParseInputs(inputs)
     const qs = generateQuestions(extracted, {})
     // Reset answers/edits when re-submitting inputs so questions regenerate cleanly
-    setDraft(d => ({ ...d, inputs, extracted, contacts, concerns, parsingSummary, answers: {}, edits: {} }))
+    setDraft(d => ({ ...d, inputs, extracted, contacts, concerns, detectedCrew, parsingSummary, answers: {}, edits: {}, crewEdits: {} }))
     setQuestions(qs)
     setStage('parsing')
   }, [])
@@ -95,6 +97,16 @@ export function IntakePage() {
       concernEdits: {
         ...d.concernEdits,
         [concernId]: { ...(d.concernEdits[concernId] || {}), included },
+      },
+    }))
+  }, [])
+
+  const handleToggleCrew = useCallback((userId, included) => {
+    setDraft(d => ({
+      ...d,
+      crewEdits: {
+        ...d.crewEdits,
+        [userId]: { ...(d.crewEdits[userId] || {}), included },
       },
     }))
   }, [])
@@ -263,6 +275,7 @@ export function IntakePage() {
             onEdit={handleEdit}
             onEditContact={handleEditContact}
             onToggleConcern={handleToggleConcern}
+            onToggleCrew={handleToggleCrew}
             onFinalize={handleFinalize}
           />
         )}

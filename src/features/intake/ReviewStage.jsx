@@ -264,9 +264,9 @@ function MilestonePreviewRow({ milestone }) {
 }
 
 // ─── ReviewStage ──────────────────────────────────────────────────────────────
-export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onFinalize }) {
-  const { extracted, answers, edits, contacts = [], concerns = [], inputs = [], contactEdits = {}, concernEdits = {} } = draft
-  const { ledWalls = [] } = useApp()
+export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onToggleCrew, onFinalize }) {
+  const { extracted, answers, edits, contacts = [], concerns = [], inputs = [], contactEdits = {}, concernEdits = {}, detectedCrew = [], crewEdits = {} } = draft
+  const { ledWalls = [], users = [] } = useApp()
 
   const resolve = field => resolveField(field, extracted, answers, edits)
   const r = {
@@ -417,6 +417,58 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onF
           ))
         )}
       </Section>
+
+      {/* Detected crew — Orbital team members named in the inputs. Each
+          comes pre-included; uncheck to leave them off the new
+          production. They get auto-added to assignedMembers on finalise. */}
+      {detectedCrew.length > 0 && (
+        <Section
+          icon={Sparkles}
+          title="Detected Crew"
+          badge={detectedCrew.length}
+          defaultOpen
+        >
+          <p className="text-xs text-orbital-subtle mb-2 px-1">
+            We spotted these team members in your inputs. They&apos;ll be auto-assigned to this production — uncheck any you don&apos;t want on it.
+          </p>
+          {detectedCrew.map(c => {
+            const u = users.find(x => x.id === c.userId)
+            if (!u) return null
+            const isIncluded = crewEdits[c.userId]?.included !== false
+            return (
+              <div
+                key={c.userId}
+                className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/[0.02]"
+              >
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
+                  style={{ backgroundColor: u.color }}
+                >
+                  {u.avatar}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-orbital-text font-medium">{u.name}</p>
+                  <p className="text-[11px] text-orbital-subtle">
+                    Matched as &ldquo;{c.matchedAs}&rdquo; · {c.confidence} confidence
+                  </p>
+                </div>
+                <button
+                  onClick={() => onToggleCrew?.(c.userId, !isIncluded)}
+                  className={clsx(
+                    'p-1.5 rounded transition-colors flex-shrink-0',
+                    isIncluded
+                      ? 'bg-blue-500/15 text-blue-400 hover:bg-blue-500/25'
+                      : 'bg-orbital-muted text-orbital-subtle hover:bg-white/10'
+                  )}
+                  title={isIncluded ? 'Click to exclude' : 'Click to include'}
+                >
+                  {isIncluded ? <Check size={13} /> : <X size={13} />}
+                </button>
+              </div>
+            )
+          })}
+        </Section>
+      )}
 
       {/* Roadmap preview */}
       <Section

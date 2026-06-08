@@ -1,10 +1,45 @@
+import * as chrono from 'chrono-node'
 import {
   createProduction, createTask, createMilestone,
   PRODUCTION_TYPE, PRODUCTION_STATUS, LOCATION_TYPE,
   TASK_PRIORITY, TASK_STATUS,
   MILESTONE_TYPE, MILESTONE_STATUS,
+  USERS,
 } from '../../data/models.js'
 import { addDays, subDays, format, isValid } from 'date-fns'
+
+// ─── Crew name index ──────────────────────────────────────────────────────────
+// Built once from the salary roster so we can fast-scan incoming text for
+// references to known team members. Includes first name, last name, full
+// name, and any nickname/avatar variants so "Brian", "Wilder", "Nitz",
+// "Brian Nitzkin" all resolve. Order: longer phrases first so "Brian
+// Nitzkin" wins over a bare "Brian" when both match. The lookup returns
+// { userId, matchedAs } so we can show provenance in the UI.
+const CREW_INDEX = (() => {
+  const entries = []
+  for (const u of USERS) {
+    const variants = new Set()
+    if (u.name) variants.add(u.name)
+    if (u.name) {
+      const parts = u.name.split(/\s+/)
+      parts.forEach(p => variants.add(p))   // first / middle / last
+      if (parts.length > 1) variants.add(`${parts[0]} ${parts.slice(-1)[0]}`)
+    }
+    // Add ID as a fallback if it looks like a name (e.g. 'wilder', 'nitz')
+    if (/^[a-z]{2,}$/i.test(u.id)) variants.add(u.id)
+    for (const v of variants) {
+      entries.push({
+        userId:   u.id,
+        name:     u.name,
+        matchedAs: v,
+        // Word-boundary regex, case-insensitive
+        re:       new RegExp(`\\b${v.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i'),
+      })
+    }
+  }
+  // Longer-first so multi-word names hit before single tokens
+  return entries.sort((a, b) => b.matchedAs.length - a.matchedAs.length)
+})()
 
 // ─── Text pattern matchers ────────────────────────────────────────────────────
 const EMAIL_RE = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
@@ -46,6 +81,24 @@ const NL_ENDDATE_RE = /(?:through|until|to|end(?:s|ing)?|wrap(?:s|ping)?|finish(
 
 const LED_KEYWORDS     = ['led', 'volume', 'xr ', ' xr', 'virtual production', 'led wall', 'led stage', 'extended reality', 'led volume', 'led shoot']
 const MOBILE_KEYWORDS  = ['mobile build', 'mobile production', 'on location', 'on-location', 'remote shoot', 'location shoot', 'offsite', 'off-site', 'away shoot', 'on site', 'on-site']
+
+// Concern detection — phrases that suggest something risky/uncertain.
+// Tier 1 heuristic; Tier 2 (Claude) will catch the subtle stuff this misses.
+// Each entry: { phrase, severityHint } — drives whether the surfaced concern
+// gets flagged as a hard problem vs a soft maybe.
+const CONCERN_PATTERNS = [
+  // Hard problems
+  { re: /\b(?:only|just)\s+\d+\s+(?:days?|hours?|weeks?)\b/i,                          hint: 'tight-timeline' },
+  { re: /\bback[-\s]?to[-\s]?back\b/i,                                                  hint: 'back-to-back' },
+  { re: /\b(?:no|without|missing)\s+(?:power|generator|crew|stage manager|sm|client)\b/i, hint: 'missing-resource' },
+  { re: /\b(?:tight|crunch|crunched|impossible|aggressive)\s+(?:timeline|schedule|deadline)\b/i, hint: 'tight-timeline' },
+  { re: /\b(?:double[-\s]?booked|overbooked|conflict|conflicts)\b/i,                    hint: 'conflict' },
+  { re: /\b(?:rain|weather|storm|cold)\b.*\b(?:concern|risk|issue|problem)\b/i,         hint: 'weather' },
+  // Soft uncertainty (lower confidence)
+  { re: /\b(?:concern|issue|problem|risk|challenge|worried|worry)\b/i,                  hint: 'general' },
+  { re: /\b(?:not sure|unclear|tbd|pending|to be (?:confirmed|determined))\b/i,         hint: 'unresolved' },
+  { re: /\b(?:need(?:s)? to confirm|haven't confirmed|not (?:yet )?confirmed|still waiting)\b/i, hint: 'unresolved' },
+]
 const CONCERN_KEYWORDS = ['concern', 'issue', 'problem', 'risk', 'challenge', 'worried', 'not sure', 'unclear', 'tbd', 'pending', 'need to confirm', 'unresolved', "haven't confirmed", "not confirmed"]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -88,6 +141,92 @@ function extractPhones(text) {
 
 function extractAllDates(text) {
   return [...(text.matchAll(DATE_RE))].map(m => m[0])
+}
+
+// ─── Chrono-powered date extraction ──────────────────────────────────────────
+// Replaces the brittle regex date pipeline with chrono-node, which handles
+// natural language ("next Tuesday", "in 3 weeks", "May 15-22", "the 15th
+// through the 22nd", "tomorrow", "this Friday", etc).
+//
+// Returns { startDate, endDate } as YYYY-MM-DD strings, or null per field.
+// When a range like "May 15-22" or "March 3rd through 5th" is detected,
+// chrono gives us both ends. When a single date is detected, only startDate
+// is filled.
+function extractDatesWithChrono(text) {
+  // chrono.parse returns ParsedResult[] each with .start (required) and
+  // optional .end. Iterate to find the FIRST result with both ends (treat
+  // as project window), or the first single-date result as startDate.
+  const results = chrono.parse(text, new Date(), { forwardDate: true })
+  if (results.length === 0) return { startDate: null, endDate: null }
+
+  // Prefer a range result first
+  const withRange = results.find(r => r.end)
+  if (withRange) {
+    const s = withRange.start.date()
+    const e = withRange.end.date()
+    return {
+      startDate: isValid(s) ? format(s, 'yyyy-MM-dd') : null,
+      endDate:   isValid(e) ? format(e, 'yyyy-MM-dd') : null,
+    }
+  }
+
+  // No range — take the first single date as start. If a SECOND single
+  // date exists later in the text, treat as end (covers "starts Mar 5.
+  // wraps Mar 7." patterns where chrono parses as two separate results).
+  const first  = results[0].start.date()
+  const second = results[1]?.start.date() || null
+  return {
+    startDate: isValid(first)  ? format(first,  'yyyy-MM-dd') : null,
+    endDate:   second && isValid(second) ? format(second, 'yyyy-MM-dd') : null,
+  }
+}
+
+// ─── Crew name detection ─────────────────────────────────────────────────────
+// Scan input text for references to known team members. Returns dedupe'd
+// list of { userId, matchedAs, confidence }. Avoids false positives by
+// preferring longer name matches and skipping single-letter or 1-char
+// candidates implicitly (CREW_INDEX entries require length ≥2).
+function detectCrewMentions(text) {
+  const hits = new Map()  // userId → { matchedAs, confidence }
+  for (const entry of CREW_INDEX) {
+    if (hits.has(entry.userId)) continue   // already matched by a longer variant
+    if (entry.re.test(text)) {
+      // Multi-word matches are higher confidence than single-token (a bare
+      // "Brian" could be anyone; "Brian Nitzkin" is unambiguous).
+      const confidence = /\s/.test(entry.matchedAs) ? 'high' : 'medium'
+      hits.set(entry.userId, { matchedAs: entry.matchedAs, confidence })
+    }
+  }
+  return [...hits.entries()].map(([userId, info]) => ({ userId, ...info }))
+}
+
+// ─── Email-thread aware contact extraction ───────────────────────────────────
+// In addition to the existing per-line scan, parse standard email headers
+// (From:, To:, Cc:) which are extremely common in pasted email threads and
+// the most reliable source of contact info. Captures the "Name <email>"
+// pattern with high confidence.
+function extractEmailHeaderContacts(text) {
+  const out = []
+  const HEADER_RE = /^(?:From|To|Cc|CC|Reply-To)\s*:\s*(.+?)$/gim
+  for (const m of text.matchAll(HEADER_RE)) {
+    const line = m[1]
+    // Each line can have multiple comma-separated recipients
+    for (const piece of line.split(/[,;]/)) {
+      const p = piece.trim()
+      if (!p) continue
+      // "First Last <email@x.com>"  or  "<email@x.com>"  or  "email@x.com"
+      const nameEmail = p.match(/^["']?([^"'<]+?)["']?\s*<\s*([^>]+)\s*>$/)
+      if (nameEmail) {
+        out.push({ name: nameEmail[1].trim(), email: nameEmail[2].trim().toLowerCase(), confidence: 'high' })
+        continue
+      }
+      const bareEmail = p.match(EMAIL_RE)
+      if (bareEmail) {
+        out.push({ name: bareEmail[0].split('@')[0], email: bareEmail[0].toLowerCase(), confidence: 'medium' })
+      }
+    }
+  }
+  return out
 }
 
 // ─── Parse a single text input ────────────────────────────────────────────────
@@ -137,38 +276,39 @@ export function parseTextContent(text, sourceId) {
   }
 
   // ── Dates ──
-  // Try context-aware NL patterns first (start/end), fall back to bare date scan
-  const startMatches = [...(text.matchAll(NL_STARTDATE_RE))].map(m => m[1])
-  const endMatches   = [...(text.matchAll(NL_ENDDATE_RE))].map(m => m[1])
-
-  if (startMatches.length > 0) {
-    const s = tryParseDate(startMatches[0])
-    if (s) candidates.startDate = { value: s, confidence: 'high', source: sourceId }
+  // chrono-node handles natural language ("next Tuesday", "in 3 weeks",
+  // "May 15-22", "the 15th through the 22nd") far more robustly than the
+  // old regex pipeline. Returns start + optional end if a range is parsed.
+  const chronoResult = extractDatesWithChrono(text)
+  if (chronoResult.startDate) {
+    candidates.startDate = { value: chronoResult.startDate, confidence: 'high', source: sourceId }
   }
-  if (endMatches.length > 0) {
-    const e = tryParseDate(endMatches[0])
-    if (e) candidates.endDate = { value: e, confidence: 'high', source: sourceId }
+  if (chronoResult.endDate) {
+    candidates.endDate = { value: chronoResult.endDate, confidence: 'high', source: sourceId }
   }
 
-  // Fall back to bare date scan if NL patterns didn't find anything
-  if (!candidates.startDate || !candidates.endDate) {
-    const allDates = extractAllDates(text)
-    if (!candidates.startDate && allDates.length >= 1) {
-      const s = tryParseDate(allDates[0])
-      if (s) candidates.startDate = { value: s, confidence: 'medium', source: sourceId }
-    }
-    if (!candidates.endDate && allDates.length >= 2) {
-      const e = tryParseDate(allDates[1])
-      if (e) candidates.endDate = { value: e, confidence: 'medium', source: sourceId }
-    }
+  // ── Contacts: email-thread headers first (highest confidence), then
+  //    in-body scan for any addresses chrono/headers missed. ──
+  const headerContacts = extractEmailHeaderContacts(text)
+  for (const c of headerContacts) {
+    contacts.push({
+      id:         crypto.randomUUID(),
+      name:       c.name,
+      email:      c.email,
+      phone:      '',
+      company:    '',
+      roleGuess:  '',
+      confidence: c.confidence,
+      source:     sourceId,
+    })
   }
 
-  // ── Contacts: scan for emails with associated names ──
+  // In-body sweep for bare emails the headers didn't catch
   for (const line of text.split('\n')) {
     const lineEmails = [...(line.matchAll(EMAIL_RE))].map(m => m[0])
     if (!lineEmails.length) continue
-    const email = lineEmails[0]
-    // Try "First Last <email>" or "First Last (email)" or line starting with a name
+    const email = lineEmails[0].toLowerCase()
+    if (contacts.some(c => c.email === email)) continue
     const nameMatch =
       line.match(/^([A-Z][a-z]+ (?:[A-Z][a-z]+ )?[A-Z][a-z]+)/) ||
       line.match(/([A-Z][a-z]+ [A-Z][a-z]+)\s*[<(]/)
@@ -185,8 +325,8 @@ export function parseTextContent(text, sourceId) {
     })
   }
 
-  // Also catch "contact is [Name]" / "contact: [Name]" natural language
-  const contactNLRe = /(?:contact(?:\s+is)?|reach out to|speak to|talk to)\s+([A-Z][a-z]+ [A-Z][a-z]+)/gi
+  // Natural language contact mentions (without email)
+  const contactNLRe = /(?:contact(?:\s+is)?|reach out to|speak to|talk to|liaison(?:\s+is)?|point of contact)\s+([A-Z][a-z]+ [A-Z][a-z]+)/gi
   for (const m of text.matchAll(contactNLRe)) {
     const name = m[1]
     if (!contacts.find(c => c.name === name)) {
@@ -210,19 +350,38 @@ export function parseTextContent(text, sourceId) {
   })
 
   // ── Concerns ──
-  text.split('\n')
-    .filter(line => CONCERN_KEYWORDS.some(k => line.toLowerCase().includes(k)) && line.trim().length > 12)
-    .slice(0, 3)
-    .forEach(line => concerns.push({
-      id:          crypto.randomUUID(),
-      title:       line.trim().slice(0, 90),
-      description: '',
-      confidence:  'low',
-      include:     false,
-      source:      sourceId,
-    }))
+  // Smarter detection using categorised regex library (replaces the bare
+  // keyword pass). Tags each concern with the matched hint so the UI can
+  // surface category-specific severity treatment.
+  const seenConcerns = new Set()
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (trimmed.length < 12) continue
+    for (const { re, hint } of CONCERN_PATTERNS) {
+      if (re.test(trimmed) && !seenConcerns.has(trimmed)) {
+        seenConcerns.add(trimmed)
+        concerns.push({
+          id:          crypto.randomUUID(),
+          title:       trimmed.slice(0, 90),
+          description: '',
+          category:    hint,
+          confidence:  hint === 'general' || hint === 'unresolved' ? 'low' : 'medium',
+          include:     false,
+          source:      sourceId,
+        })
+        break  // one hit per line
+      }
+    }
+    if (concerns.length >= 5) break  // bumped from 3 → 5
+  }
 
-  return { candidates, contacts, concerns }
+  // ── Crew mentions ──
+  // Scan for known team members named in the text. Returned alongside
+  // contacts/concerns since this is a collection (multiple people can be
+  // mentioned in one input). Merged via union across all inputs.
+  const detectedCrew = detectCrewMentions(text).map(c => ({ ...c, source: sourceId }))
+
+  return { candidates, contacts, concerns, detectedCrew }
 }
 
 // ─── Full input set parser ────────────────────────────────────────────────────
@@ -232,13 +391,14 @@ export function mockParseInputs(inputs) {
   const extracted      = {}
   const allContacts    = []
   const allConcerns    = []
+  const crewByUserId   = new Map()  // unioned across all inputs
   const parsingSummary = []
 
   inputs.forEach((input, i) => {
     const label = input.fileName || `Input ${i + 1}`
 
     if (input.type === 'text' && input.content?.trim()) {
-      const { candidates, contacts, concerns } = parseTextContent(input.content, input.id)
+      const { candidates, contacts, concerns, detectedCrew } = parseTextContent(input.content, input.id)
 
       // Merge candidates — higher confidence wins
       Object.entries(candidates).forEach(([field, candidate]) => {
@@ -251,9 +411,19 @@ export function mockParseInputs(inputs) {
       allContacts.push(...contacts.map(c => ({ ...c, sourceName: label })))
       allConcerns.push(...concerns.map(c => ({ ...c, sourceName: label })))
 
+      // Crew: union — same person mentioned in two inputs only shows once,
+      // but keeps the highest-confidence mention's metadata.
+      for (const c of (detectedCrew || [])) {
+        const existing = crewByUserId.get(c.userId)
+        if (!existing || CONF_RANK[c.confidence] > CONF_RANK[existing.confidence]) {
+          crewByUserId.set(c.userId, { ...c, sourceName: label })
+        }
+      }
+
       const found = Object.keys(candidates)
-      if (found.length)    parsingSummary.push(`Extracted ${found.join(', ')} from ${label}`)
-      if (contacts.length) parsingSummary.push(`Found ${contacts.length} contact${contacts.length > 1 ? 's' : ''} in ${label}`)
+      if (found.length)              parsingSummary.push(`Extracted ${found.join(', ')} from ${label}`)
+      if (contacts.length)           parsingSummary.push(`Found ${contacts.length} contact${contacts.length > 1 ? 's' : ''} in ${label}`)
+      if ((detectedCrew || []).length) parsingSummary.push(`Identified ${detectedCrew.length} team member${detectedCrew.length > 1 ? 's' : ''} in ${label}`)
     }
 
     if (input.type === 'image') {
@@ -270,7 +440,13 @@ export function mockParseInputs(inputs) {
     return true
   })
 
-  return { extracted, contacts, concerns: allConcerns.slice(0, 5), parsingSummary }
+  return {
+    extracted,
+    contacts,
+    concerns:     allConcerns.slice(0, 5),
+    detectedCrew: [...crewByUserId.values()],
+    parsingSummary,
+  }
 }
 
 // ─── Question engine ──────────────────────────────────────────────────────────
@@ -490,6 +666,16 @@ export function buildProductionFromDraft(draft, currentUser) {
       createdAt:      new Date().toISOString(),
     }))
 
+  // Crew auto-assignment from detected mentions. Each user pre-included
+  // unless the user explicitly toggled them off in the Review step.
+  const assignedMembers = (draft.detectedCrew || [])
+    .filter(c => draft.crewEdits?.[c.userId]?.included !== false)
+    .map(c => ({
+      userId:           c.userId,
+      roleOnProduction: '',
+      roles:            { prep: '', production: '', post: '' },
+    }))
+
   const production = createProduction({
     id:              productionId,
     name:            resolve('title').value   || 'Untitled Production',
@@ -501,6 +687,7 @@ export function buildProductionFromDraft(draft, currentUser) {
     startDate,
     endDate,
     status:          PRODUCTION_STATUS.INCOMING,
+    assignedMembers,
     createdBy,
     bible: {
       keyPlayers,
