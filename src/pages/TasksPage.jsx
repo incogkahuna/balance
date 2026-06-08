@@ -1,43 +1,93 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { isPast, parseISO } from 'date-fns'
-import { CheckSquare, AlertTriangle, Clock, CheckCheck, ListTodo } from 'lucide-react'
+import {
+  CheckSquare, AlertTriangle, Clock, CheckCheck, ListTodo,
+  Search, Film, User, ArrowUpDown,
+} from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, TASK_STATUS } from '../data/models.js'
+import { ROLES, TASK_STATUS, TASK_PRIORITY, USERS } from '../data/models.js'
 import { TaskCard } from '../components/tasks/TaskCard.jsx'
 import { EmptyState } from '../components/ui/EmptyState.jsx'
 import clsx from 'clsx'
 
-// ─── Filter definitions ────────────────────────────────────────────────────
-// Each filter is a named scope that maps a URL param (?filter=...) to a
-// predicate. Keeping these declarative so new filters slot in cleanly.
+// ─── Filter chip definitions ────────────────────────────────────────────────
 const FILTERS = {
-  all:       { label: 'All',          icon: ListTodo },
-  mine:      { label: 'Mine',         icon: CheckSquare },
-  overdue:   { label: 'Overdue',      icon: AlertTriangle },
+  all:       { label: 'All',                   icon: ListTodo },
+  mine:      { label: 'Mine',                  icon: CheckSquare },
+  overdue:   { label: 'Overdue',               icon: AlertTriangle },
   pending:   { label: 'Awaiting Verification', icon: Clock },
-  verified:  { label: 'Verified',     icon: CheckCheck },
+  verified:  { label: 'Verified',              icon: CheckCheck },
+}
+
+// Sort options driving the .sort callback below.
+const SORT_OPTIONS = [
+  { id: 'dueAsc',    label: 'Due date (soonest)' },
+  { id: 'dueDesc',   label: 'Due date (latest)' },
+  { id: 'priority',  label: 'Priority' },
+  { id: 'status',    label: 'Status' },
+  { id: 'title',     label: 'Title (A→Z)' },
+]
+
+const PRIORITY_RANK = {
+  [TASK_PRIORITY.CRITICAL]: 0,
+  [TASK_PRIORITY.HIGH]:     1,
+  [TASK_PRIORITY.MEDIUM]:   2,
+  [TASK_PRIORITY.LOW]:      3,
+}
+
+const STATUS_RANK = {
+  [TASK_STATUS.BLOCKED]:      0,
+  [TASK_STATUS.NEEDS_REVIEW]: 1,
+  [TASK_STATUS.IN_PROGRESS]:  2,
+  [TASK_STATUS.NOT_STARTED]:  3,
+  [TASK_STATUS.COMPLETE]:     4,
+  [TASK_STATUS.VERIFIED]:     5,
 }
 
 export function TasksPage() {
-  const { currentUser, tasks } = useApp()
+  const { currentUser, tasks, productions } = useApp()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
   const filter = searchParams.get('filter') || 'mine'
-
   const setFilter = (next) => {
     if (next === 'mine') setSearchParams({})
     else setSearchParams({ filter: next })
   }
 
-  const isCrew = currentUser?.role === ROLES.CREW
+  const isCrew    = currentUser?.role === ROLES.CREW
+  const isAdmin   = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
+  // ── New page-level controls (not URL-backed; ephemeral session state) ──
+  const [search, setSearch]           = useState('')
+  const [productionId, setProductionId] = useState('all')   // 'all' or a production.id
+  const [assigneeId, setAssigneeId]   = useState('all')   // 'all' or a user.id
+  const [sortBy, setSortBy]           = useState('dueAsc')
+
+  // The base list everyone-on-this-account can see. Crew see only their own
+  // tasks regardless of any later filter; admin/sup see everything.
+  const baseList = useMemo(
+    () => isCrew ? tasks.filter(t => t.assigneeId === currentUser?.id) : tasks,
+    [tasks, isCrew, currentUser]
+  )
+
+  // Stats — computed from base list (not after filtering) so the numbers
+  // mean something stable as the user tweaks chips.
+  const stats = useMemo(() => {
+    const overdue = baseList.filter(t =>
+      t.dueDate && t.status !== TASK_STATUS.VERIFIED && isPast(parseISO(t.dueDate))
+    ).length
+    const mine = baseList.filter(t =>
+      t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED
+    ).length
+    const verified = baseList.filter(t => t.status === TASK_STATUS.VERIFIED).length
+    return { total: baseList.length, overdue, mine, verified }
+  }, [baseList, currentUser])
+
+  // Apply chip + page-level controls
   const filtered = useMemo(() => {
-    // Crew always see only their own tasks regardless of filter.
-    let list = isCrew
-      ? tasks.filter(t => t.assigneeId === currentUser?.id)
-      : tasks
+    let list = baseList
 
     switch (filter) {
       case 'mine':
@@ -51,7 +101,6 @@ export function TasksPage() {
         )
         break
       case 'pending':
-        // "Awaiting Verification" = tasks marked Complete but not yet Verified
         list = list.filter(t =>
           t.status === TASK_STATUS.COMPLETE || t.status === TASK_STATUS.NEEDS_REVIEW
         )
@@ -64,14 +113,63 @@ export function TasksPage() {
         break
     }
 
-    // Sort: overdue first, then by due date ascending, then undated last.
+    // Search across title + description (case-insensitive)
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(t =>
+        (t.title || '').toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q)
+      )
+    }
+
+    // Production scope
+    if (productionId !== 'all') {
+      list = list.filter(t => t.productionId === productionId)
+    }
+    // Assignee scope (admin/sup only — crew already filtered)
+    if (isAdmin && assigneeId !== 'all') {
+      list = list.filter(t => t.assigneeId === assigneeId)
+    }
+
+    // Sort
     return list.slice().sort((a, b) => {
-      if (!a.dueDate && !b.dueDate) return 0
-      if (!a.dueDate) return 1
-      if (!b.dueDate) return -1
-      return new Date(a.dueDate) - new Date(b.dueDate)
+      switch (sortBy) {
+        case 'dueAsc':
+          if (!a.dueDate && !b.dueDate) return 0
+          if (!a.dueDate) return 1
+          if (!b.dueDate) return -1
+          return new Date(a.dueDate) - new Date(b.dueDate)
+        case 'dueDesc':
+          if (!a.dueDate && !b.dueDate) return 0
+          if (!a.dueDate) return 1
+          if (!b.dueDate) return -1
+          return new Date(b.dueDate) - new Date(a.dueDate)
+        case 'priority':
+          return (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9)
+        case 'status':
+          return (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9)
+        case 'title':
+          return (a.title || '').localeCompare(b.title || '')
+        default:
+          return 0
+      }
     })
-  }, [tasks, filter, currentUser, isCrew])
+  }, [baseList, filter, search, productionId, assigneeId, sortBy, currentUser, isAdmin])
+
+  // Production picker — only productions that actually have tasks (skip the
+  // empty options so the dropdown isn't a wall of unrelated names).
+  const productionsWithTasks = useMemo(() => {
+    const ids = new Set(baseList.map(t => t.productionId))
+    return productions
+      .filter(p => ids.has(p.id))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  }, [productions, baseList])
+
+  // Assignee picker — only people who actually have tasks in the base list
+  const assigneesWithTasks = useMemo(() => {
+    const ids = new Set(baseList.map(t => t.assigneeId).filter(Boolean))
+    return USERS.filter(u => ids.has(u.id))
+  }, [baseList])
 
   // Crew cannot see the "pending verification" filter — it's an admin concern.
   const availableFilters = Object.entries(FILTERS).filter(([key]) => {
@@ -81,11 +179,76 @@ export function TasksPage() {
 
   return (
     <div>
-      <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
-        <h1 className="text-xl font-bold text-orbital-text mb-6">Tasks</h1>
+      <div className="max-w-5xl mx-auto px-3 sm:px-4 lg:px-8 py-5 lg:py-8">
+        <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
+          <h1 className="text-xl font-bold text-orbital-text">Tasks</h1>
+          {search || productionId !== 'all' || assigneeId !== 'all' ? (
+            <button
+              onClick={() => { setSearch(''); setProductionId('all'); setAssigneeId('all') }}
+              className="text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
 
-        {/* Filter chips */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-1 -mx-4 px-4 lg:mx-0 lg:px-0">
+        {/* ── Stats strip ──────────────────────────────────────────────── */}
+        <div
+          className="grid grid-cols-2 lg:grid-cols-4 mb-5"
+          style={{ border: '1px solid var(--orbital-border)', borderRight: 'none' }}
+        >
+          <StatCell label="TOTAL"    value={stats.total}    icon={ListTodo}      color="var(--orbital-subtle)" />
+          <StatCell label="OVERDUE"  value={stats.overdue}  icon={AlertTriangle} color={stats.overdue > 0 ? '#ef4444' : 'var(--orbital-subtle)'} />
+          <StatCell label="MINE"     value={stats.mine}     icon={CheckSquare}   color="#a78bfa" />
+          <StatCell label="VERIFIED" value={stats.verified} icon={CheckCheck}    color="#22c55e" />
+        </div>
+
+        {/* ── Search + scope controls ─────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-3">
+          <div className="relative flex-1">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-orbital-subtle pointer-events-none" />
+            <input
+              className="input pl-9"
+              placeholder="Search title or description…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            {productionsWithTasks.length > 1 && (
+              <ScopeSelect
+                icon={Film}
+                value={productionId}
+                onChange={setProductionId}
+                options={[
+                  { value: 'all', label: 'All productions' },
+                  ...productionsWithTasks.map(p => ({ value: p.id, label: p.name })),
+                ]}
+              />
+            )}
+            {isAdmin && assigneesWithTasks.length > 1 && (
+              <ScopeSelect
+                icon={User}
+                value={assigneeId}
+                onChange={setAssigneeId}
+                options={[
+                  { value: 'all', label: 'All assignees' },
+                  ...assigneesWithTasks.map(u => ({ value: u.id, label: u.name })),
+                ]}
+              />
+            )}
+            <ScopeSelect
+              icon={ArrowUpDown}
+              value={sortBy}
+              onChange={setSortBy}
+              options={SORT_OPTIONS.map(s => ({ value: s.id, label: s.label }))}
+            />
+          </div>
+        </div>
+
+        {/* ── Filter chips ───────────────────────────────────────────── */}
+        <div className="flex gap-2 mb-5 overflow-x-auto pb-1 -mx-3 sm:-mx-4 px-3 sm:px-4 lg:mx-0 lg:px-0">
           {availableFilters.map(([key, { label, icon: Icon }]) => (
             <button
               key={key}
@@ -103,12 +266,13 @@ export function TasksPage() {
           ))}
         </div>
 
-        {/* List */}
+        {/* ── List ────────────────────────────────────────────────────── */}
         {filtered.length === 0 ? (
           <EmptyState
             icon={CheckSquare}
             title="No tasks to show"
             description={
+              search             ? `Nothing matches "${search}".` :
               filter === 'mine'    ? 'You have no active tasks right now.' :
               filter === 'overdue' ? 'Nothing overdue — clean slate.' :
               filter === 'pending' ? 'No tasks awaiting verification.' :
@@ -118,6 +282,9 @@ export function TasksPage() {
           />
         ) : (
           <div className="space-y-2">
+            <p className="text-xs text-orbital-dim font-telemetry tracking-wider mb-2">
+              SHOWING {filtered.length} OF {stats.total}
+            </p>
             {filtered.map(task => (
               <TaskCard
                 key={task.id}
@@ -129,6 +296,43 @@ export function TasksPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Small components ────────────────────────────────────────────────────────
+
+function StatCell({ label, value, icon: Icon, color }) {
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-3"
+      style={{ background: 'var(--orbital-surface)', borderRight: '1px solid var(--orbital-border)' }}
+    >
+      <Icon size={14} style={{ color, opacity: 0.8 }} className="flex-shrink-0" />
+      <div>
+        <p className="text-xl font-bold leading-none font-mono" style={{ color }}>
+          {String(value).padStart(2, '0')}
+        </p>
+        <p className="text-[11px] text-orbital-subtle mt-0.5 tracking-wider font-telemetry">{label}</p>
+      </div>
+    </div>
+  )
+}
+
+function ScopeSelect({ icon: Icon, value, onChange, options }) {
+  return (
+    <div className="relative">
+      <Icon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-orbital-subtle pointer-events-none" />
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="text-xs pl-7 pr-3 py-2 bg-orbital-surface border border-orbital-border text-orbital-text rounded appearance-none cursor-pointer hover:border-orbital-chrome transition-colors"
+        style={{ minWidth: 140 }}
+      >
+        {options.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
     </div>
   )
 }
