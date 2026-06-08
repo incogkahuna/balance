@@ -258,9 +258,22 @@ export function GravMap() {
               so users moving between tabs don't relearn. */}
           <Toolbar filter={filter} setFilter={setFilter} />
 
-          {/* 3D scene — background is the nebula skybox now; the div bg
-              is just a fallback while the scene is mounting. */}
-          <div className="relative" style={{ background: '#05060a', height: '60vh', minHeight: 420 }}>
+          {/* 3D scene + side drawer — flex layout so the drawer takes a
+              fixed slice of the LEFT and the canvas resizes to fill the
+              remainder. Avoids any overlap between the production details
+              panel and the planets. */}
+          <div className="relative flex" style={{ background: '#05060a', height: '60vh', minHeight: 420 }}>
+            <ProductionDrawer
+              production={clickedFullProd}
+              conflicts={clickedConflicts}
+              onClose={() => setClickedProd(null)}
+              onOpenFull={() => {
+                const id = clickedProd
+                setClickedProd(null)
+                if (id) navigate(`/productions/${id}`)
+              }}
+            />
+            <div className="flex-1 relative min-w-0">
             <Canvas
               camera={{ position: [0, 6, 14], fov: 50 }}
               dpr={[1, 2]}
@@ -372,41 +385,6 @@ export function GravMap() {
                     )
                   })}
 
-                  {/* In-scene HUD panel — anchored to the clicked planet's
-                      ring position so it rotates WITH the ring as the user
-                      scrubs through time. Renders HTML via drei <Html> so
-                      we get all the readable typography + interactivity of
-                      DOM, but anchored in 3D space. */}
-                  {clickedProd && clickedFullProd && prodPositions.get(clickedProd) && (
-                    <group position={prodPositions.get(clickedProd)}>
-                      {/* Faint glow line from planet to panel anchor so the
-                          link between them is obvious as the ring rotates. */}
-                      <Line
-                        points={[[0, 0, 0], [1.4, 1.6, 0]]}
-                        color={clickedFullProd.cardColor || '#60a5fa'}
-                        opacity={0.55}
-                        transparent
-                        lineWidth={1}
-                      />
-                      <Html
-                        position={[1.4, 1.6, 0]}
-                        distanceFactor={9}
-                        zIndexRange={[100, 0]}
-                        style={{ pointerEvents: 'auto' }}
-                      >
-                        <PlanetInfoPanel
-                          production={clickedFullProd}
-                          conflicts={clickedConflicts}
-                          onClose={() => setClickedProd(null)}
-                          onOpenFull={() => {
-                            const id = clickedProd
-                            setClickedProd(null)
-                            if (id) navigate(`/productions/${id}`)
-                          }}
-                        />
-                      </Html>
-                    </group>
-                  )}
                 </ProductionRing>
 
                 {/* Camera controls — drag to orbit, scroll to zoom. Limits
@@ -450,6 +428,7 @@ export function GravMap() {
               <p className="font-telemetry text-[9px] tracking-wider text-orbital-dim text-right">
                 DRAG TO ORBIT · SCROLL TO ZOOM
               </p>
+            </div>
             </div>
           </div>
 
@@ -577,12 +556,54 @@ function ProductionRing({ targetRotation, children }) {
   return <group ref={groupRef}>{children}</group>
 }
 
-// ── PlanetInfoPanel — holographic readout rendered next to a clicked planet
-// via drei <Html>. Lives inside the rotating ring group so it follows the
-// planet as the user scrubs through time. Styled to read as a sci-fi HUD
-// rather than a flat web modal — translucent dark panel, glowing border in
-// the production's accent colour, mono telemetry typography. ───────────────
-function PlanetInfoPanel({ production, conflicts, onClose, onOpenFull }) {
+// ── ProductionDrawer — full-height left-side panel that slides in when a
+// planet is clicked. Replaces the previous in-scene <Html> popup so the
+// production details no longer overlap the planets. Lives in the flex
+// row alongside the canvas; r3f's ResizeObserver catches the resulting
+// canvas width change and the scene reflows automatically.
+//
+// Same hologram aesthetic as before (translucent dark, accent border,
+// corner brackets, telemetry typography) — just laid out vertically as a
+// full-height drawer. Slides in/out with a CSS transform transition.
+// ─────────────────────────────────────────────────────────────────────────
+function ProductionDrawer({ production, conflicts, onClose, onOpenFull }) {
+  const open = !!production
+  // Render a width-collapsed container when no prod is selected so the
+  // flex row reflows cleanly to give the canvas full width. Animated via
+  // CSS transition on width + translateX for the slide.
+  const accent = production?.cardColor || '#60a5fa'
+  return (
+    <div
+      style={{
+        width:      open ? 340 : 0,
+        minWidth:   open ? 340 : 0,
+        transition: 'width 220ms ease-out, min-width 220ms ease-out',
+        overflow:   'hidden',
+        position:   'relative',
+        height:     '100%',
+        background: 'linear-gradient(180deg, rgba(10,12,16,0.95), rgba(10,12,16,0.88))',
+        borderRight: open ? `1px solid ${accent}55` : '1px solid transparent',
+        boxShadow: open ? `8px 0 24px rgba(0,0,0,0.4), inset -1px 0 0 ${accent}22` : 'none',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+      }}
+    >
+      {open && (
+        <ProductionDrawerInner
+          production={production}
+          conflicts={conflicts}
+          onClose={onClose}
+          onOpenFull={onOpenFull}
+        />
+      )}
+    </div>
+  )
+}
+
+// The actual contents of the drawer. Kept as a separate component so the
+// expand/collapse animation on the wrapper doesn't fight with React's
+// internal state for the inner controls.
+function ProductionDrawerInner({ production, conflicts, onClose, onOpenFull }) {
   const p = production
   const accent = p.cardColor || '#60a5fa'
 
@@ -617,48 +638,47 @@ function PlanetInfoPanel({ production, conflicts, onClose, onOpenFull }) {
 
   return (
     <div
-      // Fixed width gets scaled by Html distanceFactor on the parent so the
-      // panel "shrinks/grows" with camera distance — feels like a real 3D
-      // hologram rather than a flat overlay.
       style={{
-        width: 280,
-        background: 'linear-gradient(180deg, rgba(10,12,16,0.92), rgba(10,12,16,0.85))',
-        border: `1px solid ${accent}66`,
-        boxShadow: `0 0 24px ${accent}30, inset 0 0 24px rgba(0,0,0,0.3)`,
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
         color: 'var(--orbital-text)',
-        fontFamily: 'inherit',
         position: 'relative',
         userSelect: 'none',
       }}
     >
-      {/* Corner glyphs — sci-fi panel chrome */}
-      <span style={{ position: 'absolute', top: -1, left: -1, width: 10, height: 10, borderTop: `1px solid ${accent}`, borderLeft: `1px solid ${accent}` }} />
-      <span style={{ position: 'absolute', top: -1, right: -1, width: 10, height: 10, borderTop: `1px solid ${accent}`, borderRight: `1px solid ${accent}` }} />
-      <span style={{ position: 'absolute', bottom: -1, left: -1, width: 10, height: 10, borderBottom: `1px solid ${accent}`, borderLeft: `1px solid ${accent}` }} />
-      <span style={{ position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderBottom: `1px solid ${accent}`, borderRight: `1px solid ${accent}` }} />
+      {/* Subtle accent edge running down the right side — visually
+          separates drawer from canvas in the production's colour. */}
+      <span
+        style={{
+          position: 'absolute', top: 0, right: 0, bottom: 0,
+          width: 2, background: `linear-gradient(180deg, ${accent}99, ${accent}11)`,
+          pointerEvents: 'none',
+        }}
+      />
 
-      {/* Header strap — name + close */}
+      {/* Header strap — type label, name, client, close */}
       <div
         style={{
-          padding: '8px 10px',
+          padding: '12px 14px',
           borderBottom: `1px solid ${accent}33`,
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: 8,
+          flexShrink: 0,
         }}
       >
         <div style={{ minWidth: 0, flex: 1 }}>
-          <p style={{ fontSize: 9, letterSpacing: '0.22em', color: accent, margin: 0, fontWeight: 600 }}>
+          <p style={{ fontSize: 9, letterSpacing: '0.24em', color: accent, margin: 0, fontWeight: 600 }}>
             {p.productionType || 'PRODUCTION'}
           </p>
-          <p style={{ fontSize: 14, fontWeight: 600, margin: '2px 0 0', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <p style={{ fontSize: 18, fontWeight: 700, margin: '4px 0 0', lineHeight: 1.2, color: '#fff' }}>
             {p.name}
           </p>
           {p.client && (
-            <p style={{ fontSize: 11, color: 'var(--orbital-subtle)', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <p style={{ fontSize: 12, color: 'var(--orbital-subtle)', margin: '4px 0 0' }}>
               {p.client}
             </p>
           )}
@@ -666,124 +686,152 @@ function PlanetInfoPanel({ production, conflicts, onClose, onOpenFull }) {
         <button
           onClick={onClose}
           style={{
-            padding: 4, background: 'transparent', border: `1px solid ${accent}44`,
+            padding: 6, background: 'transparent', border: `1px solid ${accent}44`,
             color: 'var(--orbital-subtle)', cursor: 'pointer', display: 'flex',
+            flexShrink: 0,
           }}
           title="Close"
         >
-          <X size={11} />
+          <X size={12} />
         </button>
       </div>
 
-      {/* Status + countdown row */}
-      <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span
-          style={{
-            fontSize: 9, letterSpacing: '0.18em', padding: '2px 6px',
-            color: '#fff', background: accent, fontWeight: 600,
-          }}
-        >
-          {p.status?.toUpperCase()}
-        </span>
-        {countdown && (
-          <span style={{ fontSize: 11, fontFamily: 'Space Mono, monospace', color: countdown.color, fontVariantNumeric: 'tabular-nums' }}>
-            {countdown.label}<span style={{ color: 'var(--orbital-subtle)', fontSize: 9, marginLeft: 4 }}>{countdown.sub}</span>
+      {/* Scrollable body for everything else — keeps the header strap +
+          footer CTA pinned even if the team list grows long. */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}
+      >
+        {/* Status + countdown */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span
+            style={{
+              fontSize: 10, letterSpacing: '0.2em', padding: '3px 8px',
+              color: '#fff', background: accent, fontWeight: 600,
+            }}
+          >
+            {p.status?.toUpperCase()}
           </span>
-        )}
-      </div>
-
-      {/* Dates */}
-      {p.startDate && (
-        <div style={{ padding: '0 10px 6px', fontSize: 11, color: 'var(--orbital-subtle)', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Space Mono, monospace' }}>
-          <CalIcon size={10} />
-          {format(parseISO(p.startDate), 'MMM d, yyyy')}
-          {p.endDate && ` → ${format(parseISO(p.endDate), 'MMM d, yyyy')}`}
+          {countdown && (
+            <span style={{ fontSize: 12, fontFamily: 'Space Mono, monospace', color: countdown.color, fontVariantNumeric: 'tabular-nums' }}>
+              {countdown.label}<span style={{ color: 'var(--orbital-subtle)', fontSize: 10, marginLeft: 4 }}>{countdown.sub}</span>
+            </span>
+          )}
         </div>
-      )}
 
-      {/* Location */}
-      <div style={{ padding: '0 10px 8px', fontSize: 11, color: 'var(--orbital-subtle)', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <MapPin size={10} />
-        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{location}</span>
-      </div>
-
-      {/* Conflicts — red panel, only when something is double-booked. The
-          loudest visual element in the panel so issues are obvious. */}
-      {hasConflicts && (
-        <div
-          style={{
-            margin: '0 10px 8px', padding: 8,
-            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)',
-          }}
-        >
-          <p style={{ fontSize: 9, letterSpacing: '0.18em', color: '#fca5a5', margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <AlertTriangle size={10} />
-            {conflicts.length} CONFLICT{conflicts.length === 1 ? '' : 'S'}
-          </p>
-          <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none' }}>
-            {conflicts.slice(0, 3).map((c, i) => (
-              <li key={i} style={{ fontSize: 11, color: 'var(--orbital-text)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {c.resourceName} <span style={{ color: 'var(--orbital-subtle)' }}>· also on {c.otherProductionName}</span>
-              </li>
-            ))}
-            {conflicts.length > 3 && (
-              <li style={{ fontSize: 10, color: 'var(--orbital-dim)', marginTop: 2 }}>+ {conflicts.length - 3} more</li>
-            )}
-          </ul>
-        </div>
-      )}
-
-      {/* Team avatars */}
-      {visibleMembers.length > 0 && (
-        <div style={{ padding: '0 10px 8px' }}>
-          <p style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--orbital-dim)', margin: '0 0 4px' }}>TEAM</p>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {visibleMembers.map((u, i) => (
-              <div
-                key={u.id}
-                style={{
-                  width: 22, height: 22, borderRadius: '50%',
-                  background: u.color, color: '#fff', fontSize: 10, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: '2px solid rgba(10,12,16,0.85)',
-                  marginLeft: i === 0 ? 0 : -6,
-                }}
-                title={u.name}
-              >
-                {u.avatar}
-              </div>
-            ))}
-            {overflowMembers > 0 && (
-              <div
-                style={{
-                  width: 22, height: 22, borderRadius: '50%',
-                  background: 'var(--orbital-muted)', color: 'var(--orbital-subtle)',
-                  fontSize: 10, fontWeight: 600,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: '2px solid rgba(10,12,16,0.85)', marginLeft: -6,
-                }}
-              >
-                +{overflowMembers}
-              </div>
-            )}
+        {/* Dates + location stacked */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {p.startDate && (
+            <div style={{ fontSize: 12, color: 'var(--orbital-subtle)', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Space Mono, monospace' }}>
+              <CalIcon size={12} />
+              <span>
+                {format(parseISO(p.startDate), 'MMM d, yyyy')}
+                {p.endDate && ` → ${format(parseISO(p.endDate), 'MMM d, yyyy')}`}
+              </span>
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: 'var(--orbital-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapPin size={12} />
+            <span>{location}</span>
           </div>
         </div>
-      )}
 
-      {/* CTA */}
+        {/* Conflicts — most visually loud element when present */}
+        {hasConflicts && (
+          <div
+            style={{
+              padding: 10,
+              background: 'rgba(239,68,68,0.1)',
+              border: '1px solid rgba(239,68,68,0.45)',
+            }}
+          >
+            <p style={{ fontSize: 10, letterSpacing: '0.18em', color: '#fca5a5', margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={11} />
+              {conflicts.length} CONFLICT{conflicts.length === 1 ? '' : 'S'} · DOUBLE-BOOKED
+            </p>
+            <ul style={{ margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {conflicts.map((c, i) => (
+                <li key={i} style={{ fontSize: 12, color: 'var(--orbital-text)' }}>
+                  <span style={{ fontWeight: 600 }}>{c.resourceName}</span>
+                  <span style={{ color: 'var(--orbital-subtle)' }}> · also on {c.otherProductionName}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Team — full list, not just avatars */}
+        {visibleMembers.length > 0 && (
+          <div>
+            <p style={{ fontSize: 10, letterSpacing: '0.2em', color: 'var(--orbital-dim)', margin: '0 0 8px' }}>TEAM</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {visibleMembers.map(u => (
+                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div
+                    style={{
+                      width: 24, height: 24, borderRadius: '50%',
+                      background: u.color, color: '#fff', fontSize: 11, fontWeight: 600,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {u.avatar}
+                  </div>
+                  <span style={{ fontSize: 12 }}>{u.name}</span>
+                  <span style={{ fontSize: 10, color: 'var(--orbital-dim)', textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>
+                    {u.role}
+                  </span>
+                </div>
+              ))}
+              {overflowMembers > 0 && (
+                <p style={{ fontSize: 11, color: 'var(--orbital-dim)', margin: 0, paddingLeft: 32 }}>
+                  + {overflowMembers} more
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Stats footer — small numeric callouts. Adds info density to
+            justify the full-height drawer real estate. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <Stat label="ADDONS"   value={p.addons?.length || 0} />
+          <Stat label="CONCERNS" value={p.bible?.concerns?.length || 0} />
+        </div>
+      </div>
+
+      {/* CTA — pinned to the bottom */}
       <button
         onClick={onOpenFull}
         style={{
-          width: '100%', padding: '8px 10px',
+          width: '100%', padding: '12px 14px',
           borderTop: `1px solid ${accent}33`,
-          background: `linear-gradient(90deg, ${accent}25, ${accent}10)`,
-          color: accent, fontSize: 11, fontWeight: 600,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          cursor: 'pointer', border: 'none', letterSpacing: '0.1em',
+          background: `linear-gradient(90deg, ${accent}28, ${accent}12)`,
+          color: accent, fontSize: 12, fontWeight: 600,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          cursor: 'pointer', border: 'none', letterSpacing: '0.12em',
+          flexShrink: 0,
         }}
       >
-        VIEW FULL PAGE <ArrowRight size={11} />
+        VIEW FULL PAGE <ArrowRight size={12} />
       </button>
+    </div>
+  )
+}
+
+function Stat({ label, value }) {
+  return (
+    <div style={{ padding: 8, border: '1px solid var(--orbital-border)', background: 'rgba(255,255,255,0.02)' }}>
+      <p style={{ fontSize: 9, letterSpacing: '0.2em', color: 'var(--orbital-dim)', margin: 0 }}>{label}</p>
+      <p style={{ fontSize: 18, fontWeight: 700, color: '#fff', margin: '4px 0 0', fontFamily: 'Space Mono, monospace' }}>
+        {String(value).padStart(2, '0')}
+      </p>
     </div>
   )
 }
