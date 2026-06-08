@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor } from 'lucide-react'
+import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor, Bug } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
 import { DevProfileSwitcher } from '../dev/DevProfileSwitcher.jsx'
@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { to: '/analytics',   icon: BarChart3,        label: 'Analytics',   adminOnly: true  },
   { to: '/coming-soon', icon: Rocket,         label: 'Coming Soon'  },
   { to: '/resources',           icon: Sparkles, label: 'Resources'   },
+  { to: '/feedback',    icon: Bug,              label: 'Bugs & Ideas' },
 ]
 
 export function Sidebar() {

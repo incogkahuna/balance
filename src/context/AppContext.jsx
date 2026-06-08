@@ -1,5 +1,6 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { USERS, LED_WALLS_SEED, createWallAssignment } from '../data/models.js'
+import { FEEDBACK_STATUS } from '../data/models.js'
 import { useAuth } from './AuthContext.tsx'
 import {
   listProductions as listProductionsApi,
@@ -67,6 +68,25 @@ export function AppProvider({ children }) {
       window.localStorage.setItem(LED_WALLS_KEY, JSON.stringify(ledWalls))
     } catch { /* quota / private mode — ignore */ }
   }, [ledWalls])
+
+  // ─── Feedback items (Bugs & Ideas) ──────────────────────────────────────────
+  // Same localStorage-backed pattern as LED walls; port to Supabase when
+  // the data model proves stable.
+  const FEEDBACK_KEY = 'balance_feedback_v1'
+  const [feedbackItems, setFeedbackItemsState] = useState(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = window.localStorage.getItem(FEEDBACK_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : []
+    } catch { return [] }
+  })
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FEEDBACK_KEY, JSON.stringify(feedbackItems))
+    } catch { /* noop */ }
+  }, [feedbackItems])
 
   // ─── Dev profile switcher ──────────────────────────────────────────────────
   // In dev only, allows overriding `currentUser` to any of the five known
@@ -738,6 +758,29 @@ export function AppProvider({ children }) {
     }))
   }, [currentUser])
 
+  // ─── Feedback CRUD ──────────────────────────────────────────────────────────
+  const addFeedbackItem = useCallback((item) => {
+    setFeedbackItemsState(prev => [
+      {
+        ...item,
+        submittedBy: item.submittedBy || currentUser?.id || '',
+        submittedByName: item.submittedByName || currentUser?.name || 'Anonymous',
+        submittedAt: item.submittedAt || new Date().toISOString(),
+      },
+      ...prev,
+    ])
+  }, [currentUser])
+
+  const updateFeedbackItem = useCallback((id, patch) => {
+    setFeedbackItemsState(prev => prev.map(f =>
+      f.id === id ? { ...f, ...patch, updatedAt: new Date().toISOString() } : f
+    ))
+  }, [])
+
+  const deleteFeedbackItem = useCallback((id) => {
+    setFeedbackItemsState(prev => prev.filter(f => f.id !== id))
+  }, [])
+
   const value = {
     // Auth
     currentUser,
@@ -816,6 +859,12 @@ export function AppProvider({ children }) {
     updateWallAssignment,
     unassignWall,
     syncProductionWallAssignment,
+
+    // Bugs & Ideas
+    feedbackItems,
+    addFeedbackItem,
+    updateFeedbackItem,
+    deleteFeedbackItem,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

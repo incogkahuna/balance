@@ -378,6 +378,40 @@ export function createWallAssignment(overrides = {}) {
 
 // Seed inventory — three real-ish Orbital walls so the page is populated on
 // first load. Replace with real spec once Danny audits.
+// ─── Feedback (Bugs & Ideas) ──────────────────────────────────────────────────
+// User-submitted reports — bugs to fix and feature requests. localStorage
+// backed for v1 like LED walls; port to Supabase when the shape's proved.
+// Separate from production-level "feedback" (the debrief that lives on each
+// Production record); this is studio-app-level feedback about the tool.
+
+export const FEEDBACK_KIND = {
+  BUG:  'bug',
+  IDEA: 'idea',
+}
+
+export const FEEDBACK_STATUS = {
+  NEW:         'New',
+  ACKNOWLEDGED:'Acknowledged',
+  IN_PROGRESS: 'In Progress',
+  SHIPPED:     'Shipped',
+  WONT_FIX:    "Won't Fix",
+}
+
+export function createFeedbackItem(overrides = {}) {
+  return {
+    id: crypto.randomUUID(),
+    kind: FEEDBACK_KIND.IDEA,
+    title: '',
+    description: '',
+    status: FEEDBACK_STATUS.NEW,
+    submittedBy: '',         // currentUser.id
+    submittedByName: '',     // snapshot at submit time (legacy users can't be looked up later)
+    submittedAt: new Date().toISOString(),
+    resolutionNote: '',      // admin-set when status moves to Shipped / Won't Fix
+    ...overrides,
+  }
+}
+
 export const LED_WALLS_SEED = [
   createLedWall({
     id: 'wall-main-volume',
