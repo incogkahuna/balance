@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useApp } from '../context/AppContext.jsx'
+import { USERS } from '../data/models.js'
 
 export function LoginPage() {
   const { session, loading, signInWithGoogle } = useAuth()
+  const { currentUser, setDevViewAs } = useApp()
+  const navigate = useNavigate()
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -19,6 +23,18 @@ export function LoginPage() {
 
   if (session) {
     return <Navigate to="/dashboard" replace />
+  }
+
+  // DEV bypass — if a devViewAs impersonation is already set in localStorage,
+  // currentUser will be non-null even without a real session. Send them
+  // straight to the dashboard so they don't get stuck on this login page.
+  if (import.meta.env.DEV && currentUser) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  const handleDevQuickPick = (userId: string) => {
+    setDevViewAs(userId)
+    navigate('/dashboard')
   }
 
   const handleSignIn = async () => {
@@ -64,6 +80,47 @@ export function LoginPage() {
           <br />
           New here? Ask an admin to add you to the team.
         </p>
+
+        {/* DEV-only quick login — bypasses OAuth entirely. Useful on
+            localhost where Supabase's redirect URL isn't whitelisted, or
+            for impersonating any team member to test role-gated UI. Never
+            renders in a production build. */}
+        {import.meta.env.DEV && (
+          <div
+            className="mt-8 p-4 rounded-xl"
+            style={{
+              background: 'rgba(251,191,36,0.06)',
+              border: '1px dashed rgba(251,191,36,0.45)',
+            }}
+          >
+            <p className="font-telemetry text-[10px] tracking-[0.22em] text-amber-400 mb-2 text-center">
+              DEV BYPASS — LOCALHOST ONLY
+            </p>
+            <p className="text-[11px] text-orbital-subtle mb-3 text-center">
+              Pick a team member to enter as. Use the sidebar switcher to swap later.
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {USERS.map(u => (
+                <button
+                  key={u.id}
+                  onClick={() => handleDevQuickPick(u.id)}
+                  className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-orbital-surface border border-orbital-border hover:border-amber-500/50 hover:bg-orbital-muted transition-colors text-left"
+                >
+                  <span
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                    style={{ backgroundColor: u.color }}
+                  >
+                    {u.avatar}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-orbital-text truncate">{u.name}</p>
+                    <p className="text-[10px] text-orbital-dim uppercase tracking-wider">{u.role}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <p className="mt-12 text-xs text-orbital-muted text-center">

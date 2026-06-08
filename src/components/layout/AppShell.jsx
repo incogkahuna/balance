@@ -35,7 +35,16 @@ export function AppShell() {
     )
   }
 
-  if (!session || !currentUser) {
+  // ── DEV bypass ─────────────────────────────────────────────────────────────
+  // Localhost dev should never bounce users to /login when their localStorage
+  // already has a dev impersonation set. This lets devs work without going
+  // through real Google OAuth (which redirects to whatever Supabase's
+  // Site URL is — usually Vercel — making localhost OAuth flow useless
+  // unless the localhost URL is whitelisted in the Supabase dashboard).
+  // In dev, currentUser is computed from the devViewAs override even when
+  // no real session exists, so we just need to skip the auth gate here.
+  const isDevBypass = import.meta.env.DEV && currentUser
+  if (!isDevBypass && (!session || !currentUser)) {
     return <Navigate to="/login" replace />
   }
 
