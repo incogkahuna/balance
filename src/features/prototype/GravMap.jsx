@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Html, Line } from '@react-three/drei'
 import * as THREE from 'three'
-import { format } from 'date-fns'
+import { format, parseISO, differenceInCalendarDays } from 'date-fns'
+import { MapPin, Calendar as CalIcon, AlertTriangle, ArrowRight, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
+import { USERS, TASK_STATUS } from '../../data/models.js'
 import { MiniCalendar } from '../../components/ui/MiniCalendar.jsx'
-import { ProductionQuickView } from '../../components/productions/ProductionQuickView.jsx'
 import { usePrototypeData } from './dataSource.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -288,6 +289,42 @@ export function GravMap() {
                       )
                     })
                   })}
+
+                  {/* In-scene HUD panel — anchored to the clicked planet's
+                      ring position so it rotates WITH the ring as the user
+                      scrubs through time. Renders HTML via drei <Html> so
+                      we get all the readable typography + interactivity of
+                      DOM, but anchored in 3D space. */}
+                  {clickedProd && clickedFullProd && prodPositions.get(clickedProd) && (
+                    <group position={prodPositions.get(clickedProd)}>
+                      {/* Faint glow line from planet to panel anchor so the
+                          link between them is obvious as the ring rotates. */}
+                      <Line
+                        points={[[0, 0, 0], [1.4, 1.6, 0]]}
+                        color={clickedFullProd.cardColor || '#60a5fa'}
+                        opacity={0.55}
+                        transparent
+                        lineWidth={1}
+                      />
+                      <Html
+                        position={[1.4, 1.6, 0]}
+                        distanceFactor={9}
+                        zIndexRange={[100, 0]}
+                        style={{ pointerEvents: 'auto' }}
+                      >
+                        <PlanetInfoPanel
+                          production={clickedFullProd}
+                          conflicts={clickedConflicts}
+                          onClose={() => setClickedProd(null)}
+                          onOpenFull={() => {
+                            const id = clickedProd
+                            setClickedProd(null)
+                            if (id) navigate(`/productions/${id}`)
+                          }}
+                        />
+                      </Html>
+                    </group>
+                  )}
                 </ProductionRing>
 
                 {/* Camera controls — drag to orbit, scroll to zoom. Limits
@@ -329,19 +366,6 @@ export function GravMap() {
         </div>
       )}
 
-      {/* Rich quick-view popup — same modal used by Productions cards on
-          mobile + Gantt bar clicks. Renders outside the canvas wrapper
-          so the modal overlays the whole page (not just the 3D area). */}
-      <ProductionQuickView
-        production={clickedFullProd}
-        conflicts={clickedConflicts}
-        onClose={() => setClickedProd(null)}
-        onOpenFull={() => {
-          const id = clickedProd
-          setClickedProd(null)
-          if (id) navigate(`/productions/${id}`)
-        }}
-      />
     </div>
   )
 }
@@ -454,6 +478,217 @@ function ProductionRing({ targetRotation, children }) {
     groupRef.current.rotation.y = current + diff * Math.min(1, dt * 3)
   })
   return <group ref={groupRef}>{children}</group>
+}
+
+// ── PlanetInfoPanel — holographic readout rendered next to a clicked planet
+// via drei <Html>. Lives inside the rotating ring group so it follows the
+// planet as the user scrubs through time. Styled to read as a sci-fi HUD
+// rather than a flat web modal — translucent dark panel, glowing border in
+// the production's accent colour, mono telemetry typography. ───────────────
+function PlanetInfoPanel({ production, conflicts, onClose, onOpenFull }) {
+  const p = production
+  const accent = p.cardColor || '#60a5fa'
+
+  // Countdown — same calc as the ProductionQuickView popup so the language
+  // is consistent across surfaces (T-13 DAYS / DAY 16 OF 17 / +4 DAYS AGO).
+  const countdown = (() => {
+    if (!p.startDate) return null
+    const today = new Date()
+    const start = parseISO(p.startDate)
+    const end   = p.endDate ? parseISO(p.endDate) : start
+    const toStart  = differenceInCalendarDays(start, today)
+    const sinceEnd = differenceInCalendarDays(today, end)
+    if (toStart  > 0) return { label: `T-${toStart}`, sub: toStart  === 1 ? 'DAY'     : 'DAYS',     color: '#60a5fa' }
+    if (sinceEnd > 0) return { label: `+${sinceEnd}`, sub: sinceEnd === 1 ? 'DAY AGO' : 'DAYS AGO', color: '#71717a' }
+    const total = differenceInCalendarDays(end, start) + 1
+    const dayN  = differenceInCalendarDays(today, start) + 1
+    return { label: `DAY ${dayN}`, sub: `OF ${total}`, color: '#34d399' }
+  })()
+
+  const location = p.locationType === 'In-House (Orbital Studios)'
+    ? 'Orbital Studios'
+    : p.locationAddress || 'Mobile'
+
+  const memberIds = (p.assignedMembers || []).map(m => m.userId)
+  const visibleMembers = memberIds
+    .map(id => USERS.find(u => u.id === id))
+    .filter(Boolean)
+    .slice(0, 6)
+  const overflowMembers = Math.max(0, memberIds.length - visibleMembers.length)
+
+  const hasConflicts = conflicts && conflicts.length > 0
+
+  return (
+    <div
+      // Fixed width gets scaled by Html distanceFactor on the parent so the
+      // panel "shrinks/grows" with camera distance — feels like a real 3D
+      // hologram rather than a flat overlay.
+      style={{
+        width: 280,
+        background: 'linear-gradient(180deg, rgba(10,12,16,0.92), rgba(10,12,16,0.85))',
+        border: `1px solid ${accent}66`,
+        boxShadow: `0 0 24px ${accent}30, inset 0 0 24px rgba(0,0,0,0.3)`,
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        color: 'var(--orbital-text)',
+        fontFamily: 'inherit',
+        position: 'relative',
+        userSelect: 'none',
+      }}
+    >
+      {/* Corner glyphs — sci-fi panel chrome */}
+      <span style={{ position: 'absolute', top: -1, left: -1, width: 10, height: 10, borderTop: `1px solid ${accent}`, borderLeft: `1px solid ${accent}` }} />
+      <span style={{ position: 'absolute', top: -1, right: -1, width: 10, height: 10, borderTop: `1px solid ${accent}`, borderRight: `1px solid ${accent}` }} />
+      <span style={{ position: 'absolute', bottom: -1, left: -1, width: 10, height: 10, borderBottom: `1px solid ${accent}`, borderLeft: `1px solid ${accent}` }} />
+      <span style={{ position: 'absolute', bottom: -1, right: -1, width: 10, height: 10, borderBottom: `1px solid ${accent}`, borderRight: `1px solid ${accent}` }} />
+
+      {/* Header strap — name + close */}
+      <div
+        style={{
+          padding: '8px 10px',
+          borderBottom: `1px solid ${accent}33`,
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 8,
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p style={{ fontSize: 9, letterSpacing: '0.22em', color: accent, margin: 0, fontWeight: 600 }}>
+            {p.productionType || 'PRODUCTION'}
+          </p>
+          <p style={{ fontSize: 14, fontWeight: 600, margin: '2px 0 0', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {p.name}
+          </p>
+          {p.client && (
+            <p style={{ fontSize: 11, color: 'var(--orbital-subtle)', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {p.client}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            padding: 4, background: 'transparent', border: `1px solid ${accent}44`,
+            color: 'var(--orbital-subtle)', cursor: 'pointer', display: 'flex',
+          }}
+          title="Close"
+        >
+          <X size={11} />
+        </button>
+      </div>
+
+      {/* Status + countdown row */}
+      <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span
+          style={{
+            fontSize: 9, letterSpacing: '0.18em', padding: '2px 6px',
+            color: '#fff', background: accent, fontWeight: 600,
+          }}
+        >
+          {p.status?.toUpperCase()}
+        </span>
+        {countdown && (
+          <span style={{ fontSize: 11, fontFamily: 'Space Mono, monospace', color: countdown.color, fontVariantNumeric: 'tabular-nums' }}>
+            {countdown.label}<span style={{ color: 'var(--orbital-subtle)', fontSize: 9, marginLeft: 4 }}>{countdown.sub}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Dates */}
+      {p.startDate && (
+        <div style={{ padding: '0 10px 6px', fontSize: 11, color: 'var(--orbital-subtle)', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Space Mono, monospace' }}>
+          <CalIcon size={10} />
+          {format(parseISO(p.startDate), 'MMM d, yyyy')}
+          {p.endDate && ` → ${format(parseISO(p.endDate), 'MMM d, yyyy')}`}
+        </div>
+      )}
+
+      {/* Location */}
+      <div style={{ padding: '0 10px 8px', fontSize: 11, color: 'var(--orbital-subtle)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <MapPin size={10} />
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{location}</span>
+      </div>
+
+      {/* Conflicts — red panel, only when something is double-booked. The
+          loudest visual element in the panel so issues are obvious. */}
+      {hasConflicts && (
+        <div
+          style={{
+            margin: '0 10px 8px', padding: 8,
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)',
+          }}
+        >
+          <p style={{ fontSize: 9, letterSpacing: '0.18em', color: '#fca5a5', margin: 0, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <AlertTriangle size={10} />
+            {conflicts.length} CONFLICT{conflicts.length === 1 ? '' : 'S'}
+          </p>
+          <ul style={{ margin: '4px 0 0', padding: 0, listStyle: 'none' }}>
+            {conflicts.slice(0, 3).map((c, i) => (
+              <li key={i} style={{ fontSize: 11, color: 'var(--orbital-text)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {c.resourceName} <span style={{ color: 'var(--orbital-subtle)' }}>· also on {c.otherProductionName}</span>
+              </li>
+            ))}
+            {conflicts.length > 3 && (
+              <li style={{ fontSize: 10, color: 'var(--orbital-dim)', marginTop: 2 }}>+ {conflicts.length - 3} more</li>
+            )}
+          </ul>
+        </div>
+      )}
+
+      {/* Team avatars */}
+      {visibleMembers.length > 0 && (
+        <div style={{ padding: '0 10px 8px' }}>
+          <p style={{ fontSize: 9, letterSpacing: '0.18em', color: 'var(--orbital-dim)', margin: '0 0 4px' }}>TEAM</p>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {visibleMembers.map((u, i) => (
+              <div
+                key={u.id}
+                style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  background: u.color, color: '#fff', fontSize: 10, fontWeight: 600,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '2px solid rgba(10,12,16,0.85)',
+                  marginLeft: i === 0 ? 0 : -6,
+                }}
+                title={u.name}
+              >
+                {u.avatar}
+              </div>
+            ))}
+            {overflowMembers > 0 && (
+              <div
+                style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  background: 'var(--orbital-muted)', color: 'var(--orbital-subtle)',
+                  fontSize: 10, fontWeight: 600,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '2px solid rgba(10,12,16,0.85)', marginLeft: -6,
+                }}
+              >
+                +{overflowMembers}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* CTA */}
+      <button
+        onClick={onOpenFull}
+        style={{
+          width: '100%', padding: '8px 10px',
+          borderTop: `1px solid ${accent}33`,
+          background: `linear-gradient(90deg, ${accent}25, ${accent}10)`,
+          color: accent, fontSize: 11, fontWeight: 600,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          cursor: 'pointer', border: 'none', letterSpacing: '0.1em',
+        }}
+      >
+        VIEW FULL PAGE <ArrowRight size={11} />
+      </button>
+    </div>
+  )
 }
 
 // ── StudioCore — the central anchor representing Orbital Studios ─────────────
