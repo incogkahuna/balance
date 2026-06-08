@@ -24,7 +24,7 @@ const STEP_INDEX = Object.fromEntries(STEPS.map((s, i) => [s.id, i]))
 // ─── IntakePage ────────────────────────────────────────────────────────────────
 export function IntakePage() {
   const navigate = useNavigate()
-  const { currentUser, addProduction, addTask, updateBible, addMilestone } = useApp()
+  const { currentUser, addProduction, addTask, updateBible, addMilestone, syncProductionWallAssignment } = useApp()
 
   const [stage, setStage] = useState('input')
 
@@ -110,8 +110,20 @@ export function IntakePage() {
     tasks.forEach(task => addTask(task))
     milestones.forEach(m => addMilestone(production.id, m))
 
+    // If the user picked an LED wall in the Review step, auto-create the
+    // matching booking on that wall for the production's date range —
+    // same idempotent sync the regular ProductionForm runs on save.
+    if (production.ledWallId && production.startDate) {
+      syncProductionWallAssignment?.(
+        production.id,
+        production.ledWallId,
+        production.startDate,
+        production.endDate,
+      )
+    }
+
     setStage('finalizing')
-  }, [draft, currentUser, addProduction, addTask, addMilestone])
+  }, [draft, currentUser, addProduction, addTask, addMilestone, syncProductionWallAssignment])
 
   const handleRedirect = useCallback(() => {
     if (createdIdRef.current) {

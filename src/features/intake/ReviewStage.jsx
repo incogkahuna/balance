@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import {
-  Film, User, Calendar, MapPin, Tag, Users, Route,
+  Film, User, Calendar, MapPin, Tag, Users, Route, Monitor,
   AlertTriangle, FileText, CheckCircle, Edit3, Check,
   X, ChevronDown, ChevronUp, Sparkles, Image,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import clsx from 'clsx'
 import { PRODUCTION_TYPE, LOCATION_TYPE } from '../../data/models.js'
+import { useApp } from '../../context/AppContext.jsx'
 import { resolveField, generateRoadmapMilestones, generateStarterTasks } from './intakeUtils.js'
 import { MILESTONE_TYPE_CONFIG } from '../productions/roadmap/roadmapUtils.js'
 
@@ -265,16 +266,36 @@ function MilestonePreviewRow({ milestone }) {
 // ─── ReviewStage ──────────────────────────────────────────────────────────────
 export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onFinalize }) {
   const { extracted, answers, edits, contacts = [], concerns = [], inputs = [], contactEdits = {}, concernEdits = {} } = draft
+  const { ledWalls = [] } = useApp()
 
   const resolve = field => resolveField(field, extracted, answers, edits)
   const r = {
     title:          resolve('title'),
     client:         resolve('client'),
     productionType: resolve('productionType'),
+    ledWallId:      resolve('ledWallId'),
     locationType:   resolve('locationType'),
     locationName:   resolve('locationName'),
     startDate:      resolve('startDate'),
     endDate:        resolve('endDate'),
+  }
+
+  // LED Wall picker options for the EditableField select — same flow as
+  // the wall picker on ProductionForm. "None / Other" maps to empty
+  // string so the dropdown shows it as the unselected state. Picking a
+  // wall sets ledWallId in the draft AND mirrors the wall name into
+  // productionType so downstream display sites that read the type
+  // string keep showing something sensible.
+  const wallOptions = [
+    { value: '', label: 'None / Other' },
+    ...ledWalls.map(w => ({ value: w.id, label: w.name })),
+  ]
+  const handleWallPick = (wallId) => {
+    onEdit('ledWallId', wallId || '')
+    if (wallId) {
+      const w = ledWalls.find(x => x.id === wallId)
+      if (w) onEdit('productionType', w.name)
+    }
   }
 
   // Preview milestones + tasks
@@ -323,13 +344,24 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onF
           placeholder="Enter client name"
           onSave={v => onEdit('client', v)}
         />
+        {/* LED Wall picker — replaces the old Production type dropdown
+            here too (it was the same parallel-list confusion Danny
+            flagged on the regular form). Sourced from /gear walls.
+            "None / Other" preserves the free-form productionType for
+            on-location shoots. Picking a wall also auto-creates a
+            booking assignment after the production is saved
+            (handled in IntakePage.handleFinalize). */}
         <EditableField
-          label="Production type" icon={Tag}
-          value={r.productionType.value ? TYPE_OPTIONS.find(o => o.value === r.productionType.value)?.label : null}
-          confidence={r.productionType.confidence}
-          placeholder="Select type"
-          type="select" options={TYPE_OPTIONS}
-          onSave={v => onEdit('productionType', v)}
+          label="LED Wall" icon={Monitor}
+          value={
+            r.ledWallId.value
+              ? (ledWalls.find(w => w.id === r.ledWallId.value)?.name || 'Unknown wall')
+              : (r.productionType.value || null)
+          }
+          confidence={r.ledWallId.confidence || r.productionType.confidence}
+          placeholder="Pick an LED wall from /gear (or leave blank for none)"
+          type="select" options={wallOptions}
+          onSave={handleWallPick}
         />
         <EditableField
           label="Location type" icon={MapPin}

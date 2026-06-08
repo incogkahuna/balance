@@ -440,6 +440,9 @@ export function buildProductionFromDraft(draft, currentUser) {
   const resolve = field => resolveField(field, extracted, answers, edits)
 
   const productionType = resolve('productionType').value || PRODUCTION_TYPE.OTHER
+  // ledWallId is empty string for "None / Other" (no wall booked).
+  // Normalise to null so the production record has a clean nullable FK.
+  const ledWallId      = resolve('ledWallId').value || null
   const locationType   = resolve('locationType').value   || LOCATION_TYPE.IN_HOUSE
   const startDate      = resolve('startDate').value      || ''
   const endDate        = resolve('endDate').value        || ''
@@ -492,6 +495,7 @@ export function buildProductionFromDraft(draft, currentUser) {
     name:            resolve('title').value   || 'Untitled Production',
     client:          resolve('client').value  || '',
     productionType,
+    ledWallId,
     locationType,
     locationAddress: locationName,
     startDate,
