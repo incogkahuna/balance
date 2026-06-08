@@ -39,6 +39,8 @@ const PROD_RING_RADIUS   = 6
 const PROD_BODY_RADIUS   = 0.55
 const RESOURCE_RADIUS    = 0.12
 const ORBIT_DISTANCE     = 1.6   // resources orbit this far from their production
+const HOME_RADIUS_BASE   = 2.4   // idle resources orbit this far from the studio core
+const HOME_RADIUS_SPREAD = 1.2   // additional radius variance per resource (so the home swarm isn't a flat shell)
 const FILTER_OPTIONS = [
   { id: 'all',    label: 'ALL' },
   { id: 'people', label: 'PEOPLE' },
@@ -78,6 +80,8 @@ export function GravMap() {
   const [filter, setFilter]       = useState('all')
   const [clickedProd, setClickedProd] = useState(null)
   const [calOpen, setCalOpen]         = useState(false)
+  const [hoveredProd, setHoveredProd] = useState(null)
+  const [clickedResource, setClickedResource] = useState(null)
 
   // Days with at least one production scheduled — drives the blue-dot
   // indicators in the MiniCalendar so the user can see "busy" weeks at a
@@ -311,8 +315,11 @@ export function GravMap() {
                       position={prodPositions.get(prod.id)}
                       isClicked={clickedProd === prod.id}
                       isFeatured={featureProdId === prod.id}
+                      isHovered={hoveredProd === prod.id}
                       statusSpeed={speedFor(prod.status)}
                       statusEmissive={emissiveFor(prod.status)}
+                      onHover={() => setHoveredProd(prod.id)}
+                      onUnhover={() => setHoveredProd(h => h === prod.id ? null : h)}
                       onClick={() => setClickedProd(p => p === prod.id ? null : prod.id)}
                     />
                   ))}
@@ -330,25 +337,39 @@ export function GravMap() {
                       />
                     )
                   })}
-                  {filteredResources.map(resource => {
-                    const activeIds = resourceActiveProds.get(resource.id) || []
-                    if (activeIds.length === 0) return null
-                    return activeIds.map((prodId, idx) => {
-                      const prodPos = prodPositions.get(prodId)
-                      if (!prodPos) return null
-                      const isConflict = activeIds.length > 1
-                      const statusSpeed = speedFor(prodStatusById.get(prodId))
-                      return (
-                        <ResourceBody
-                          key={`${resource.id}-${prodId}`}
-                          resource={resource}
-                          productionPos={prodPos}
-                          orbitSeed={resource.id.charCodeAt(0) + idx * 17}
-                          isConflict={isConflict}
-                          statusSpeed={statusSpeed}
-                        />
-                      )
-                    })
+                  {/* Resources — render ALL filtered resources every frame.
+                      Each body lives in one of two states and lerps between
+                      them as the scrubber moves:
+                        - HOME: orbits the studio core (parked / idle)
+                        - AWAY: orbits an active production (committed)
+                      Conflict (>1 active prod) glows red and orbits the
+                      first one. The smooth fly-home effect is the whole
+                      point — you watch each person travel between jobs. */}
+                  {filteredResources.map((resource, idx) => {
+                    const activeIds  = resourceActiveProds.get(resource.id) || []
+                    const isCommitted = activeIds.length > 0
+                    const isConflict  = activeIds.length > 1
+                    const targetProdId = isCommitted ? activeIds[0] : null
+                    const targetPos    = targetProdId ? prodPositions.get(targetProdId) : null
+                    const statusSpeed  = targetProdId
+                      ? speedFor(prodStatusById.get(targetProdId))
+                      : 0.55 // gentle drift while idle
+                    return (
+                      <ResourceBody
+                        key={resource.id}
+                        resource={resource}
+                        targetProdPos={targetPos}
+                        homeIdx={idx}
+                        homeOf={filteredResources.length}
+                        isCommitted={isCommitted}
+                        isConflict={isConflict}
+                        statusSpeed={statusSpeed}
+                        isClicked={clickedResource === resource.id}
+                        onClick={() =>
+                          setClickedResource(r => r === resource.id ? null : resource.id)
+                        }
+                      />
+                    )
                   })}
 
                   {/* In-scene HUD panel — anchored to the clicked planet's
@@ -804,7 +825,7 @@ function StudioCore() {
 // production.logoUrl (or production.client.logoUrl) is populated. The
 // component already accepts a `logoUrl` prop and renders an <img> when
 // present, falling back to initials otherwise.
-function ProductionBody({ prod, position, isClicked, isFeatured, statusSpeed = 1, statusEmissive = 1, onClick }) {
+function ProductionBody({ prod, position, isClicked, isFeatured, isHovered, statusSpeed = 1, statusEmissive = 1, onClick, onHover, onUnhover }) {
   const groupRef = useRef()
   const bodyRef  = useRef()
   const cloudRef = useRef()
@@ -838,11 +859,19 @@ function ProductionBody({ prod, position, isClicked, isFeatured, statusSpeed = 1
     uTime:  { value: 0 },
   }), [seed])
 
-  useFrame((state) => {
+  // Hover/click scale — lerp the whole group's scale so the planet
+  // gently grows on hover and pops on click. Camera-relative bump
+  // doubles as visual confirmation that hit-testing is working.
+  const targetScale = isClicked ? 1.18 : (isHovered ? 1.08 : 1.0)
+  useFrame((state, dt) => {
     if (!groupRef.current) return
     const t = state.clock.elapsedTime
     // Bob the entire planet group (body + atmosphere + clouds together)
     groupRef.current.position.y = Math.sin(t * 0.4 + seed) * 0.15 * statusSpeed
+    // Smoothly approach target scale
+    const cur = groupRef.current.scale.x
+    const ns  = cur + (targetScale - cur) * Math.min(1, dt * 8)
+    groupRef.current.scale.setScalar(ns)
     // Rotate the body and clouds at different rates for parallax
     if (bodyRef.current)  bodyRef.current.rotation.y  += 0.0025 * statusSpeed
     if (cloudRef.current) cloudRef.current.rotation.y += 0.0011 * statusSpeed
@@ -854,7 +883,12 @@ function ProductionBody({ prod, position, isClicked, isFeatured, statusSpeed = 1
   if (!position) return null
 
   return (
-    <group ref={groupRef} position={position}>
+    <group
+      ref={groupRef}
+      position={position}
+      onPointerOver={(e) => { e.stopPropagation(); onHover?.(); document.body.style.cursor = 'pointer' }}
+      onPointerOut={() => { onUnhover?.(); document.body.style.cursor = '' }}
+    >
       {/* Body sphere with procedural shader */}
       <mesh ref={bodyRef} onClick={onClick}>
         <sphereGeometry args={[PROD_BODY_RADIUS, 64, 64]} />
@@ -1107,29 +1141,71 @@ const ATMOSPHERE_FRAG = `
   }
 `
 
-// ── ResourceBody — small orbiting body around its active production ─────────
-function ResourceBody({ resource, productionPos, orbitSeed, isConflict, statusSpeed = 1 }) {
-  const groupRef     = useRef()
-  const conflictRef  = useRef()  // outer halo mesh — pulses on conflicts
-  // Orbit speed + phase derived from a stable seed so each resource gets a
-  // unique-looking orbit but the orbit doesn't reshuffle on re-render.
-  // Multiplied by the parent production's statusSpeed so Active prods
-  // have lively orbits, Completed prods are frozen.
-  const baseSpeed = 0.25 + (orbitSeed % 7) * 0.04
-  const phase     = (orbitSeed % 31) * 0.2
-  const tilt      = ((orbitSeed % 13) / 13 - 0.5) * 0.6
+// ── ResourceBody — orbits its active production OR the studio core ──────────
+// One body per resource regardless of commitment status. Smoothly lerps
+// between HOME (orbit around studio core when idle) and AWAY (orbit around
+// the active production). The "fly home" effect — watching each person
+// travel between jobs as the scrubber moves — is the whole point. Brings
+// the same dynamism the 2D Constellation had to the 3D scene.
+function ResourceBody({ resource, targetProdPos, homeIdx, homeOf, isCommitted, isConflict, statusSpeed = 1, isClicked, onClick }) {
+  const groupRef    = useRef()
+  const sphereRef   = useRef()
+  const conflictRef = useRef()
+  const [hover, setHover] = useState(false)
 
-  useFrame((state) => {
+  // Stable seed from the resource id so the same person always orbits the
+  // same way — no reshuffling on re-render.
+  const orbitSeed = useMemo(() => {
+    let h = 0
+    for (let i = 0; i < resource.id.length; i++) h = (h * 31 + resource.id.charCodeAt(i)) & 0xffff
+    return h
+  }, [resource.id])
+
+  // Home swarm geometry — spread resources around the studio core in a
+  // sphere-ish cloud. Each gets a unique radius + phase + tilt from its
+  // index so the swarm looks busy, not stacked.
+  const homeRadius = HOME_RADIUS_BASE + ((homeIdx % 7) / 6) * HOME_RADIUS_SPREAD
+  const homeTilt   = ((homeIdx % 13) / 13 - 0.5) * 1.8
+
+  const baseSpeed  = 0.25 + (orbitSeed % 7) * 0.04
+  const phase      = (orbitSeed * 0.21) + (homeIdx * 0.83)
+  const awayTilt   = ((orbitSeed % 13) / 13 - 0.5) * 0.6
+
+  // Refs hold the current centre position (lerps between studio core and
+  // the active production). Initialise at home so first paint is sensible.
+  const centerRef = useRef(new THREE.Vector3(0, 0, 0))
+
+  useFrame((state, dt) => {
     if (!groupRef.current) return
     const t = state.clock.elapsedTime
-    const a = phase + t * baseSpeed * statusSpeed
-    groupRef.current.position.x = productionPos[0] + Math.cos(a) * ORBIT_DISTANCE
-    groupRef.current.position.z = productionPos[2] + Math.sin(a) * ORBIT_DISTANCE
-    groupRef.current.position.y = productionPos[1] + Math.sin(a * 0.7) * tilt
-    // Conflict flare — pulse the outer halo so double-booked resources
-    // throb red instead of just glowing static. The closer to scrub, the
-    // louder; here we use a fast oscillation since the user already sees
-    // the halo's at-rest scale.
+
+    // Where should the orbit be centred RIGHT NOW?
+    const desiredCenterX = targetProdPos ? targetProdPos[0] : 0
+    const desiredCenterY = targetProdPos ? targetProdPos[1] : 0
+    const desiredCenterZ = targetProdPos ? targetProdPos[2] : 0
+    // Smooth lerp the centre — this is what produces the fly-out / fly-home
+    // motion when commitments change.
+    const k = Math.min(1, dt * 1.4)
+    centerRef.current.x += (desiredCenterX - centerRef.current.x) * k
+    centerRef.current.y += (desiredCenterY - centerRef.current.y) * k
+    centerRef.current.z += (desiredCenterZ - centerRef.current.z) * k
+
+    // Orbital offset from the (possibly mid-lerp) centre
+    const a       = phase + t * baseSpeed * statusSpeed
+    const radius  = isCommitted ? ORBIT_DISTANCE : homeRadius
+    const tilt    = isCommitted ? awayTilt : homeTilt
+    groupRef.current.position.x = centerRef.current.x + Math.cos(a) * radius
+    groupRef.current.position.z = centerRef.current.z + Math.sin(a) * radius
+    groupRef.current.position.y = centerRef.current.y + Math.sin(a * 0.7) * tilt
+
+    // Hover/click scale bump for the sphere itself
+    if (sphereRef.current) {
+      const targetS = isClicked ? 1.6 : hover ? 1.3 : 1.0
+      const cur = sphereRef.current.scale.x
+      sphereRef.current.scale.setScalar(cur + (targetS - cur) * Math.min(1, dt * 8))
+    }
+
+    // Conflict pulse (existing behaviour)
     if (isConflict && conflictRef.current) {
       const pulse = 1 + Math.sin(t * 4) * 0.35
       conflictRef.current.scale.setScalar(pulse)
@@ -1139,14 +1215,23 @@ function ResourceBody({ resource, productionPos, orbitSeed, isConflict, statusSp
     }
   })
 
+  // Idle resources are dimmer so they don't compete with the committed ones
+  const emissive = isConflict ? 1.4 : (isCommitted ? 0.55 : 0.28)
+  const color    = isConflict ? '#ef4444' : (resource.color || '#94a3b8')
+
   return (
     <group ref={groupRef}>
-      <mesh>
+      <mesh
+        ref={sphereRef}
+        onClick={(e) => { e.stopPropagation(); onClick?.() }}
+        onPointerOver={(e) => { e.stopPropagation(); setHover(true); document.body.style.cursor = 'pointer' }}
+        onPointerOut={() => { setHover(false); document.body.style.cursor = '' }}
+      >
         <sphereGeometry args={[RESOURCE_RADIUS, 16, 16]} />
         <meshStandardMaterial
-          color={isConflict ? '#ef4444' : (resource.color || '#94a3b8')}
-          emissive={isConflict ? '#ef4444' : (resource.color || '#94a3b8')}
-          emissiveIntensity={isConflict ? 1.4 : 0.45}
+          color={color}
+          emissive={color}
+          emissiveIntensity={emissive}
           metalness={0.3}
           roughness={0.5}
         />
@@ -1156,6 +1241,38 @@ function ResourceBody({ resource, productionPos, orbitSeed, isConflict, statusSp
           <sphereGeometry args={[RESOURCE_RADIUS * 2.6, 16, 16]} />
           <meshBasicMaterial color="#ef4444" transparent opacity={0.22} />
         </mesh>
+      )}
+      {/* Name label — shown on hover/click. Tiny billboard pinned just
+          above the resource sphere. */}
+      {(hover || isClicked) && (
+        <Html
+          position={[0, RESOURCE_RADIUS * 2.4, 0]}
+          center
+          distanceFactor={6}
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
+        >
+          <div
+            style={{
+              fontFamily: 'Space Mono, monospace',
+              fontSize: 10,
+              letterSpacing: '0.1em',
+              padding: '2px 6px',
+              background: 'rgba(10,12,16,0.85)',
+              border: `1px solid ${color}88`,
+              color: '#fff',
+              whiteSpace: 'nowrap',
+              boxShadow: `0 0 8px ${color}66`,
+            }}
+          >
+            {resource.name}
+            {isCommitted && (
+              <span style={{ color: '#94a3b8', marginLeft: 6 }}>· {isConflict ? 'CONFLICT' : 'BOOKED'}</span>
+            )}
+            {!isCommitted && (
+              <span style={{ color: '#94a3b8', marginLeft: 6 }}>· IDLE</span>
+            )}
+          </div>
+        </Html>
       )}
     </group>
   )
