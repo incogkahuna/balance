@@ -38,7 +38,7 @@ const STUDIO_CORE_RADIUS = 0.6
 const PROD_RING_RADIUS   = 6
 const PROD_BODY_RADIUS   = 0.55
 const RESOURCE_RADIUS    = 0.12
-const ORBIT_DISTANCE     = 1.6   // resources orbit this far from their production
+const ORBIT_DISTANCE     = 1.0   // resources orbit this far from their production (tightened in iter 6 — closer satellites read more clearly as "this person belongs here")
 const HOME_RADIUS_BASE   = 2.4   // idle resources orbit this far from the studio core
 const HOME_RADIUS_SPREAD = 1.2   // additional radius variance per resource (so the home swarm isn't a flat shell)
 const FILTER_OPTIONS = [
@@ -1290,8 +1290,37 @@ function ResourceBody({ resource, targetProdPos, homeIdx, homeOf, isCommitted, i
           <meshBasicMaterial color="#ef4444" transparent opacity={0.22} />
         </mesh>
       )}
-      {/* Name label — shown on hover/click. Tiny billboard pinned just
-          above the resource sphere. */}
+      {/* Permanent name label — always visible for committed resources
+          orbiting a planet (per Danny: "leave their names written out
+          under the blob"). Idle resources around the studio core stay
+          unlabelled so the home swarm doesn't drown in text; they still
+          reveal their name on hover/click via the richer label below. */}
+      {isCommitted && !hover && !isClicked && (
+        <Html
+          position={[0, -RESOURCE_RADIUS * 2.0, 0]}
+          center
+          distanceFactor={8}
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
+        >
+          <div
+            style={{
+              fontFamily: 'Space Mono, monospace',
+              fontSize: 9,
+              letterSpacing: '0.08em',
+              color: isConflict ? '#fca5a5' : '#e2e8f0',
+              whiteSpace: 'nowrap',
+              textShadow: '0 0 4px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,1)',
+              opacity: 0.85,
+            }}
+          >
+            {resource.name}
+          </div>
+        </Html>
+      )}
+
+      {/* Rich hover/click label — replaces the permanent label when the
+          user is interacting, since this version carries the BOOKED /
+          IDLE / CONFLICT status too. */}
       {(hover || isClicked) && (
         <Html
           position={[0, RESOURCE_RADIUS * 2.4, 0]}
