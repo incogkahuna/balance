@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Html, Line } from '@react-three/drei'
 import * as THREE from 'three'
-import { format, parseISO, differenceInCalendarDays } from 'date-fns'
+import { format, parseISO, differenceInCalendarDays, isSameDay } from 'date-fns'
 import { MapPin, Calendar as CalIcon, AlertTriangle, ArrowRight, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { USERS, TASK_STATUS } from '../../data/models.js'
@@ -43,6 +43,25 @@ const FILTER_OPTIONS = [
   { id: 'people', label: 'PEOPLE' },
   { id: 'gear',   label: 'GEAR' },
 ]
+
+// Per-production-status multipliers — Active prods feel alive, Completed
+// ones freeze, Incoming/Wrap sit somewhere in between. Drives resource
+// orbit speed + production body emissive so the scene reads lifecycle
+// state at a glance without reading labels.
+const STATUS_SPEED = {
+  Active:    1.0,
+  Incoming:  0.45,
+  Wrap:      0.7,
+  Completed: 0.0,
+}
+const STATUS_EMISSIVE = {
+  Active:    1.0,
+  Incoming:  0.85,
+  Wrap:      0.65,
+  Completed: 0.25,
+}
+const speedFor    = (status) => STATUS_SPEED[status]    ?? 1.0
+const emissiveFor = (status) => STATUS_EMISSIVE[status] ?? 1.0
 
 export function GravMap() {
   const data = usePrototypeData()
@@ -147,6 +166,27 @@ export function GravMap() {
     return Math.PI / 2 - entry.angle
   }, [featureProdId, prodLayout])
 
+  // Quick lookup: productionId → status. Used to vary orbit speeds and
+  // emissive intensity per lifecycle state.
+  const prodStatusById = useMemo(() => {
+    const map = new Map()
+    productions.forEach(p => map.set(p.id, p.status || 'Active'))
+    return map
+  }, [productions])
+
+  // Today proximity: 0 when scrubbed far from today, 1 when scrubbed on
+  // today. Drives the TODAY beam's brightness so the user always knows
+  // where "now" sits relative to where they're looking.
+  const todayProximity = useMemo(() => {
+    const now = new Date()
+    const days = Math.abs(differenceInCalendarDays(scrubDate, now))
+    // Full bright within ±2 days, fades to nothing by 14 days out.
+    if (days <= 2) return 1
+    if (days >= 14) return 0
+    return 1 - (days - 2) / 12
+  }, [scrubDate])
+  const scrubIsToday = useMemo(() => isSameDay(scrubDate, new Date()), [scrubDate])
+
   // ── Click-a-planet → ProductionQuickView popup ───────────────────────────
   // Look up the FULL Production record from AppContext since the prototype
   // projection only carries visual fields. Same pattern Gantt uses.
@@ -242,6 +282,12 @@ export function GravMap() {
                     Stays outside the rotating ring group so it never moves. */}
                 <StudioCore />
 
+                {/* TODAY beam — vertical golden pillar through the core whose
+                    brightness tracks how close the scrub date is to today.
+                    Always-on visual reference for "where is now relative to
+                    where I'm looking." */}
+                <TodayBeam proximity={todayProximity} isToday={scrubIsToday} />
+
                 {/* Rotating ring — productions + their spokes + their
                     orbiting resources all live in one group so they rotate
                     together when the scrubber moves. The lerp toward
@@ -254,6 +300,8 @@ export function GravMap() {
                       position={prodPositions.get(prod.id)}
                       isClicked={clickedProd === prod.id}
                       isFeatured={featureProdId === prod.id}
+                      statusSpeed={speedFor(prod.status)}
+                      statusEmissive={emissiveFor(prod.status)}
                       onClick={() => setClickedProd(p => p === prod.id ? null : prod.id)}
                     />
                   ))}
@@ -278,6 +326,7 @@ export function GravMap() {
                       const prodPos = prodPositions.get(prodId)
                       if (!prodPos) return null
                       const isConflict = activeIds.length > 1
+                      const statusSpeed = speedFor(prodStatusById.get(prodId))
                       return (
                         <ResourceBody
                           key={`${resource.id}-${prodId}`}
@@ -285,6 +334,7 @@ export function GravMap() {
                           productionPos={prodPos}
                           orbitSeed={resource.id.charCodeAt(0) + idx * 17}
                           isConflict={isConflict}
+                          statusSpeed={statusSpeed}
                         />
                       )
                     })
@@ -717,21 +767,25 @@ function StudioCore() {
 }
 
 // ── ProductionBody — coloured sphere on the ring with a floating label ──────
-function ProductionBody({ prod, position, isClicked, isFeatured, onClick }) {
+function ProductionBody({ prod, position, isClicked, isFeatured, statusSpeed = 1, statusEmissive = 1, onClick }) {
   const meshRef = useRef()
   // Subtle bob so the bodies feel alive — small enough not to distract.
+  // Bob speed/amplitude scales with status: Active wobbles normally,
+  // Completed sits still, Incoming/Wrap somewhere in between.
   const seed = useMemo(() => prod.id.charCodeAt(0), [prod.id])
   useFrame((state) => {
     if (!meshRef.current) return
     const t = state.clock.elapsedTime
-    meshRef.current.position.y = Math.sin(t * 0.4 + seed) * 0.15
-    meshRef.current.rotation.y += 0.003
+    meshRef.current.position.y = Math.sin(t * 0.4 + seed) * 0.15 * statusSpeed
+    meshRef.current.rotation.y += 0.003 * statusSpeed
   })
   if (!position) return null
   // Featured = closest to the scrub date. Bumps emissive + halo to draw
   // the eye to the production the scrubber is currently spotlighting.
-  const baseEmissive = isClicked ? 1.4 : (isFeatured ? 1.0 : 0.5)
-  const haloOpacity  = isClicked ? 0.20 : (isFeatured ? 0.16 : 0.08)
+  // statusEmissive further dims Completed/Wrap prods so they read as
+  // "less alive" even when not the featured one.
+  const baseEmissive = (isClicked ? 1.4 : (isFeatured ? 1.0 : 0.5)) * statusEmissive
+  const haloOpacity  = (isClicked ? 0.20 : (isFeatured ? 0.16 : 0.08)) * statusEmissive
   return (
     <group position={position}>
       <mesh ref={meshRef} onClick={onClick}>
@@ -772,21 +826,35 @@ function ProductionBody({ prod, position, isClicked, isFeatured, onClick }) {
 }
 
 // ── ResourceBody — small orbiting body around its active production ─────────
-function ResourceBody({ resource, productionPos, orbitSeed, isConflict }) {
-  const groupRef = useRef()
+function ResourceBody({ resource, productionPos, orbitSeed, isConflict, statusSpeed = 1 }) {
+  const groupRef     = useRef()
+  const conflictRef  = useRef()  // outer halo mesh — pulses on conflicts
   // Orbit speed + phase derived from a stable seed so each resource gets a
   // unique-looking orbit but the orbit doesn't reshuffle on re-render.
-  const speed = 0.25 + (orbitSeed % 7) * 0.04
-  const phase = (orbitSeed % 31) * 0.2
-  const tilt  = ((orbitSeed % 13) / 13 - 0.5) * 0.6
+  // Multiplied by the parent production's statusSpeed so Active prods
+  // have lively orbits, Completed prods are frozen.
+  const baseSpeed = 0.25 + (orbitSeed % 7) * 0.04
+  const phase     = (orbitSeed % 31) * 0.2
+  const tilt      = ((orbitSeed % 13) / 13 - 0.5) * 0.6
 
   useFrame((state) => {
     if (!groupRef.current) return
     const t = state.clock.elapsedTime
-    const a = phase + t * speed
+    const a = phase + t * baseSpeed * statusSpeed
     groupRef.current.position.x = productionPos[0] + Math.cos(a) * ORBIT_DISTANCE
     groupRef.current.position.z = productionPos[2] + Math.sin(a) * ORBIT_DISTANCE
     groupRef.current.position.y = productionPos[1] + Math.sin(a * 0.7) * tilt
+    // Conflict flare — pulse the outer halo so double-booked resources
+    // throb red instead of just glowing static. The closer to scrub, the
+    // louder; here we use a fast oscillation since the user already sees
+    // the halo's at-rest scale.
+    if (isConflict && conflictRef.current) {
+      const pulse = 1 + Math.sin(t * 4) * 0.35
+      conflictRef.current.scale.setScalar(pulse)
+      if (conflictRef.current.material) {
+        conflictRef.current.material.opacity = 0.18 + Math.sin(t * 4) * 0.18
+      }
+    }
   })
 
   return (
@@ -796,17 +864,70 @@ function ResourceBody({ resource, productionPos, orbitSeed, isConflict }) {
         <meshStandardMaterial
           color={isConflict ? '#ef4444' : (resource.color || '#94a3b8')}
           emissive={isConflict ? '#ef4444' : (resource.color || '#94a3b8')}
-          emissiveIntensity={isConflict ? 1.2 : 0.45}
+          emissiveIntensity={isConflict ? 1.4 : 0.45}
           metalness={0.3}
           roughness={0.5}
         />
       </mesh>
       {isConflict && (
-        <mesh>
-          <sphereGeometry args={[RESOURCE_RADIUS * 2.4, 16, 16]} />
+        <mesh ref={conflictRef}>
+          <sphereGeometry args={[RESOURCE_RADIUS * 2.6, 16, 16]} />
           <meshBasicMaterial color="#ef4444" transparent opacity={0.22} />
         </mesh>
       )}
+    </group>
+  )
+}
+
+// ── TodayBeam — vertical golden pillar through the studio core whose
+// brightness tracks proximity to today. Always-on visual reference for
+// "where is now relative to where I'm looking." On exactly today it
+// pulses, otherwise it sits steady (just dimmer the farther scrubbed). ───
+function TodayBeam({ proximity, isToday }) {
+  const innerRef = useRef()
+  useFrame((state) => {
+    if (!innerRef.current?.material) return
+    if (isToday) {
+      const pulse = 0.55 + Math.sin(state.clock.elapsedTime * 2.5) * 0.25
+      innerRef.current.material.opacity = pulse
+    } else {
+      innerRef.current.material.opacity = 0.18 + proximity * 0.32
+    }
+  })
+  if (proximity <= 0 && !isToday) return null
+  return (
+    <group position={[0, 0, 0]}>
+      {/* Wide soft outer pillar — the bloom */}
+      <mesh>
+        <cylinderGeometry args={[0.22, 0.22, 40, 16, 1, true]} />
+        <meshBasicMaterial
+          color="#fbbf24"
+          transparent
+          opacity={0.08 + proximity * 0.12}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+      {/* Sharp inner pillar — the core */}
+      <mesh ref={innerRef}>
+        <cylinderGeometry args={[0.045, 0.045, 40, 8]} />
+        <meshBasicMaterial color="#fde68a" transparent opacity={0.4} depthWrite={false} />
+      </mesh>
+      {/* TODAY label above the studio core, billboarded by Html */}
+      <Html position={[0, 1.6, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
+        <div
+          style={{
+            fontFamily: 'Space Mono, monospace',
+            fontSize: 10,
+            letterSpacing: '0.22em',
+            color: '#fde68a',
+            textShadow: '0 0 6px rgba(0,0,0,0.9)',
+            opacity: isToday ? 1 : 0.45 + proximity * 0.55,
+          }}
+        >
+          TODAY
+        </div>
+      </Html>
     </group>
   )
 }

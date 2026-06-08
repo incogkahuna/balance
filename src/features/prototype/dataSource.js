@@ -60,6 +60,9 @@ function toPrototypeProduction(prod, idx) {
     start:   prod.startDate ? new Date(prod.startDate) : new Date(),
     end:     prod.endDate   ? new Date(prod.endDate)   : new Date(),
     summary: [prod.client, prod.productionType].filter(Boolean).join(' · '),
+    // Surface status so visualisations can vary orbit speed / glow per
+    // lifecycle state (Active = lively, Completed = frozen, etc).
+    status:  prod.status || 'Active',
   }
 }
 
