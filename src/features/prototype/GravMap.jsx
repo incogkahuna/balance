@@ -1,9 +1,12 @@
 import { useMemo, useRef, useState, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Html, Line } from '@react-three/drei'
 import * as THREE from 'three'
 import { format } from 'date-fns'
+import { useApp } from '../../context/AppContext.jsx'
 import { MiniCalendar } from '../../components/ui/MiniCalendar.jsx'
+import { ProductionQuickView } from '../../components/productions/ProductionQuickView.jsx'
 import { usePrototypeData } from './dataSource.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,6 +46,12 @@ const FILTER_OPTIONS = [
 export function GravMap() {
   const data = usePrototypeData()
   const { productions, resources, commitments, windowDays, dayIndex, dateAtDayIndex } = data
+  // Full production records from AppContext — needed to feed
+  // ProductionQuickView with the rich shape (roadmap, addons, concerns,
+  // assigned crew, etc). The prototype's projection only has the visual
+  // fields, so we look up the real record by id when a planet is clicked.
+  const { productions: appProductions } = useApp()
+  const navigate = useNavigate()
 
   const [scrubDay, setScrubDay]   = useState(0)
   const [filter, setFilter]       = useState('all')
@@ -136,6 +145,44 @@ export function GravMap() {
     if (!entry) return 0
     return Math.PI / 2 - entry.angle
   }, [featureProdId, prodLayout])
+
+  // ── Click-a-planet → ProductionQuickView popup ───────────────────────────
+  // Look up the FULL Production record from AppContext since the prototype
+  // projection only carries visual fields. Same pattern Gantt uses.
+  const clickedFullProd = useMemo(
+    () => clickedProd ? appProductions.find(p => p.id === clickedProd) : null,
+    [clickedProd, appProductions]
+  )
+
+  // Conflicts for the clicked prod: which resources committed here are also
+  // committed to another production during overlapping dates. Surfaced in
+  // ProductionQuickView's red panel. Lifted from Gantt's same calculation.
+  const clickedConflicts = useMemo(() => {
+    if (!clickedProd) return []
+    const myCs = commitments.filter(c => c.productionId === clickedProd)
+    const out  = []
+    const seen = new Set()
+    for (const c of myCs) {
+      const others = commitments.filter(o =>
+        o.resourceId === c.resourceId &&
+        o.productionId !== clickedProd &&
+        c.start <= o.end && o.start <= c.end
+      )
+      for (const o of others) {
+        const key = `${c.resourceId}:${o.productionId}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        const resource = resources.find(r => r.id === c.resourceId)
+        const otherProd = productions.find(p => p.id === o.productionId)
+        if (!resource || !otherProd) continue
+        out.push({
+          resourceName:        resource.name,
+          otherProductionName: otherProd.name,
+        })
+      }
+    }
+    return out
+  }, [clickedProd, commitments, resources, productions])
 
   const resourceActiveProds = useMemo(() => {
     const map = new Map()
@@ -270,12 +317,6 @@ export function GravMap() {
                 DRAG TO ORBIT · SCROLL TO ZOOM
               </p>
             </div>
-            {clickedProd && (
-              <ClickedProdPanel
-                production={productions.find(p => p.id === clickedProd)}
-                onClose={() => setClickedProd(null)}
-              />
-            )}
           </div>
 
           {/* Scrubber — same time slider language as Gantt + Constellation */}
@@ -287,6 +328,20 @@ export function GravMap() {
           />
         </div>
       )}
+
+      {/* Rich quick-view popup — same modal used by Productions cards on
+          mobile + Gantt bar clicks. Renders outside the canvas wrapper
+          so the modal overlays the whole page (not just the 3D area). */}
+      <ProductionQuickView
+        production={clickedFullProd}
+        conflicts={clickedConflicts}
+        onClose={() => setClickedProd(null)}
+        onOpenFull={() => {
+          const id = clickedProd
+          setClickedProd(null)
+          if (id) navigate(`/productions/${id}`)
+        }}
+      />
     </div>
   )
 }
@@ -518,37 +573,6 @@ function ResourceBody({ resource, productionPos, orbitSeed, isConflict }) {
         </mesh>
       )}
     </group>
-  )
-}
-
-// ── Clicked production overlay panel ────────────────────────────────────────
-function ClickedProdPanel({ production, onClose }) {
-  if (!production) return null
-  return (
-    <div
-      className="absolute top-3 right-3 max-w-[260px] p-3 pointer-events-auto"
-      style={{
-        background: 'rgba(10,12,16,0.85)',
-        border: '1px solid var(--orbital-border)',
-        backdropFilter: 'blur(4px)',
-      }}
-    >
-      <div className="flex items-baseline justify-between gap-2 mb-1">
-        <p className="text-sm font-semibold text-orbital-text truncate">
-          {production.name}
-        </p>
-        <button
-          onClick={onClose}
-          className="font-telemetry text-[9px] tracking-wider text-orbital-subtle hover:text-orbital-text"
-        >
-          ✕
-        </button>
-      </div>
-      <p className="text-[11px] text-orbital-subtle mb-1.5">{production.summary}</p>
-      <p className="font-telemetry text-[9px] tracking-wider text-orbital-dim">
-        {production.code}
-      </p>
-    </div>
   )
 }
 
