@@ -2,6 +2,8 @@ import { useMemo, useRef, useState, Suspense } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Html, Line } from '@react-three/drei'
 import * as THREE from 'three'
+import { format } from 'date-fns'
+import { MiniCalendar } from '../../components/ui/MiniCalendar.jsx'
 import { usePrototypeData } from './dataSource.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,11 +42,37 @@ const FILTER_OPTIONS = [
 
 export function GravMap() {
   const data = usePrototypeData()
-  const { productions, resources, commitments, windowDays, dateAtDayIndex } = data
+  const { productions, resources, commitments, windowDays, dayIndex, dateAtDayIndex } = data
 
   const [scrubDay, setScrubDay]   = useState(0)
   const [filter, setFilter]       = useState('all')
   const [clickedProd, setClickedProd] = useState(null)
+  const [calOpen, setCalOpen]         = useState(false)
+
+  // Days with at least one production scheduled — drives the blue-dot
+  // indicators in the MiniCalendar so the user can see "busy" weeks at a
+  // glance from the picker.
+  const eventDays = useMemo(() => {
+    const set = new Set()
+    productions.forEach(p => {
+      const start = new Date(p.start); start.setHours(12, 0, 0, 0)
+      const end   = new Date(p.end);   end.setHours(12, 0, 0, 0)
+      const cursor = new Date(start)
+      while (cursor <= end) {
+        set.add(format(cursor, 'yyyy-MM-dd'))
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    })
+    return set
+  }, [productions])
+
+  const jumpToDate = (date) => {
+    if (!date) return
+    const idx = dayIndex(date)
+    const clamped = Math.max(0, Math.min(windowDays, idx))
+    setScrubDay(clamped)
+    setCalOpen(false)
+  }
 
   // Filter resources by the active chip. People/Gear/Locations — same
   // language as the 2D Constellation + Gantt so the mental model carries.
@@ -55,19 +83,28 @@ export function GravMap() {
 
   // Compute production positions on a horizontal ring. Evenly spaced by
   // angle; cyclic so the count doesn't matter (unlike the 2D 4-corner
-  // hardcoded layout).
-  const prodPositions = useMemo(() => {
+  // hardcoded layout). Angles stored alongside positions because the ring
+  // rotation calc needs them.
+  const prodLayout = useMemo(() => {
     const map = new Map()
     productions.forEach((prod, i) => {
       const angle = (i / Math.max(productions.length, 1)) * Math.PI * 2
-      map.set(prod.id, [
-        Math.cos(angle) * PROD_RING_RADIUS,
-        0,
-        Math.sin(angle) * PROD_RING_RADIUS,
-      ])
+      map.set(prod.id, {
+        angle,
+        position: [
+          Math.cos(angle) * PROD_RING_RADIUS,
+          0,
+          Math.sin(angle) * PROD_RING_RADIUS,
+        ],
+      })
     })
     return map
   }, [productions])
+  const prodPositions = useMemo(() => {
+    const m = new Map()
+    prodLayout.forEach((v, k) => m.set(k, v.position))
+    return m
+  }, [prodLayout])
 
   // For each resource, which productions are they committed to at the
   // scrub date? Drives both the orbit position and the conflict flare.
@@ -75,6 +112,30 @@ export function GravMap() {
   const activeCommitments = useMemo(() => {
     return commitments.filter(c => c.start <= scrubDate && scrubDate <= c.end)
   }, [commitments, scrubDate])
+
+  // Pick the "feature" production for the scrub date — the one whose date
+  // window midpoint is closest. That production rotates to the front of
+  // the ring so the camera looks straight at it. Per Wilder: "the selected
+  // date comes to the front."
+  const featureProdId = useMemo(() => {
+    let best = null
+    for (const p of productions) {
+      const mid = (p.start.getTime() + p.end.getTime()) / 2
+      const dist = Math.abs(mid - scrubDate.getTime())
+      if (!best || dist < best.dist) best = { id: p.id, dist }
+    }
+    return best?.id || null
+  }, [productions, scrubDate])
+
+  // Target ring rotation that puts the feature production at the front of
+  // the camera. Camera sits at +Z so "front" is the +Z side of the ring
+  // (sin θ = 1 → θ = π/2). Rotating the ring by (π/2 - featureAngle) does it.
+  const targetRingRotation = useMemo(() => {
+    if (!featureProdId) return 0
+    const entry = prodLayout.get(featureProdId)
+    if (!entry) return 0
+    return Math.PI / 2 - entry.angle
+  }, [featureProdId, prodLayout])
 
   const resourceActiveProds = useMemo(() => {
     const map = new Map()
@@ -87,7 +148,14 @@ export function GravMap() {
 
   return (
     <div className="px-3 sm:px-6 py-4 sm:py-5">
-      <Header scrubDate={scrubDate} />
+      <Header
+        scrubDate={scrubDate}
+        calOpen={calOpen}
+        onToggleCal={() => setCalOpen(o => !o)}
+        eventDays={eventDays}
+        onJump={jumpToDate}
+        onCloseCal={() => setCalOpen(false)}
+      />
 
       {productions.length === 0 ? (
         <EmptyState />
@@ -122,57 +190,58 @@ export function GravMap() {
                   speed={0.3}
                 />
 
-                {/* Studio core — represents Orbital Studios at the centre */}
+                {/* Studio core — represents Orbital Studios at the centre.
+                    Stays outside the rotating ring group so it never moves. */}
                 <StudioCore />
 
-                {/* Production bodies — coloured glowing spheres on the ring */}
-                {productions.map(prod => (
-                  <ProductionBody
-                    key={prod.id}
-                    prod={prod}
-                    position={prodPositions.get(prod.id)}
-                    isClicked={clickedProd === prod.id}
-                    onClick={() => setClickedProd(p => p === prod.id ? null : prod.id)}
-                  />
-                ))}
-
-                {/* Connector rings — faint glow connecting studio core to each prod */}
-                {productions.map(prod => {
-                  const pos = prodPositions.get(prod.id)
-                  if (!pos) return null
-                  return (
-                    <Line
-                      key={`spoke-${prod.id}`}
-                      points={[[0, 0, 0], pos]}
-                      color={prod.color}
-                      opacity={0.18}
-                      transparent
-                      lineWidth={1}
+                {/* Rotating ring — productions + their spokes + their
+                    orbiting resources all live in one group so they rotate
+                    together when the scrubber moves. The lerp toward
+                    targetRingRotation happens inside <ProductionRing>. */}
+                <ProductionRing targetRotation={targetRingRotation}>
+                  {productions.map(prod => (
+                    <ProductionBody
+                      key={prod.id}
+                      prod={prod}
+                      position={prodPositions.get(prod.id)}
+                      isClicked={clickedProd === prod.id}
+                      isFeatured={featureProdId === prod.id}
+                      onClick={() => setClickedProd(p => p === prod.id ? null : prod.id)}
                     />
-                  )
-                })}
-
-                {/* Resource bodies — orbit their active production(s).
-                    Filter chip narrows what's rendered without breaking
-                    the commitment math. */}
-                {filteredResources.map(resource => {
-                  const activeIds = resourceActiveProds.get(resource.id) || []
-                  if (activeIds.length === 0) return null
-                  return activeIds.map((prodId, idx) => {
-                    const prodPos = prodPositions.get(prodId)
-                    if (!prodPos) return null
-                    const isConflict = activeIds.length > 1
+                  ))}
+                  {productions.map(prod => {
+                    const pos = prodPositions.get(prod.id)
+                    if (!pos) return null
                     return (
-                      <ResourceBody
-                        key={`${resource.id}-${prodId}`}
-                        resource={resource}
-                        productionPos={prodPos}
-                        orbitSeed={resource.id.charCodeAt(0) + idx * 17}
-                        isConflict={isConflict}
+                      <Line
+                        key={`spoke-${prod.id}`}
+                        points={[[0, 0, 0], pos]}
+                        color={prod.color}
+                        opacity={0.18}
+                        transparent
+                        lineWidth={1}
                       />
                     )
-                  })
-                })}
+                  })}
+                  {filteredResources.map(resource => {
+                    const activeIds = resourceActiveProds.get(resource.id) || []
+                    if (activeIds.length === 0) return null
+                    return activeIds.map((prodId, idx) => {
+                      const prodPos = prodPositions.get(prodId)
+                      if (!prodPos) return null
+                      const isConflict = activeIds.length > 1
+                      return (
+                        <ResourceBody
+                          key={`${resource.id}-${prodId}`}
+                          resource={resource}
+                          productionPos={prodPos}
+                          orbitSeed={resource.id.charCodeAt(0) + idx * 17}
+                          isConflict={isConflict}
+                        />
+                      )
+                    })
+                  })}
+                </ProductionRing>
 
                 {/* Camera controls — drag to orbit, scroll to zoom. Limits
                     keep the camera out of the centre and not too far away. */}
@@ -223,7 +292,7 @@ export function GravMap() {
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
-function Header({ scrubDate }) {
+function Header({ scrubDate, calOpen, onToggleCal, eventDays, onJump, onCloseCal }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-4">
       <div>
@@ -233,16 +302,33 @@ function Header({ scrubDate }) {
         </h1>
         <p className="text-sm text-orbital-subtle mt-0.5">
           Productions orbit the studio core. Resources orbit their active production.
-          Drag to look around; scroll to zoom.
+          Drag to look around; scroll to zoom. Click the date to jump to a specific day.
         </p>
       </div>
-      <div className="sm:text-right">
+      <div className="sm:text-right relative">
         <p className="hud-label mb-1">PLAYHEAD</p>
-        <p className="font-telemetry text-sm text-orbital-text tracking-wider">
+        {/* Clickable playhead — opens a MiniCalendar with blue dots on
+            production days. Picking a date jumps the scrubber AND rotates
+            the production ring so the featured prod for that day faces
+            the camera (handled in GravMap.targetRingRotation). */}
+        <button
+          onClick={onToggleCal}
+          className="font-telemetry text-sm text-orbital-text tracking-wider px-2 py-1 rounded hover:bg-orbital-muted transition-colors whitespace-nowrap"
+          title="Click to jump to a specific date"
+        >
           {scrubDate.toLocaleDateString('en-US', {
             weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
           }).toUpperCase()}
-        </p>
+        </button>
+        {calOpen && (
+          <MiniCalendar
+            selected={scrubDate}
+            eventDays={eventDays}
+            onPick={onJump}
+            onClose={onCloseCal}
+            anchor="right"
+          />
+        )}
       </div>
     </div>
   )
@@ -294,6 +380,27 @@ function Toolbar({ filter, setFilter }) {
   )
 }
 
+// ── ProductionRing — wraps the prods + spokes + resources in a group that
+// smoothly rotates toward a target angle. Driven by the scrub date so the
+// "featured" production for the current day faces the camera. Per Wilder:
+// the selected date should come to the front. ─────────────────────────────
+function ProductionRing({ targetRotation, children }) {
+  const groupRef = useRef()
+  // Track the unwrapped accumulated rotation so we always take the shortest
+  // path to the target (e.g. don't unwind 350° when you could go +10°).
+  useFrame((_, dt) => {
+    if (!groupRef.current) return
+    const current = groupRef.current.rotation.y
+    let diff = targetRotation - current
+    // Normalise diff to (-PI, PI] so the lerp goes the short way.
+    while (diff > Math.PI)  diff -= Math.PI * 2
+    while (diff <= -Math.PI) diff += Math.PI * 2
+    // Smooth easing — small fraction per frame, framerate-independent via dt.
+    groupRef.current.rotation.y = current + diff * Math.min(1, dt * 3)
+  })
+  return <group ref={groupRef}>{children}</group>
+}
+
 // ── StudioCore — the central anchor representing Orbital Studios ─────────────
 function StudioCore() {
   const meshRef = useRef()
@@ -320,7 +427,7 @@ function StudioCore() {
 }
 
 // ── ProductionBody — coloured sphere on the ring with a floating label ──────
-function ProductionBody({ prod, position, isClicked, onClick }) {
+function ProductionBody({ prod, position, isClicked, isFeatured, onClick }) {
   const meshRef = useRef()
   // Subtle bob so the bodies feel alive — small enough not to distract.
   const seed = useMemo(() => prod.id.charCodeAt(0), [prod.id])
@@ -331,6 +438,10 @@ function ProductionBody({ prod, position, isClicked, onClick }) {
     meshRef.current.rotation.y += 0.003
   })
   if (!position) return null
+  // Featured = closest to the scrub date. Bumps emissive + halo to draw
+  // the eye to the production the scrubber is currently spotlighting.
+  const baseEmissive = isClicked ? 1.4 : (isFeatured ? 1.0 : 0.5)
+  const haloOpacity  = isClicked ? 0.20 : (isFeatured ? 0.16 : 0.08)
   return (
     <group position={position}>
       <mesh ref={meshRef} onClick={onClick}>
@@ -338,7 +449,7 @@ function ProductionBody({ prod, position, isClicked, onClick }) {
         <meshStandardMaterial
           color={prod.color}
           emissive={prod.color}
-          emissiveIntensity={isClicked ? 1.2 : 0.55}
+          emissiveIntensity={baseEmissive}
           metalness={0.4}
           roughness={0.4}
         />
@@ -346,7 +457,7 @@ function ProductionBody({ prod, position, isClicked, onClick }) {
       {/* Halo */}
       <mesh>
         <sphereGeometry args={[PROD_BODY_RADIUS * 1.7, 32, 32]} />
-        <meshBasicMaterial color={prod.color} transparent opacity={isClicked ? 0.18 : 0.08} />
+        <meshBasicMaterial color={prod.color} transparent opacity={haloOpacity} />
       </mesh>
       {/* Label — DOM via drei's <Html>, transforms with the camera */}
       <Html
