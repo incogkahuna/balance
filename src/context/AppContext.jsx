@@ -69,6 +69,24 @@ export function AppProvider({ children }) {
     } catch { /* quota / private mode — ignore */ }
   }, [ledWalls])
 
+  // ─── To-Dos ─────────────────────────────────────────────────────────────────
+  // localStorage-backed for v1 like LED walls + feedback. Port to Supabase
+  // once the shape proves out (esp. visibility filtering which will need
+  // proper RLS).
+  const TODOS_KEY = 'balance_todos_v1'
+  const [todos, setTodosState] = useState(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = window.localStorage.getItem(TODOS_KEY)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed : []
+    } catch { return [] }
+  })
+  useEffect(() => {
+    try { window.localStorage.setItem(TODOS_KEY, JSON.stringify(todos)) } catch { /* noop */ }
+  }, [todos])
+
   // ─── Feedback items (Bugs & Ideas) ──────────────────────────────────────────
   // Same localStorage-backed pattern as LED walls; port to Supabase when
   // the data model proves stable.
@@ -758,6 +776,28 @@ export function AppProvider({ children }) {
     }))
   }, [currentUser])
 
+  // ─── To-Dos CRUD ────────────────────────────────────────────────────────────
+  const addToDo = useCallback((todo) => {
+    setTodosState(prev => [
+      {
+        ...todo,
+        createdBy: todo.createdBy || currentUser?.id || '',
+        createdAt: todo.createdAt || new Date().toISOString(),
+      },
+      ...prev,
+    ])
+  }, [currentUser])
+
+  const updateToDo = useCallback((id, patch) => {
+    setTodosState(prev => prev.map(t =>
+      t.id === id ? { ...t, ...patch, updatedAt: new Date().toISOString() } : t
+    ))
+  }, [])
+
+  const deleteToDo = useCallback((id) => {
+    setTodosState(prev => prev.filter(t => t.id !== id))
+  }, [])
+
   // ─── Feedback CRUD ──────────────────────────────────────────────────────────
   const addFeedbackItem = useCallback((item) => {
     setFeedbackItemsState(prev => [
@@ -865,6 +905,12 @@ export function AppProvider({ children }) {
     addFeedbackItem,
     updateFeedbackItem,
     deleteFeedbackItem,
+
+    // To-Dos (daily-scoped, distinct from production tasks)
+    todos,
+    addToDo,
+    updateToDo,
+    deleteToDo,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

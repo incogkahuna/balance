@@ -329,6 +329,44 @@ export function createFeedback(overrides = {}) {
   }
 }
 
+// ─── To-Dos ──────────────────────────────────────────────────────────────────
+// Daily-scoped work items, distinct from production-bound Tasks. Anyone can
+// create one. Default visibility is "shared" (whole salary roster can see it);
+// flip to "direct" for a private item visible only to creator + assignee.
+// Lifecycle is intentionally simple — Open / Done / Cancelled — so they stay
+// lightweight. If something needs the 6-state task workflow, it's a Task.
+
+export const TODO_STATUS = {
+  OPEN:      'open',
+  DONE:      'done',
+  CANCELLED: 'cancelled',
+}
+
+export const TODO_VISIBILITY = {
+  SHARED: 'shared',   // visible to the whole salary roster
+  DIRECT: 'direct',   // visible only to creator + assignee
+}
+
+export function createToDo(overrides = {}) {
+  return {
+    id: crypto.randomUUID(),
+    title: '',
+    description: '',
+    // dueDate is YYYY-MM-DD; defaults to today in the form, but the factory
+    // leaves it blank so we don't accidentally stamp a date when callers
+    // want an undated entry.
+    dueDate: '',
+    assigneeId: '',         // single assignee (legacy USERS id or UUID)
+    createdBy: '',
+    visibility: TODO_VISIBILITY.SHARED,
+    status: TODO_STATUS.OPEN,
+    completedAt: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
 // ─── LED Walls ────────────────────────────────────────────────────────────────
 // Top-level gear-database entity. Scope intentionally narrow for v1: just LED
 // walls + their supporting hardware as a single line (no per-panel/per-

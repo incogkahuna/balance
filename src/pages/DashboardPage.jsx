@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
 import { Film, CheckSquare, AlertTriangle, Clock, ChevronRight } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS, TASK_STATUS, TODO_STATUS, TODO_VISIBILITY, USERS } from '../data/models.js'
 import { StatusBadge, TaskStatusBadge, PriorityBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { UpcomingMilestones } from '../features/productions/roadmap/UpcomingMilestones.jsx'
@@ -46,8 +46,25 @@ function SectionHeader({ label, action }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function DashboardPage() {
-  const { currentUser, productions, tasks } = useApp()
+  const { currentUser, productions, tasks, todos, updateToDo } = useApp()
   const navigate = useNavigate()
+
+  // To-Dos visible to me + due today or overdue (only OPEN ones) — surfaced
+  // on the dashboard so daily ops stay top-of-mind. Mirror of the page-level
+  // visibility filter: shared OR (creator/assignee of a direct one).
+  const myTodaysTodos = (todos || [])
+    .filter(t => t.status === TODO_STATUS.OPEN)
+    .filter(t => {
+      if (t.visibility === TODO_VISIBILITY.SHARED) return true
+      return t.createdBy === currentUser?.id || t.assigneeId === currentUser?.id
+    })
+    .filter(t => t.assigneeId === currentUser?.id)
+    .filter(t => {
+      if (!t.dueDate) return false
+      const d = parseISO(t.dueDate)
+      return isToday(d) || isPast(d)
+    })
+    .sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))
 
   const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
@@ -219,6 +236,63 @@ export function DashboardPage() {
                           </div>
                         )}
                         <StatusBadge status={prod.status} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Today's To-Dos — daily ops, distinct from production-bound Tasks.
+              Surfaces only OPEN to-dos assigned to me with a due date that's
+              today or overdue, so the dashboard answers "what's on my plate
+              right now" rather than my whole future queue. */}
+          <section className="lg:col-span-2">
+            <SectionHeader
+              label="Today's To-Dos"
+              action={
+                <button onClick={() => navigate('/todos')}
+                  className="flex items-center gap-0.5 text-[11px] text-orbital-subtle hover:text-orbital-text transition-colors">
+                  All to-dos <ChevronRight size={12} />
+                </button>
+              }
+            />
+            {myTodaysTodos.length === 0 ? (
+              <div className="card px-4 py-5 text-center">
+                <p className="text-xs text-orbital-subtle">Nothing for today. Drop one on the To-Dos page.</p>
+              </div>
+            ) : (
+              <div className="card divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
+                {myTodaysTodos.slice(0, 5).map(todo => {
+                  const isOverdue = todo.dueDate && isPast(parseISO(todo.dueDate)) && !isToday(parseISO(todo.dueDate))
+                  const creator   = USERS.find(u => u.id === todo.createdBy)
+                  return (
+                    <div
+                      key={todo.id}
+                      className="flex items-center gap-3 px-3 py-2.5 hover:bg-orbital-panel transition-colors"
+                      style={{ borderLeft: `2px solid ${isOverdue ? '#ef4444' : '#a78bfa'}` }}
+                    >
+                      <button
+                        onClick={() => updateToDo(todo.id, {
+                          status: TODO_STATUS.DONE,
+                          completedAt: new Date().toISOString(),
+                        })}
+                        className="text-orbital-subtle hover:text-green-400 transition-colors flex-shrink-0"
+                        title="Mark done"
+                      >
+                        <CheckSquare size={14} />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-orbital-text truncate">{todo.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-orbital-subtle">
+                          {isOverdue
+                            ? <span className="text-red-400 font-mono">overdue · {format(parseISO(todo.dueDate), 'MMM d')}</span>
+                            : <span className="font-mono">today</span>}
+                          {creator && todo.createdBy !== currentUser?.id && (
+                            <span className="text-orbital-dim">· from {creator.name}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )

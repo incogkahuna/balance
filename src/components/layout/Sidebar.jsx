@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor, Bug } from 'lucide-react'
+import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor, Bug, ListChecks } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
 import { DevProfileSwitcher } from '../dev/DevProfileSwitcher.jsx'
@@ -7,6 +7,7 @@ import { DevProfileSwitcher } from '../dev/DevProfileSwitcher.jsx'
 const NAV_ITEMS = [
   { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard'   },
   { to: '/productions', icon: Film,             label: 'Productions' },
+  { to: '/todos',       icon: ListChecks,       label: 'To-Dos'      },
   { to: '/schedule',    icon: Calendar,         label: 'Schedule'    },
   { to: '/team',        icon: UserSquare2,      label: 'Team'        },
   { to: '/contractors', icon: Users,            label: 'Contractors', adminOrSup: true },
