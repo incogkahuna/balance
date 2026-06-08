@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Stars, Html, Line } from '@react-three/drei'
+import { OrbitControls, Stars, Html, Line, Points, PointMaterial } from '@react-three/drei'
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { format, parseISO, differenceInCalendarDays, isSameDay } from 'date-fns'
 import { MapPin, Calendar as CalIcon, AlertTriangle, ArrowRight, X } from 'lucide-react'
@@ -253,7 +254,8 @@ export function GravMap() {
               so users moving between tabs don't relearn. */}
           <Toolbar filter={filter} setFilter={setFilter} />
 
-          {/* 3D scene */}
+          {/* 3D scene — background is the nebula skybox now; the div bg
+              is just a fallback while the scene is mounting. */}
           <div className="relative" style={{ background: '#05060a', height: '60vh', minHeight: 420 }}>
             <Canvas
               camera={{ position: [0, 6, 14], fov: 50 }}
@@ -267,7 +269,15 @@ export function GravMap() {
                 <pointLight position={[10, 15, 10]} intensity={1.1} color="#ffffff" />
                 <pointLight position={[-10, -5, -10]} intensity={0.4} color="#60a5fa" />
 
-                {/* Background starfield */}
+                {/* Nebula skybox — large gradient sphere behind everything
+                    so the void has colour and depth instead of pure black.
+                    Sits inside-out (BackSide) so the camera always reads
+                    its inner surface. */}
+                <NebulaSky />
+
+                {/* Background starfield + drifting dust particles in front
+                    of the nebula. Together they give the scene depth that
+                    bloom + vignette amplify. */}
                 <Stars
                   radius={120}
                   depth={60}
@@ -277,6 +287,7 @@ export function GravMap() {
                   fade
                   speed={0.3}
                 />
+                <DustParticles />
 
                 {/* Studio core — represents Orbital Studios at the centre.
                     Stays outside the rotating ring group so it never moves. */}
@@ -387,6 +398,21 @@ export function GravMap() {
                   maxPolarAngle={Math.PI / 2.1}
                   rotateSpeed={0.6}
                 />
+
+                {/* Post-processing — bloom turns the emissive surfaces
+                    (planets, studio core, today beam, conflict pulses)
+                    into actual glowing light. Vignette darkens the edges
+                    so the centre of the frame feels like a focused
+                    "viewport" rather than a flat canvas. */}
+                <EffectComposer multisampling={0}>
+                  <Bloom
+                    intensity={1.2}
+                    luminanceThreshold={0.15}
+                    luminanceSmoothing={0.85}
+                    mipmapBlur
+                  />
+                  <Vignette offset={0.15} darkness={0.6} eskil={false} />
+                </EffectComposer>
               </Suspense>
             </Canvas>
 
@@ -875,6 +901,119 @@ function ResourceBody({ resource, productionPos, orbitSeed, isConflict, statusSp
           <meshBasicMaterial color="#ef4444" transparent opacity={0.22} />
         </mesh>
       )}
+    </group>
+  )
+}
+
+// ── NebulaSky — large inside-out sphere with a procedural fragment shader
+// that fades between two deep colours and adds soft noise clouds. Sits
+// behind everything so the void reads as "outer space with atmosphere"
+// rather than pure black. ───────────────────────────────────────────────
+function NebulaSky() {
+  const materialRef = useRef()
+  // Plug a simple shader straight into a standard mesh. Two colours
+  // gradient-mixed by world y; soft FBM-ish noise on top so the sky has
+  // texture instead of looking like a flat gradient.
+  const uniforms = useMemo(() => ({
+    uTopColor:    { value: new THREE.Color('#0a0e2a') },
+    uBottomColor: { value: new THREE.Color('#1a0825') },
+    uAccent:      { value: new THREE.Color('#3b1e57') },
+    uTime:        { value: 0 },
+  }), [])
+  useFrame((state) => {
+    if (materialRef.current) materialRef.current.uniforms.uTime.value = state.clock.elapsedTime * 0.04
+  })
+  return (
+    <mesh scale={[-1, 1, 1]}>
+      <sphereGeometry args={[150, 32, 32]} />
+      <shaderMaterial
+        ref={materialRef}
+        uniforms={uniforms}
+        side={THREE.BackSide}
+        depthWrite={false}
+        vertexShader={`
+          varying vec3 vPos;
+          void main() {
+            vPos = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          uniform vec3 uTopColor;
+          uniform vec3 uBottomColor;
+          uniform vec3 uAccent;
+          uniform float uTime;
+          varying vec3 vPos;
+
+          // Cheap value-noise approximation
+          float hash(vec3 p) {
+            return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+          }
+          float noise(vec3 p) {
+            vec3 i = floor(p);
+            vec3 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            float a = hash(i);
+            float b = hash(i + vec3(1.0,0.0,0.0));
+            float c = hash(i + vec3(0.0,1.0,0.0));
+            float d = hash(i + vec3(1.0,1.0,0.0));
+            return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);
+          }
+
+          void main() {
+            vec3 n = normalize(vPos);
+            float t = n.y * 0.5 + 0.5;                    // 0 = bottom, 1 = top
+            vec3 base = mix(uBottomColor, uTopColor, t);
+            // Cloud-ish accent in the middle band
+            float band = smoothstep(0.25, 0.75, t) * (1.0 - smoothstep(0.55, 0.95, t));
+            float cloud = noise(n * 4.0 + vec3(uTime, 0.0, 0.0)) * 0.5
+                        + noise(n * 9.0) * 0.25;
+            vec3 col = base + uAccent * cloud * band * 0.45;
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `}
+      />
+    </mesh>
+  )
+}
+
+// ── DustParticles — slow drifting points across the scene. Gives a sense
+// of motion + depth even when nothing else is happening. Position with a
+// stable seed so reloads don't reshuffle the look. ─────────────────────────
+function DustParticles({ count = 600 }) {
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3)
+    for (let i = 0; i < count; i++) {
+      // Random points in a thick disc around the ring — concentrate them
+      // where the action is rather than out at the skybox.
+      const r     = 8 + Math.random() * 18
+      const theta = Math.random() * Math.PI * 2
+      const y     = (Math.random() - 0.5) * 8
+      arr[i * 3]     = Math.cos(theta) * r
+      arr[i * 3 + 1] = y
+      arr[i * 3 + 2] = Math.sin(theta) * r
+    }
+    return arr
+  }, [count])
+
+  const groupRef = useRef()
+  useFrame((state) => {
+    if (!groupRef.current) return
+    groupRef.current.rotation.y = state.clock.elapsedTime * 0.005
+  })
+
+  return (
+    <group ref={groupRef}>
+      <Points positions={positions} stride={3} frustumCulled={false}>
+        <PointMaterial
+          transparent
+          size={0.06}
+          sizeAttenuation
+          depthWrite={false}
+          color="#94a3b8"
+          opacity={0.4}
+        />
+      </Points>
     </group>
   )
 }
