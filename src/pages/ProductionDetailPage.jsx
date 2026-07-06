@@ -697,7 +697,7 @@ function AddonCard({ addon, canDelete, onDelete }) {
             {showPhotos ? 'Hide' : 'Show'} {addon.damagePhotos.length} damage photo{addon.damagePhotos.length !== 1 ? 's' : ''}
           </button>
           {showPhotos && (
-            <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
               {addon.damagePhotos.map(photo => (
                 photo.storage_path ? (
                   <StoredImage

@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns'
 import { Plus, Trash2, Check, Loader2, Hash, MessageSquare } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES } from '../data/models.js'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
 import {
   listComingSoon, createComingSoon, setComingSoonDone, deleteComingSoon,
   subscribeToComingSoon,
@@ -172,13 +173,14 @@ export function ComingSoonPage() {
 // ── Single row ──────────────────────────────────────────────────────────────
 function ComingSoonRow({ item, canEdit, canDelete, done, onToggleDone, onDelete }) {
   const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const handleToggle = async () => {
     setBusy(true)
     try { await onToggleDone() } finally { setBusy(false) }
   }
-  const handleDelete = async () => {
-    if (!confirm('Delete this item?')) return
+  const handleDelete = () => setConfirmDelete(true)
+  const reallyDelete = async () => {
     setBusy(true)
     try { await onDelete() } catch { setBusy(false) }
   }
@@ -258,6 +260,16 @@ function ComingSoonRow({ item, canEdit, canDelete, done, onToggleDone, onDelete 
           <Trash2 size={13} />
         </button>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={reallyDelete}
+        title="Delete item"
+        message={`Delete "${item.title || item.text || 'this item'}"? This can't be undone.`}
+        confirmLabel="Delete"
+        danger
+      />
     </li>
   )
 }

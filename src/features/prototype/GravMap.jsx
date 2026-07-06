@@ -51,6 +51,16 @@ const FILTER_OPTIONS = [
 // ones freeze, Incoming/Wrap sit somewhere in between. Drives resource
 // orbit speed + production body emissive so the scene reads lifecycle
 // state at a glance without reading labels.
+// Ring colour per lifecycle status — the flat Saturn-style ring around each
+// planet. Matches STATUS_COLOR used on badges across the app so the colour
+// language carries from 2D UI into the 3D scene.
+const STATUS_RING_COLOR = {
+  Active:    '#22c55e',
+  Incoming:  '#3b82f6',
+  Wrap:      '#f59e0b',
+  Completed: '#71717a',
+}
+
 const STATUS_SPEED = {
   Active:    1.0,
   Incoming:  0.45,
@@ -239,6 +249,26 @@ export function GravMap() {
     return map
   }, [activeCommitments])
 
+  // Which productions have at least one resource actively committed at the
+  // scrub date — drives the faint orbit-path ring so occupied planets read
+  // as "inhabited" at a glance.
+  const prodsWithActiveResources = useMemo(() => {
+    const s = new Set()
+    for (const c of activeCommitments) s.add(c.productionId)
+    return s
+  }, [activeCommitments])
+
+  // Legend visibility — open by default on the user's first ever visit so
+  // the visual language is explained up front, collapsed after that
+  // (persisted via localStorage flag). The ? button in the HUD re-opens it.
+  const [legendOpen, setLegendOpen] = useState(() => {
+    try { return !window.localStorage.getItem('balance_gravmap_legend_seen') } catch { return true }
+  })
+  const closeLegend = () => {
+    setLegendOpen(false)
+    try { window.localStorage.setItem('balance_gravmap_legend_seen', '1') } catch { /* noop */ }
+  }
+
   return (
     <div className="px-3 sm:px-6 py-4 sm:py-5">
       <Header
@@ -331,6 +361,7 @@ export function GravMap() {
                       isHovered={hoveredProd === prod.id}
                       statusSpeed={speedFor(prod.status)}
                       statusEmissive={emissiveFor(prod.status)}
+                      hasResources={prodsWithActiveResources.has(prod.id)}
                       onHover={() => setHoveredProd(prod.id)}
                       onUnhover={() => setHoveredProd(h => h === prod.id ? null : h)}
                       onClick={() => setClickedProd(p => p === prod.id ? null : prod.id)}
@@ -415,18 +446,39 @@ export function GravMap() {
               </Suspense>
             </Canvas>
 
-            {/* Overlay HUD — top-left status, bottom-right interaction hint */}
+            {/* Overlay HUD — top-left live status readout */}
             <div className="absolute top-3 left-3 pointer-events-none">
               <p className="font-telemetry text-[9px] tracking-[0.22em] text-orbital-subtle/80">
-                GRAV MAP · ITER 1 · 3D
+                {scrubDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()}
+                {scrubIsToday && <span style={{ color: '#fde68a' }}> · TODAY</span>}
               </p>
               <p className="font-telemetry text-[9px] tracking-wider text-orbital-dim mt-1">
-                {productions.length} PROD · {filteredResources.length} RES · {activeCommitments.length} ACTIVE
+                {productions.length} PRODUCTIONS · {activeCommitments.length} ON THE CLOCK · {filteredResources.length - new Set(activeCommitments.map(c => c.resourceId)).size} AT HOME
               </p>
             </div>
+
+            {/* Legend toggle — top-right of the canvas */}
+            <button
+              onClick={() => legendOpen ? closeLegend() : setLegendOpen(true)}
+              className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center font-telemetry text-[11px] transition-colors"
+              style={{
+                background: legendOpen ? 'rgba(59,130,246,0.25)' : 'rgba(10,12,16,0.7)',
+                border: `1px solid ${legendOpen ? 'rgba(96,165,250,0.7)' : 'var(--orbital-border)'}`,
+                color: legendOpen ? '#93c5fd' : 'var(--orbital-subtle)',
+              }}
+              title="What am I looking at?"
+            >
+              ?
+            </button>
+
+            {/* Legend — explains the visual language. Bottom-left so it
+                doesn't fight the drawer (left side, but drawer is outside
+                the canvas div) or the hint (bottom-right). */}
+            {legendOpen && <MapLegend onClose={closeLegend} />}
+
             <div className="absolute bottom-3 right-3 pointer-events-none">
               <p className="font-telemetry text-[9px] tracking-wider text-orbital-dim text-right">
-                DRAG TO ORBIT · SCROLL TO ZOOM
+                DRAG TO ORBIT · SCROLL TO ZOOM · CLICK A PLANET FOR DETAILS
               </p>
             </div>
             </div>
@@ -873,10 +925,11 @@ function StudioCore() {
 // production.logoUrl (or production.client.logoUrl) is populated. The
 // component already accepts a `logoUrl` prop and renders an <img> when
 // present, falling back to initials otherwise.
-function ProductionBody({ prod, position, isClicked, isFeatured, isHovered, statusSpeed = 1, statusEmissive = 1, onClick, onHover, onUnhover }) {
+function ProductionBody({ prod, position, isClicked, isFeatured, isHovered, statusSpeed = 1, statusEmissive = 1, hasResources = false, onClick, onHover, onUnhover }) {
   const groupRef = useRef()
   const bodyRef  = useRef()
   const cloudRef = useRef()
+  const selectRingRef = useRef()
   const seed = useMemo(() => {
     // Stable per-prod seed from id chars so terrain is unique per planet
     // and doesn't reshuffle on re-render.
@@ -926,9 +979,19 @@ function ProductionBody({ prod, position, isClicked, isFeatured, isHovered, stat
     // Animate shader time uniforms for subtle surface motion
     if (bodyUniforms)  bodyUniforms.uTime.value  = t * 0.03
     if (cloudUniforms) cloudUniforms.uTime.value = t * 0.02
+    // Selection ring — slow spin + gentle opacity pulse so the clicked
+    // planet is unmistakable even in a crowded ring.
+    if (selectRingRef.current) {
+      selectRingRef.current.rotation.z = t * 0.5
+      if (selectRingRef.current.material) {
+        selectRingRef.current.material.opacity = 0.55 + Math.sin(t * 3) * 0.25
+      }
+    }
   })
 
   if (!position) return null
+
+  const ringColor = STATUS_RING_COLOR[prod.status] || '#71717a'
 
   return (
     <group
@@ -973,6 +1036,53 @@ function ProductionBody({ prod, position, isClicked, isFeatured, isHovered, stat
         />
       </mesh>
 
+      {/* Status ring — flat Saturn-style ring tilted slightly off the
+          ecliptic, coloured by lifecycle status (green Active, blue
+          Incoming, amber Wrap, grey Completed). Reads the production's
+          state at a glance without any text, and doubles as visual
+          flair. */}
+      <mesh rotation={[Math.PI / 2 + 0.22, 0, 0.35]}>
+        <ringGeometry args={[PROD_BODY_RADIUS * 1.45, PROD_BODY_RADIUS * 1.7, 64]} />
+        <meshBasicMaterial
+          color={ringColor}
+          transparent
+          opacity={0.4 * statusEmissive}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Orbit-path ring — faint horizontal circle at the resource orbit
+          distance, only when someone is actually committed here. Answers
+          "which planets are inhabited right now" from any zoom level. */}
+      {hasResources && (
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[ORBIT_DISTANCE - 0.015, ORBIT_DISTANCE + 0.015, 64]} />
+          <meshBasicMaterial
+            color={prod.color}
+            transparent
+            opacity={0.16}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
+      {/* Selection ring — bright spinning halo on the clicked planet so
+          the drawer's subject is unmistakable in the scene. */}
+      {isClicked && (
+        <mesh ref={selectRingRef} rotation={[Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[PROD_BODY_RADIUS * 1.9, PROD_BODY_RADIUS * 2.0, 64]} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.6}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
       {/* Client badge — circular plate billboarded at the camera, showing
           the client name's initials. Slot-ready for a real logo when a
           logoUrl is supplied. */}
@@ -983,22 +1093,40 @@ function ProductionBody({ prod, position, isClicked, isFeatured, isHovered, stat
         radius={PROD_BODY_RADIUS}
       />
 
-      {/* Production code — kept above the planet, telemetry-style */}
+      {/* Label — code + production name. The code alone ("SNO-01") was
+          cryptic; the name underneath makes every planet identifiable
+          without hovering or opening the drawer. */}
       <Html
         position={[0, PROD_BODY_RADIUS + 0.55, 0]}
         center
         distanceFactor={10}
         style={{ pointerEvents: 'none', userSelect: 'none' }}
       >
-        <div
-          className="font-telemetry tracking-wider whitespace-nowrap"
-          style={{
-            color: prod.color,
-            fontSize: 10,
-            textShadow: '0 0 4px rgba(0,0,0,0.9)',
-          }}
-        >
-          {prod.code}
+        <div style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+          <div
+            className="font-telemetry tracking-wider"
+            style={{
+              color: prod.color,
+              fontSize: 10,
+              textShadow: '0 0 4px rgba(0,0,0,0.9)',
+            }}
+          >
+            {prod.code}
+          </div>
+          <div
+            style={{
+              color: '#e2e8f0',
+              fontSize: 11,
+              fontWeight: 600,
+              maxWidth: 140,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              textShadow: '0 0 5px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9)',
+              opacity: 0.92,
+            }}
+          >
+            {prod.name}
+          </div>
         </div>
       </Html>
     </group>
@@ -1548,6 +1676,63 @@ function Scrubber({ day, setDay, windowDays, scrubDate }) {
       <span className="font-telemetry text-[10px] tracking-wider text-orbital-text whitespace-nowrap tabular-nums">
         DAY {String(day).padStart(2, '0')} / {windowDays}
       </span>
+    </div>
+  )
+}
+
+// ── MapLegend — explains the Grav Map's visual language ─────────────────────
+// Opens automatically on the user's first visit, collapses after (flag in
+// localStorage), re-openable via the ? button in the HUD. Interpretability
+// is the whole point of this overlay: every glyph in the scene gets one
+// plain-English line.
+function MapLegend({ onClose }) {
+  const rows = [
+    { swatch: <span className="w-3 h-3 rounded-full inline-block" style={{ background: 'radial-gradient(circle at 35% 35%, #60a5fa, #1d4ed8)' }} />, label: 'Planet = a production. Ring colour shows status.' },
+    { swatch: (
+        <span className="inline-flex gap-0.5">
+          <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#22c55e' }} />
+          <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }} />
+          <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#f59e0b' }} />
+          <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#71717a' }} />
+        </span>
+      ), label: 'Ring: green Active · blue Incoming · amber Wrap · grey Done' },
+    { swatch: <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#ec4899', boxShadow: '0 0 6px #ec4899' }} />, label: 'Small orbiting body = crew or gear on that job right now' },
+    { swatch: <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#94a3b8', opacity: 0.6 }} />, label: 'Swarm around the centre = idle at the studio' },
+    { swatch: <span className="w-2.5 h-2.5 rounded-full inline-block animate-pulse" style={{ background: '#ef4444', boxShadow: '0 0 8px #ef4444' }} />, label: 'Pulsing red = double-booked (conflict)' },
+    { swatch: <span className="w-0.5 h-4 inline-block" style={{ background: '#fde68a', boxShadow: '0 0 6px #fbbf24' }} />, label: 'Gold beam = today. Brighter = you’re scrubbed near now.' },
+  ]
+  return (
+    <div
+      className="absolute bottom-3 left-3 w-[300px] p-3"
+      style={{
+        background: 'rgba(10,12,16,0.88)',
+        border: '1px solid var(--orbital-border)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+      }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <p className="font-telemetry text-[9px] tracking-[0.22em] text-orbital-subtle">
+          HOW TO READ THIS MAP
+        </p>
+        <button
+          onClick={onClose}
+          className="font-telemetry text-[10px] text-orbital-dim hover:text-orbital-text transition-colors"
+        >
+          GOT IT
+        </button>
+      </div>
+      <ul className="space-y-1.5">
+        {rows.map((r, i) => (
+          <li key={i} className="flex items-center gap-2.5">
+            <span className="w-8 flex justify-center flex-shrink-0">{r.swatch}</span>
+            <span className="text-[11px] text-orbital-subtle leading-snug">{r.label}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="text-[10px] text-orbital-dim mt-2 pt-2" style={{ borderTop: '1px solid var(--orbital-border)' }}>
+        Drag the timeline below and watch people fly between jobs. Click any planet for full details.
+      </p>
     </div>
   )
 }

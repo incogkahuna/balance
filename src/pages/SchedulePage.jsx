@@ -181,7 +181,10 @@ export function SchedulePage() {
       <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-          <h1 className="text-xl font-bold text-orbital-text">Schedule</h1>
+          <div>
+            <p className="hud-label mb-1">WHO &amp; WHERE</p>
+            <h1 className="text-xl sm:text-2xl font-semibold text-orbital-text tracking-tight">Schedule</h1>
+          </div>
 
           {/* Controls */}
           <div className="flex items-center gap-3 flex-wrap">

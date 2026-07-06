@@ -8,6 +8,7 @@ import { useApp } from '../context/AppContext.jsx'
 import {
   USERS, TODO_STATUS, TODO_VISIBILITY, createToDo,
 } from '../data/models.js'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
 import clsx from 'clsx'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -374,6 +375,7 @@ function Bucket({ label, accent, todos, onToggle, onUpdate, onDelete, currentUse
 
 // ── ToDoRow ─────────────────────────────────────────────────────────────────
 function ToDoRow({ todo, currentUser, onToggle, onUpdate, onDelete }) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const isDone     = todo.status === TODO_STATUS.DONE
   const isOverdue  = !isDone && todo.dueDate && isPast(parseISO(todo.dueDate)) && !isToday(parseISO(todo.dueDate))
   const assignee   = USERS.find(u => u.id === todo.assigneeId)
@@ -487,15 +489,23 @@ function ToDoRow({ todo, currentUser, onToggle, onUpdate, onDelete }) {
       {/* Delete (creator only) */}
       {canDelete && (
         <button
-          onClick={() => {
-            if (confirm(`Delete "${todo.title}"?`)) onDelete()
-          }}
+          onClick={() => setConfirmDelete(true)}
           className="p-1 rounded text-orbital-subtle hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
           title="Delete"
         >
           <Trash2 size={12} />
         </button>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={onDelete}
+        title="Delete to-do"
+        message={`Delete "${todo.title}"? This can't be undone.`}
+        confirmLabel="Delete"
+        danger
+      />
     </div>
   )
 }

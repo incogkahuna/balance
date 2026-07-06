@@ -108,7 +108,10 @@ export function AnalyticsPage() {
   return (
     <div>
       <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
-        <h1 className="text-xl font-bold text-orbital-text mb-6">Analytics</h1>
+        <div className="mb-6">
+          <p className="hud-label mb-1">STUDIO METRICS</p>
+          <h1 className="text-xl sm:text-2xl font-semibold text-orbital-text tracking-tight">Analytics</h1>
+        </div>
 
         {/* Summary cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">

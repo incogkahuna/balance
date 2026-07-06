@@ -46,8 +46,9 @@ function SectionHeader({ label, action }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function DashboardPage() {
-  const { currentUser, productions, tasks, todos, updateToDo } = useApp()
+  const { currentUser, productions, tasks, todos, updateToDo, productionsLoading, tasksLoading } = useApp()
   const navigate = useNavigate()
+  const stillLoading = productionsLoading || tasksLoading
 
   // To-Dos visible to me + due today or overdue (only OPEN ones) — surfaced
   // on the dashboard so daily ops stay top-of-mind. Mirror of the page-level
@@ -161,7 +162,9 @@ export function DashboardPage() {
             />
             {myPendingTasks.length === 0 ? (
               <div className="card px-4 py-5 text-center">
-                <p className="text-xs text-orbital-subtle">No pending tasks.</p>
+                <p className="text-xs text-orbital-subtle">
+                  {stillLoading ? 'Loading…' : 'No pending tasks — you’re clear.'}
+                </p>
               </div>
             ) : (
               <div className="card divide-y" style={{ '--tw-divide-opacity': 1, borderColor: 'var(--orbital-border)' }}>
@@ -206,7 +209,9 @@ export function DashboardPage() {
             />
             {activeProds.length === 0 ? (
               <div className="card px-4 py-5 text-center">
-                <p className="text-xs text-orbital-subtle">No active or incoming productions.</p>
+                <p className="text-xs text-orbital-subtle">
+                  {stillLoading ? 'Loading…' : 'No active or incoming productions.'}
+                </p>
               </div>
             ) : (
               <div className="card divide-y" style={{ borderColor: 'var(--orbital-border)' }}>

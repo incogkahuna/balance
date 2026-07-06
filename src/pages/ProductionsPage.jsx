@@ -42,7 +42,7 @@ const STATUS_ORDER = [
 const MOBILE_BREAKPOINT = 640
 
 export function ProductionsPage() {
-  const { currentUser, productions, addProduction } = useApp()
+  const { currentUser, productions, addProduction, productionsLoading } = useApp()
   const navigate = useNavigate()
   const [search, setSearch]     = useState('')
   const [showCreate, setShowCreate] = useState(false)
@@ -223,7 +223,17 @@ export function ProductionsPage() {
         )}
 
         {/* ── Cards ── */}
-        {sortedFiltered.length === 0 ? (
+        {/* Loading gate first — otherwise the empty state flashes "No
+            productions found" for the second it takes Supabase to answer,
+            which reads as data loss to a nervous user. */}
+        {productionsLoading && sortedFiltered.length === 0 ? (
+          <div className="flex items-center justify-center py-16 gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-indicator-pulse" />
+            <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">
+              LOADING PRODUCTIONS
+            </p>
+          </div>
+        ) : sortedFiltered.length === 0 ? (
           <EmptyState
             icon={Film}
             title="No productions found"

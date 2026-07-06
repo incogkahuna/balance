@@ -46,7 +46,7 @@ const STATUS_RANK = {
 }
 
 export function TasksPage() {
-  const { currentUser, tasks, productions } = useApp()
+  const { currentUser, tasks, productions, tasksLoading } = useApp()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -181,7 +181,10 @@ export function TasksPage() {
     <div>
       <div className="max-w-5xl mx-auto px-3 sm:px-4 lg:px-8 py-5 lg:py-8">
         <div className="flex items-baseline justify-between mb-4 flex-wrap gap-2">
-          <h1 className="text-xl font-bold text-orbital-text">Tasks</h1>
+          <div>
+            <p className="hud-label mb-1">PRODUCTION WORK</p>
+            <h1 className="text-xl sm:text-2xl font-semibold text-orbital-text tracking-tight">Tasks</h1>
+          </div>
           {search || productionId !== 'all' || assigneeId !== 'all' ? (
             <button
               onClick={() => { setSearch(''); setProductionId('all'); setAssigneeId('all') }}
@@ -267,7 +270,14 @@ export function TasksPage() {
         </div>
 
         {/* ── List ────────────────────────────────────────────────────── */}
-        {filtered.length === 0 ? (
+        {tasksLoading && filtered.length === 0 ? (
+          <div className="flex items-center justify-center py-16 gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-indicator-pulse" />
+            <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">
+              LOADING TASKS
+            </p>
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={CheckSquare}
             title="No tasks to show"

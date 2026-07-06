@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
 import {
   ROLES, FEEDBACK_KIND, FEEDBACK_STATUS, createFeedbackItem,
 } from '../data/models.js'
@@ -40,6 +41,7 @@ export function FeedbackPage() {
   const [kindFilter, setKindFilter]   = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [expandedId, setExpandedId]   = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)   // feedback item pending delete confirmation
 
   const filtered = useMemo(() => {
     return feedbackItems
@@ -156,9 +158,7 @@ export function FeedbackPage() {
                 isExpanded={expandedId === item.id}
                 onToggleExpand={() => setExpandedId(id => id === item.id ? null : item.id)}
                 onUpdateStatus={(status) => updateFeedbackItem(item.id, { status })}
-                onDelete={() => {
-                  if (confirm('Delete this report? This cannot be undone.')) deleteFeedbackItem(item.id)
-                }}
+                onDelete={() => setDeleteTarget(item)}
               />
             ))}
           </div>
@@ -171,6 +171,16 @@ export function FeedbackPage() {
           onClose={() => setShowSubmit(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteFeedbackItem(deleteTarget?.id)}
+        title="Delete report"
+        message={`Delete "${deleteTarget?.title}"? This can't be undone.`}
+        confirmLabel="Delete"
+        danger
+      />
     </div>
   )
 }

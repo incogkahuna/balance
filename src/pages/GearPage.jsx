@@ -6,6 +6,7 @@ import {
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, createLedWall, LED_WALL_STATUS } from '../data/models.js'
 import { Modal } from '../components/ui/Modal.jsx'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GearPage — v1 of the gear database, scoped to LED walls per Danny's spec.
@@ -101,6 +102,7 @@ export function GearPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 function WallCard({ wall, productions, isAdmin, onEdit, onAssign }) {
   const { deleteLedWall, unassignWall } = useApp()
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Sort assignments by start date, ascending
   const sorted = useMemo(() => {
@@ -163,13 +165,19 @@ function WallCard({ wall, productions, isAdmin, onEdit, onAssign }) {
     return { label: 'Available', color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', border: 'rgba(96,165,250,0.4)' }
   })()
 
-  const handleDelete = () => {
-    if (!confirm(`Delete "${wall.name}"? Its assignment history will be lost.`)) return
-    deleteLedWall(wall.id)
-  }
+  const handleDelete = () => setConfirmDelete(true)
 
   return (
     <div className="card-elevated p-4 flex flex-col gap-3">
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => deleteLedWall(wall.id)}
+        title="Delete LED wall"
+        message={`Delete "${wall.name}"? Its assignment history will be lost.`}
+        confirmLabel="Delete"
+        danger
+      />
       {/* Header: name + status + actions */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">

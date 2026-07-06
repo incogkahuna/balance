@@ -32,8 +32,10 @@ const CREW_INDEX = (() => {
         userId:   u.id,
         name:     u.name,
         matchedAs: v,
-        // Word-boundary regex, case-insensitive
-        re:       new RegExp(`\\b${v.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i'),
+        // Word-boundary regex, case-insensitive. Escape regex specials in
+        // the name so e.g. a future "J.J." or "(Nitz)" variant can't
+        // produce an invalid pattern and crash this module at load.
+        re:       new RegExp(`\\b${v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
       })
     }
   }
