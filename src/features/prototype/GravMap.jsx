@@ -258,6 +258,37 @@ export function GravMap() {
     return s
   }, [activeCommitments])
 
+  // Drawer subject — prefer the full AppContext record (live mode), but in
+  // seed/demo mode (or before Supabase answers) synthesize a displayable
+  // record from the prototype projection so clicking a planet ALWAYS opens
+  // the drawer instead of silently doing nothing. __demo flags the
+  // synthesized shape so the "View full page" CTA (which needs a real
+  // /productions/:id route) can be suppressed.
+  const clickedProtoProd = useMemo(
+    () => clickedProd ? productions.find(p => p.id === clickedProd) : null,
+    [clickedProd, productions]
+  )
+  const drawerProduction = useMemo(() => {
+    if (clickedFullProd) return clickedFullProd
+    if (!clickedProtoProd) return null
+    const pp = clickedProtoProd
+    const iso = (d) => {
+      try { return format(d, 'yyyy-MM-dd') } catch { return '' }
+    }
+    return {
+      id:             pp.id,
+      name:           pp.name,
+      client:         pp.summary?.split(' · ')[0] || '',
+      productionType: pp.summary?.split(' · ')[1] || '',
+      status:         pp.status || 'Active',
+      startDate:      iso(pp.start),
+      endDate:        iso(pp.end),
+      assignedMembers: [],
+      cardColor:      pp.color,
+      __demo:         true,
+    }
+  }, [clickedFullProd, clickedProtoProd])
+
   // Legend visibility — open by default on the user's first ever visit so
   // the visual language is explained up front, collapsed after that
   // (persisted via localStorage flag). The ? button in the HUD re-opens it.
@@ -294,10 +325,10 @@ export function GravMap() {
               panel and the planets. */}
           <div className="relative flex" style={{ background: '#05060a', height: '60vh', minHeight: 420 }}>
             <ProductionDrawer
-              production={clickedFullProd}
+              production={drawerProduction}
               conflicts={clickedConflicts}
               onClose={() => setClickedProd(null)}
-              onOpenFull={() => {
+              onOpenFull={drawerProduction?.__demo ? null : () => {
                 const id = clickedProd
                 setClickedProd(null)
                 if (id) navigate(`/productions/${id}`)
@@ -858,21 +889,35 @@ function ProductionDrawerInner({ production, conflicts, onClose, onOpenFull }) {
         </div>
       </div>
 
-      {/* CTA — pinned to the bottom */}
-      <button
-        onClick={onOpenFull}
-        style={{
-          width: '100%', padding: '12px 14px',
-          borderTop: `1px solid ${accent}33`,
-          background: `linear-gradient(90deg, ${accent}28, ${accent}12)`,
-          color: accent, fontSize: 12, fontWeight: 600,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          cursor: 'pointer', border: 'none', letterSpacing: '0.12em',
-          flexShrink: 0,
-        }}
-      >
-        VIEW FULL PAGE <ArrowRight size={12} />
-      </button>
+      {/* CTA — pinned to the bottom. Hidden in demo/seed mode where the
+          synthesized record has no real /productions/:id to land on. */}
+      {onOpenFull ? (
+        <button
+          onClick={onOpenFull}
+          style={{
+            width: '100%', padding: '12px 14px',
+            borderTop: `1px solid ${accent}33`,
+            background: `linear-gradient(90deg, ${accent}28, ${accent}12)`,
+            color: accent, fontSize: 12, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            cursor: 'pointer', border: 'none', letterSpacing: '0.12em',
+            flexShrink: 0,
+          }}
+        >
+          VIEW FULL PAGE <ArrowRight size={12} />
+        </button>
+      ) : (
+        <div
+          style={{
+            width: '100%', padding: '10px 14px',
+            borderTop: `1px solid ${accent}33`,
+            color: 'var(--orbital-dim)', fontSize: 10, letterSpacing: '0.12em',
+            textAlign: 'center', flexShrink: 0, fontFamily: 'Space Mono, monospace',
+          }}
+        >
+          DEMO DATA — SIGN IN FOR LIVE PRODUCTIONS
+        </div>
+      )}
     </div>
   )
 }
@@ -997,11 +1042,16 @@ function ProductionBody({ prod, position, isClicked, isFeatured, isHovered, stat
     <group
       ref={groupRef}
       position={position}
+      // Click lives on the GROUP, not just the body sphere — so clouds,
+      // atmosphere shell, and status ring all count as hit target. With
+      // it only on the body, the effective click area was a ~20px disc
+      // that the bob animation kept moving out from under the cursor.
+      onClick={(e) => { e.stopPropagation(); onClick?.() }}
       onPointerOver={(e) => { e.stopPropagation(); onHover?.(); document.body.style.cursor = 'pointer' }}
       onPointerOut={() => { onUnhover?.(); document.body.style.cursor = '' }}
     >
       {/* Body sphere with procedural shader */}
-      <mesh ref={bodyRef} onClick={onClick}>
+      <mesh ref={bodyRef}>
         <sphereGeometry args={[PROD_BODY_RADIUS, 64, 64]} />
         <shaderMaterial
           uniforms={bodyUniforms}

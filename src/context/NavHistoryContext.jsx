@@ -38,6 +38,11 @@ export function NavHistoryProvider({ children }) {
     if (path === lastPathRef.current) return
     lastPathRef.current = path
 
+    // Paths that exist only as instant redirects never belong in the trail —
+    // recording them produced crumbs like "Home › Home" ('/' bounces to
+    // /dashboard before the user ever sees it).
+    if (path === '/' || path === '/login' || path === '/prototype/resources') return
+
     setTrail((prev) => {
       const existingIdx = prev.indexOf(path)
       if (existingIdx >= 0) {
