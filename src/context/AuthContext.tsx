@@ -36,6 +36,19 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 const log = (...args: unknown[]) => console.log('[AuthContext]', ...args)
 const warn = (...args: unknown[]) => console.warn('[AuthContext]', ...args)
 
+// Capture the OAuth PKCE code at MODULE LOAD — the instant this file is first
+// imported, which happens before ReactDOM renders anything. This is the only
+// safe moment: React Router's catch-all redirect ("/" → "/dashboard",
+// Navigate replace) fires DURING the first render, before any useEffect, and
+// it rewrites the URL — stripping the ?code= that Supabase appended when it
+// dropped us at the site root. Reading window.location inside the provider's
+// effect was too late (that's why the loop persisted). We stash the string
+// here and exchange it in the init effect below.
+const CAPTURED_OAUTH_CODE =
+  typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('code')
+    : null
+
 async function fetchProfile(userId: string): Promise<Profile | null> {
   log('fetchProfile starting for', userId)
   try {
@@ -112,17 +125,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ;(async () => {
       try {
         // ── Complete the OAuth PKCE exchange FIRST, if we just came back from
-        //    Google. The landing URL is <origin>/dashboard?code=... (or
-        //    <origin>/?code=... if Supabase fell back to the Site URL root).
-        //    We exchange the code explicitly and before anything else so React
-        //    Router's catch-all redirect can't strip the ?code= param first —
-        //    that race caused an infinite login loop after the domain change.
-        const landingUrl = new URL(window.location.href)
-        const oauthCode = landingUrl.searchParams.get('code')
-        if (oauthCode) {
-          log('OAuth code present in URL — exchanging for a session')
+        //    Google. CAPTURED_OAUTH_CODE was grabbed at module load (before the
+        //    router could strip it). The PKCE verifier lives in localStorage on
+        //    this origin, so the exchange works regardless of which path
+        //    Supabase landed us on (/ or /dashboard).
+        log('captured OAuth code:', CAPTURED_OAUTH_CODE ? 'present' : 'none')
+        if (CAPTURED_OAUTH_CODE) {
+          log('exchanging OAuth code for a session')
           const { error: exchErr } = await withTimeout(
-            supabase.auth.exchangeCodeForSession(oauthCode),
+            supabase.auth.exchangeCodeForSession(CAPTURED_OAUTH_CODE),
             8000,
             'exchangeCodeForSession',
           )
@@ -132,16 +143,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             log('code exchange succeeded')
           }
-          // Strip the code (and any error params) from the URL so a refresh
-          // or the router doesn't re-trigger / choke on a now-consumed code.
-          landingUrl.searchParams.delete('code')
-          landingUrl.searchParams.delete('error')
-          landingUrl.searchParams.delete('error_description')
-          window.history.replaceState(
-            {},
-            '',
-            landingUrl.pathname + landingUrl.search + landingUrl.hash,
-          )
+          // Clean any leftover auth params off the URL (best-effort; the
+          // router may have already rewritten it).
+          try {
+            const u = new URL(window.location.href)
+            u.searchParams.delete('code')
+            u.searchParams.delete('error')
+            u.searchParams.delete('error_description')
+            window.history.replaceState({}, '', u.pathname + u.search + u.hash)
+          } catch { /* noop */ }
         }
 
         const { data, error } = await withTimeout(
