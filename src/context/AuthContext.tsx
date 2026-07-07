@@ -111,6 +111,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     ;(async () => {
       try {
+        // ── Complete the OAuth PKCE exchange FIRST, if we just came back from
+        //    Google. The landing URL is <origin>/dashboard?code=... (or
+        //    <origin>/?code=... if Supabase fell back to the Site URL root).
+        //    We exchange the code explicitly and before anything else so React
+        //    Router's catch-all redirect can't strip the ?code= param first —
+        //    that race caused an infinite login loop after the domain change.
+        const landingUrl = new URL(window.location.href)
+        const oauthCode = landingUrl.searchParams.get('code')
+        if (oauthCode) {
+          log('OAuth code present in URL — exchanging for a session')
+          const { error: exchErr } = await withTimeout(
+            supabase.auth.exchangeCodeForSession(oauthCode),
+            8000,
+            'exchangeCodeForSession',
+          )
+          if (exchErr) {
+            warn('exchangeCodeForSession failed:', exchErr.message)
+            setError(exchErr.message)
+          } else {
+            log('code exchange succeeded')
+          }
+          // Strip the code (and any error params) from the URL so a refresh
+          // or the router doesn't re-trigger / choke on a now-consumed code.
+          landingUrl.searchParams.delete('code')
+          landingUrl.searchParams.delete('error')
+          landingUrl.searchParams.delete('error_description')
+          window.history.replaceState(
+            {},
+            '',
+            landingUrl.pathname + landingUrl.search + landingUrl.hash,
+          )
+        }
+
         const { data, error } = await withTimeout(
           supabase.auth.getSession(),
           8000,
