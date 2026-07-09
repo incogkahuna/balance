@@ -4,13 +4,13 @@
 
 ## TL;DR — the one thing that matters right now
 
-**An auth-loop fix was just shipped (`3553910`) but is NOT yet verified working.**
-The user must test it and report back before anything else proceeds. See "IN
-FLIGHT" below. Everything else is stable.
+**The auth-loop fix (`3553910`) is VERIFIED WORKING as of 2026-07-08.** Fresh
+incognito → Google login → dashboard, no loop. The old "IN FLIGHT" block is kept
+below for reference only. Everything is stable; pick up from the debt list.
 
 ---
 
-## IN FLIGHT — Google OAuth login loop (unverified fix)
+## RESOLVED — Google OAuth login loop (verified 2026-07-08)
 
 **Symptom:** On the production site, signing in with Google looped — pick
 account → back to the login page → repeat. Never reached the dashboard.
@@ -30,21 +30,11 @@ Supabase client can exchange it. No exchange → no session → bounce to
   can't strip it), then `exchangeCodeForSession(CAPTURED_OAUTH_CODE)` in the
   init effect. Added log line `[AuthContext] captured OAuth code: present|none`.
 
-**What the user needs to do to verify** (waiting on this):
-1. Let Vercel finish deploying `3553910` (Deployments tab → "Ready").
-2. Fresh incognito → `https://balance-orbital.vercel.app` → Continue with Google.
-3. Open console (F12) and read the new log line:
-   - **`captured OAuth code: present`** + `code exchange succeeded` → fixed, done.
-   - **`captured OAuth code: present`** + `exchangeCodeForSession failed: <msg>`
-     → PKCE verifier/config issue; the `<msg>` names it. Likely fix: Supabase
-     Site URL must exactly equal the browsing URL.
-   - **`captured OAuth code: none`** → Supabase isn't returning a code at all →
-     pure dashboard config. Check Supabase → Auth → Providers → Google (enabled +
-     client id/secret) and Auth → URL Configuration → Redirect URLs contains
-     `https://balance-orbital.vercel.app/**`.
-
-**If verified working:** delete the extra `[AuthContext]` debug logs if desired
-(optional), and move on to the debt list below.
+**Verification result:** fresh incognito login reached the dashboard cleanly, no
+loop. The `[AuthContext]` diagnostic logs were **kept on purpose** — they route
+through a `log`/`warn` helper and are the fastest way to diagnose the next
+Supabase auto-pause incident (see Environment facts). Don't strip them without
+reason; the exchange logic (`CAPTURED_OAUTH_CODE`) must stay regardless.
 
 ---
 
