@@ -2,6 +2,7 @@ import { createContext, useContext, useCallback, useEffect, useMemo, useState } 
 import { USERS, LED_WALLS_SEED, createWallAssignment } from '../data/models.js'
 import { FEEDBACK_STATUS } from '../data/models.js'
 import { useAuth } from './AuthContext.tsx'
+import { useToast } from './ToastContext.jsx'
 import {
   listProductions as listProductionsApi,
   createProduction as createProductionApi,
@@ -33,6 +34,7 @@ const DEV_VIEW_AS_KEY = 'balance_dev_view_as'
 
 export function AppProvider({ children }) {
   const { profile, signOut } = useAuth()
+  const toast = useToast()
 
   // All entities now live in Postgres. State hydrates on session start and
   // stays in sync via realtime subscriptions.
@@ -338,20 +340,27 @@ export function AppProvider({ children }) {
   // will reconcile any drift.
   const mutateProduction = useCallback((productionId, patchFn) => {
     let patchToSend = null
+    let prevProduction = null
     setProductionsState((prev) =>
       prev.map((p) => {
         if (p.id !== productionId) return p
         const patch = patchFn(p)
         patchToSend = patch
+        prevProduction = p
         return { ...p, ...patch, updatedAt: new Date().toISOString() }
       }),
     )
     if (patchToSend) {
       updateProductionApi(productionId, patchToSend).catch((err) => {
         console.error('[AppContext] updateProduction failed:', err)
+        toast.error(`Couldn't save production changes — ${err?.message || 'unknown error'}`)
+        // Roll the optimistic edit back so the UI doesn't show a phantom save.
+        if (prevProduction) {
+          setProductionsState(prev => prev.map(p => p.id === productionId ? prevProduction : p))
+        }
       })
     }
-  }, [])
+  }, [toast])
 
   // ─── currentUser ───────────────────────────────────────────────────────────
   // Derived from the Supabase profile. For the 5 known team members (Mark, AJ,
@@ -422,19 +431,27 @@ export function AppProvider({ children }) {
     setProductionsState(prev => [production, ...prev])
     createProductionApi(production).catch((err) => {
       console.error('[AppContext] createProduction failed:', err)
+      toast.error(`Couldn't create production — ${err?.message || 'unknown error'}`)
       // Rollback optimistic insert
       setProductionsState(prev => prev.filter(p => p.id !== production.id))
     })
-  }, [])
+  }, [toast])
 
   const updateProduction = useCallback((id, updates) => {
-    setProductionsState(prev => prev.map(p =>
-      p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
-    ))
+    let prevProduction = null
+    setProductionsState(prev => prev.map(p => {
+      if (p.id !== id) return p
+      prevProduction = p
+      return { ...p, ...updates, updatedAt: new Date().toISOString() }
+    }))
     updateProductionApi(id, updates).catch((err) => {
       console.error('[AppContext] updateProduction failed:', err)
+      toast.error(`Couldn't save production changes — ${err?.message || 'unknown error'}`)
+      if (prevProduction) {
+        setProductionsState(prev => prev.map(p => p.id === id ? prevProduction : p))
+      }
     })
-  }, [])
+  }, [toast])
 
   const deleteProduction = useCallback((id) => {
     setProductionsState(prev => prev.filter(p => p.id !== id))
@@ -443,8 +460,9 @@ export function AppProvider({ children }) {
     setTasksState(prev => prev.filter(t => t.productionId !== id))
     deleteProductionApi(id).catch((err) => {
       console.error('[AppContext] deleteProduction failed:', err)
+      toast.error(`Couldn't delete production — ${err?.message || 'unknown error'}. Refresh to restore the list.`)
     })
-  }, [])
+  }, [toast])
 
   const getProduction = useCallback((id) => {
     return productions.find(p => p.id === id)
@@ -460,25 +478,36 @@ export function AppProvider({ children }) {
     setTasksState(prev => [taskWithComments, ...prev])
     createTaskApi(task).catch((err) => {
       console.error('[AppContext] createTask failed:', err)
+      // The eager-create placeholder is blank on purpose — only worth a toast
+      // once the user typed something (updateTask covers the rest).
+      if (task.title) toast.error(`Couldn't create task — ${err?.message || 'unknown error'}`)
       setTasksState(prev => prev.filter(t => t.id !== task.id))
     })
-  }, [])
+  }, [toast])
 
   const updateTask = useCallback((id, updates) => {
-    setTasksState(prev => prev.map(t =>
-      t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t
-    ))
+    let prevTask = null
+    setTasksState(prev => prev.map(t => {
+      if (t.id !== id) return t
+      prevTask = t
+      return { ...t, ...updates, updatedAt: new Date().toISOString() }
+    }))
     updateTaskApi(id, updates).catch((err) => {
       console.error('[AppContext] updateTask failed:', err)
+      toast.error(`Couldn't save task changes — ${err?.message || 'unknown error'}`)
+      if (prevTask) {
+        setTasksState(prev => prev.map(t => t.id === id ? prevTask : t))
+      }
     })
-  }, [])
+  }, [toast])
 
   const deleteTask = useCallback((id) => {
     setTasksState(prev => prev.filter(t => t.id !== id))
     deleteTaskApi(id).catch((err) => {
       console.error('[AppContext] deleteTask failed:', err)
+      toast.error(`Couldn't delete task — ${err?.message || 'unknown error'}. Refresh to restore the list.`)
     })
-  }, [])
+  }, [toast])
 
   const getTasksForProduction = useCallback((productionId) => {
     return tasks.filter(t => t.productionId === productionId)
@@ -516,6 +545,7 @@ export function AppProvider({ children }) {
         photoName: optimistic.photoName,
       }).catch((err) => {
         console.error('[AppContext] createComment failed:', err)
+        toast.error(`Comment didn't send — ${err?.message || 'unknown error'}`)
         // Rollback
         setTasksState(prev => prev.map(t =>
           t.id === taskId
@@ -524,7 +554,7 @@ export function AppProvider({ children }) {
         ))
       })
     }
-  }, [profile])
+  }, [profile, toast])
 
   // ─── Add-ons ───────────────────────────────────────────────────────────────
   const addAddon = useCallback((productionId, addon) => {
@@ -555,25 +585,34 @@ export function AppProvider({ children }) {
     setContractorsState(prev => [contractor, ...prev])
     createContractorApi(contractor).catch((err) => {
       console.error('[AppContext] createContractor failed:', err)
+      if (contractor.name) toast.error(`Couldn't add contractor — ${err?.message || 'unknown error'}`)
       setContractorsState(prev => prev.filter(c => c.id !== contractor.id))
     })
-  }, [])
+  }, [toast])
 
   const updateContractor = useCallback((id, updates) => {
-    setContractorsState(prev => prev.map(c =>
-      c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
-    ))
+    let prevContractor = null
+    setContractorsState(prev => prev.map(c => {
+      if (c.id !== id) return c
+      prevContractor = c
+      return { ...c, ...updates, updatedAt: new Date().toISOString() }
+    }))
     updateContractorApi(id, updates).catch((err) => {
       console.error('[AppContext] updateContractor failed:', err)
+      toast.error(`Couldn't save contractor changes — ${err?.message || 'unknown error'}`)
+      if (prevContractor) {
+        setContractorsState(prev => prev.map(c => c.id === id ? prevContractor : c))
+      }
     })
-  }, [])
+  }, [toast])
 
   const deleteContractor = useCallback((id) => {
     setContractorsState(prev => prev.filter(c => c.id !== id))
     deleteContractorApi(id).catch((err) => {
       console.error('[AppContext] deleteContractor failed:', err)
+      toast.error(`Couldn't delete contractor — ${err?.message || 'unknown error'}. Refresh to restore the list.`)
     })
-  }, [])
+  }, [toast])
 
   const getContractor = useCallback((id) => {
     return contractors.find(c => c.id === id) || null
@@ -719,8 +758,9 @@ export function AppProvider({ children }) {
     ))
     updateTaskApi(taskId, { instructionPackage: pkg }).catch((err) => {
       console.error('[AppContext] updateTaskInstructionPackage failed:', err)
+      toast.error(`Couldn't save instruction package — ${err?.message || 'unknown error'}`)
     })
-  }, [])
+  }, [toast])
 
   // ─── LED Walls — CRUD + assignment ─────────────────────────────────────────
   const addLedWall = useCallback((wall) => {
