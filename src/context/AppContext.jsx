@@ -25,6 +25,7 @@ import {
   deleteContractor as deleteContractorApi,
   subscribeToContractors,
 } from '../lib/data/contractors.ts'
+import { listProfiles as listProfilesApi } from '../lib/data/profiles.ts'
 
 const AppContext = createContext(null)
 
@@ -46,6 +47,11 @@ export function AppProvider({ children }) {
   const [contractors, setContractorsState]           = useState([])
   const [contractorsLoading, setContractorsLoading]  = useState(true)
   const [contractorsError, setContractorsError]      = useState(null)
+
+  // Auth-UUID roster (profiles table). Read-only; used to resolve changed_by /
+  // author_id UUIDs to display names. Loaded once per session — the roster is
+  // tiny and changes rarely.
+  const [profilesList, setProfilesList] = useState([])
 
   // ─── LED Walls ─────────────────────────────────────────────────────────────
   // v1 is localStorage-backed (no Supabase table yet). Seeded with three
@@ -208,7 +214,9 @@ export function AppProvider({ children }) {
         if (event.type === 'UPDATE') {
           return prev.map((t) =>
             t.id === event.row.id
-              ? { ...event.row, comments: t.comments } // keep existing comments
+              // Keep existing comments + status history — the realtime row
+              // carries neither (they live in sibling tables).
+              ? { ...event.row, comments: t.comments, statusHistory: t.statusHistory }
               : t,
           )
         }
@@ -293,6 +301,35 @@ export function AppProvider({ children }) {
       unsub()
     }
   }, [profile])
+
+  // ─── Hydrate profiles (auth-UUID roster) ───────────────────────────────────
+  useEffect(() => {
+    if (!profile) {
+      setProfilesList([])
+      return
+    }
+    let cancelled = false
+    listProfilesApi()
+      .then((rows) => { if (!cancelled) setProfilesList(rows) })
+      .catch((err) => {
+        // Non-fatal — name resolution just falls back to legacy USERS.
+        console.warn('[AppContext] listProfiles failed:', err?.message || err)
+      })
+    return () => { cancelled = true }
+  }, [profile])
+
+  // Resolve any user identifier (auth UUID or legacy string id) to a display
+  // name. Falls back through profiles → USERS → contractors → null.
+  const resolveUserName = useCallback((id) => {
+    if (!id) return null
+    const p = profilesList.find(pr => pr.id === id)
+    if (p) return p.name
+    const u = USERS.find(us => us.id === id)
+    if (u) return u.name
+    const c = contractors.find(co => co.id === id)
+    if (c) return c.name
+    return null
+  }, [profilesList, contractors])
 
   // ─── mutateProduction — optimistic local + remote ──────────────────────────
   // All sub-entity mutations (addons, milestones, bible, etc) flow through
@@ -452,12 +489,16 @@ export function AppProvider({ children }) {
   }, [tasks])
 
   const addComment = useCallback((taskId, comment) => {
-    // Optimistic insert
+    // Optimistic insert — carries the same fields we persist, so the comment
+    // renders identically before and after the realtime echo.
     const optimistic = {
       id: comment.id || crypto.randomUUID(),
       taskId,
       authorId: comment.authorId || profile?.id || null,
+      authorName: comment.authorName || profile?.name || '',
       text: comment.text || comment.body || '',
+      photoStoragePath: comment.photoStoragePath || null,
+      photoName: comment.photoName || null,
       createdAt: comment.createdAt || new Date().toISOString(),
     }
     setTasksState(prev => prev.map(t =>
@@ -468,7 +509,12 @@ export function AppProvider({ children }) {
     // Persist — author MUST be the real authenticated user (profile.id) per RLS,
     // not the dev impersonation id.
     if (profile?.id) {
-      createCommentApi(taskId, profile.id, optimistic.text).catch((err) => {
+      createCommentApi(taskId, profile.id, {
+        text: optimistic.text,
+        authorName: optimistic.authorName,
+        photoStoragePath: optimistic.photoStoragePath,
+        photoName: optimistic.photoName,
+      }).catch((err) => {
         console.error('[AppContext] createComment failed:', err)
         // Rollback
         setTasksState(prev => prev.map(t =>
@@ -876,6 +922,8 @@ export function AppProvider({ children }) {
     getContractor,
     getContractorHistory,
     resolveAssignee,
+    resolveUserName,
+    profiles: profilesList,
 
     // Contractor assignment
     setStageManager,

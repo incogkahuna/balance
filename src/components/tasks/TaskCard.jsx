@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES, TASK_STATUS } from '../../data/models.js'
-import { TASK_STATUS_CONFIG } from '../../features/tasks/taskStatusConfig.js'
+import { TASK_STATUS_CONFIG, getValidTransitions } from '../../features/tasks/taskStatusConfig.js'
 import { PriorityBadge } from '../ui/StatusBadge.jsx'
 import { Avatar } from '../ui/Avatar.jsx'
 import { Modal } from '../ui/Modal.jsx'
@@ -20,7 +20,7 @@ import clsx from 'clsx'
 // `showProduction`: surfaces a clickable production-name link above the title.
 // Used on the cross-production Tasks list view.
 export function TaskCard({ task, productionId, showProduction = false }) {
-  const { currentUser, updateTask, deleteTask, addComment, getProduction } = useApp()
+  const { currentUser, updateTask, deleteTask, addComment, getProduction, resolveUserName } = useApp()
   const production = showProduction ? getProduction(task.productionId) : null
 
   const [expanded, setExpanded] = useState(false)
@@ -107,6 +107,45 @@ export function TaskCard({ task, productionId, showProduction = false }) {
   }
 
   // ── Task actions ───────────────────────────────────────────────────────────
+  // Optimistic history entry — the DB trigger writes the authoritative row
+  // (keyed by profile UUID); this keeps the current session's display exact.
+  const appendHistory = (to, note = '') => [...(task.statusHistory || []), {
+    from: task.status, to,
+    by: currentUser?.profileId || currentUser?.id, byName: currentUser?.name,
+    at: new Date().toISOString(), note,
+  }]
+
+  // ── Quick status transitions ───────────────────────────────────────────────
+  // Complete/Verified are excluded — they have dedicated flows below that
+  // capture notes/photos. Everything else is a one-click pill.
+  const [blockPrompt, setBlockPrompt] = useState(false)
+  const [blockReason, setBlockReason] = useState('')
+  const quickTransitions = getValidTransitions(task.status, currentUser?.role, isAssignee)
+    .filter(s => s !== TASK_STATUS.COMPLETE && s !== TASK_STATUS.VERIFIED)
+
+  const handleStatusChange = (next) => {
+    if (next === TASK_STATUS.BLOCKED) {
+      setBlockPrompt(true)
+      return
+    }
+    const patch = { status: next, statusHistory: appendHistory(next) }
+    // Leaving Blocked clears the reason so it doesn't linger on the card.
+    if (task.status === TASK_STATUS.BLOCKED) patch.blockedReason = ''
+    updateTask(task.id, patch)
+  }
+
+  const handleConfirmBlock = () => {
+    const reason = blockReason.trim()
+    if (!reason) return
+    updateTask(task.id, {
+      status: TASK_STATUS.BLOCKED,
+      blockedReason: reason,
+      statusHistory: appendHistory(TASK_STATUS.BLOCKED, reason),
+    })
+    setBlockPrompt(false)
+    setBlockReason('')
+  }
+
   const handleMarkComplete = () => {
     const photos = completionPhoto
       ? [
@@ -125,11 +164,7 @@ export function TaskCard({ task, productionId, showProduction = false }) {
       status: TASK_STATUS.COMPLETE,
       completionNote: completionNote.trim() || task.completionNote,
       completionPhotos: photos,
-      statusHistory: [...(task.statusHistory || []), {
-        from: task.status, to: TASK_STATUS.COMPLETE,
-        by: currentUser?.id, byName: currentUser?.name,
-        at: new Date().toISOString(), note: completionNote.trim(),
-      }],
+      statusHistory: appendHistory(TASK_STATUS.COMPLETE, completionNote.trim()),
     })
     setCompletionPhoto(null)
   }
@@ -137,22 +172,14 @@ export function TaskCard({ task, productionId, showProduction = false }) {
   const handleVerify = () => {
     updateTask(task.id, {
       status: TASK_STATUS.VERIFIED,
-      statusHistory: [...(task.statusHistory || []), {
-        from: task.status, to: TASK_STATUS.VERIFIED,
-        by: currentUser?.id, byName: currentUser?.name,
-        at: new Date().toISOString(), note: '',
-      }],
+      statusHistory: appendHistory(TASK_STATUS.VERIFIED),
     })
   }
 
   const handleUnverify = () => {
     updateTask(task.id, {
       status: TASK_STATUS.COMPLETE,
-      statusHistory: [...(task.statusHistory || []), {
-        from: TASK_STATUS.VERIFIED, to: TASK_STATUS.COMPLETE,
-        by: currentUser?.id, byName: currentUser?.name,
-        at: new Date().toISOString(), note: 'Verification reversed',
-      }],
+      statusHistory: appendHistory(TASK_STATUS.COMPLETE, 'Verification reversed'),
     })
   }
 
@@ -267,10 +294,14 @@ export function TaskCard({ task, productionId, showProduction = false }) {
               <div className="p-3 rounded-lg bg-blue-500/8 border border-blue-500/20">
                 <p className="section-title mb-1 text-blue-400">From assigner</p>
                 <p className="text-sm text-orbital-subtle italic">"{task.expectationsNote}"</p>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <Avatar userId={task.assignedBy} size="xs" />
-                  <span className="text-xs text-orbital-subtle">{task.assignedBy}</span>
-                </div>
+                {task.assignedBy && (
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <Avatar userId={task.assignedBy} size="xs" />
+                    <span className="text-xs text-orbital-subtle">
+                      {resolveUserName(task.assignedBy) || task.assignedBy}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -308,16 +339,72 @@ export function TaskCard({ task, productionId, showProduction = false }) {
               </div>
             )}
 
-            {/* Verification line */}
-            {isVerified && (
-              <div className="flex items-center gap-2 text-xs text-emerald-400">
-                <CheckCheck size={13} />
-                <span>
-                  Verified by {task.statusHistory?.findLast?.(e => e.to === TASK_STATUS.VERIFIED)?.byName || 'Supervisor'}
-                  {task.statusHistory?.findLast?.(e => e.to === TASK_STATUS.VERIFIED)?.at &&
-                    ` · ${format(parseISO(task.statusHistory.findLast(e => e.to === TASK_STATUS.VERIFIED).at), 'MMM d, h:mm a')}`
-                  }
-                </span>
+            {/* Verification line — persisted rows carry the profile UUID in
+                `by`; optimistic session entries carry `byName` directly. */}
+            {isVerified && (() => {
+              const entry = task.statusHistory?.findLast?.(e => e.to === TASK_STATUS.VERIFIED)
+              const name = entry?.byName || resolveUserName(entry?.by) || 'Supervisor'
+              return (
+                <div className="flex items-center gap-2 text-xs text-emerald-400">
+                  <CheckCheck size={13} />
+                  <span>
+                    Verified by {name}
+                    {entry?.at && ` · ${format(parseISO(entry.at), 'MMM d, h:mm a')}`}
+                  </span>
+                </div>
+              )
+            })()}
+
+            {/* ── Quick status change ─────────────────────────────────────── */}
+            {quickTransitions.length > 0 && (
+              <div className="pt-2 border-t border-orbital-border space-y-2">
+                <p className="section-title">Set Status</p>
+                <div className="flex gap-2 flex-wrap">
+                  {quickTransitions.map(s => {
+                    const sCfg = TASK_STATUS_CONFIG[s]
+                    const SIcon = sCfg.icon
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => handleStatusChange(s)}
+                        title={sCfg.description}
+                        className={clsx(
+                          'inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors active:scale-[0.97]',
+                          sCfg.pillClass,
+                        )}
+                      >
+                        <SIcon size={12} />
+                        {s}
+                      </button>
+                    )
+                  })}
+                </div>
+                {blockPrompt && (
+                  <div className="space-y-2">
+                    <textarea
+                      className="input min-h-[56px] resize-none text-sm"
+                      placeholder="What's blocking this task? (required)"
+                      value={blockReason}
+                      onChange={e => setBlockReason(e.target.value)}
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleConfirmBlock}
+                        disabled={!blockReason.trim()}
+                        className="btn-primary flex-1 disabled:opacity-40"
+                      >
+                        Mark Blocked
+                      </button>
+                      <button
+                        onClick={() => { setBlockPrompt(false); setBlockReason('') }}
+                        className="btn-ghost"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -441,7 +528,9 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                       <Avatar userId={c.authorId} size="xs" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-2">
-                          <span className="text-xs font-semibold text-orbital-text">{c.authorName}</span>
+                          <span className="text-xs font-semibold text-orbital-text">
+                            {c.authorName || resolveUserName(c.authorId) || 'Team member'}
+                          </span>
                           <span className="text-xs text-orbital-subtle">
                             {format(parseISO(c.createdAt), 'MMM d, h:mm a')}
                           </span>
@@ -449,13 +538,14 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                         {c.text && (
                           <p className="text-sm text-orbital-subtle mt-0.5">{c.text}</p>
                         )}
-                        {c.photoUrl && (
+                        {c.photoStoragePath && (
                           <button
-                            onClick={() => setLightbox(c.photoUrl)}
+                            onClick={() => setLightbox({ storage_path: c.photoStoragePath })}
                             className="mt-2 block rounded-lg overflow-hidden border border-orbital-border max-w-[240px] hover:border-blue-500/40 transition-colors"
                           >
-                            <img
-                              src={c.photoUrl}
+                            <StoredImage
+                              bucket={BUCKETS.taskCompletionPhotos}
+                              path={c.photoStoragePath}
                               alt={c.photoName || 'Comment photo'}
                               className="w-full object-cover"
                             />

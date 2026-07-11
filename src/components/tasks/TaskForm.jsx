@@ -22,6 +22,8 @@ export function TaskForm({ productionId, initial, onClose }) {
       priority: TASK_PRIORITY.MEDIUM,
       status: TASK_STATUS.NOT_STARTED,
       assignedBy: currentUser?.id || '',
+      // Real auth UUID — satisfies the tasks.created_by FK to profiles.
+      createdBy: currentUser?.profileId || '',
     })
     workingIdRef.current = placeholder.id
     createdHereRef.current = true

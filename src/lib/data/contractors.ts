@@ -5,19 +5,34 @@ export type ContractorAvailability = 'Available' | 'Booked' | 'Tentative' | 'Una
 export type ContractorExperience   = 'Junior' | 'Mid' | 'Senior' | 'Lead'
 export type ContractorFlag         = 'Recommended' | 'Neutral' | 'Do Not Rehire'
 
+export interface ContractorEmergencyContact {
+  name: string
+  relationship: string
+  phone: string
+}
+
 export interface Contractor {
   id: string
   name: string
   primaryRole: string
+  secondaryRoles: string[]
+  skills: string[]
   phone: string
   email: string
+  location: string
   availability: ContractorAvailability
   experienceLevel: ContractorExperience
   specialties: string[]
   photoUrl: string
   companyName: string
   companyRole: string
+  // Client-side name is dayRate; persists to the pre-existing rate_per_day
+  // column. ratePerDay is kept as an alias for older call sites.
+  dayRate: string
   ratePerDay: string
+  weeklyRate: string
+  rateNotes: string
+  emergencyContact: ContractorEmergencyContact | null
   flag: ContractorFlag
   notes: string
   createdAt: string
@@ -31,8 +46,11 @@ interface ContractorRow {
   id: string
   name: string
   primary_role: string
+  secondary_roles: string[]
+  skills: string[]
   phone: string
   email: string
+  location: string
   availability: ContractorAvailability
   experience_level: ContractorExperience
   specialties: string[]
@@ -40,6 +58,9 @@ interface ContractorRow {
   company_name: string
   company_role: string
   rate_per_day: string
+  weekly_rate: string
+  rate_notes: string
+  emergency_contact: ContractorEmergencyContact | null
   flag: ContractorFlag
   notes: string
   created_at: string
@@ -51,15 +72,22 @@ function rowToContractor(r: ContractorRow): Contractor {
     id:               r.id,
     name:             r.name,
     primaryRole:      r.primary_role,
+    secondaryRoles:   r.secondary_roles ?? [],
+    skills:           r.skills ?? [],
     phone:            r.phone,
     email:            r.email,
+    location:         r.location ?? '',
     availability:     r.availability,
     experienceLevel:  r.experience_level,
     specialties:      r.specialties ?? [],
     photoUrl:         r.photo_url,
     companyName:      r.company_name,
     companyRole:      r.company_role,
-    ratePerDay:       r.rate_per_day,
+    dayRate:          r.rate_per_day ?? '',
+    ratePerDay:       r.rate_per_day ?? '',
+    weeklyRate:       r.weekly_rate ?? '',
+    rateNotes:        r.rate_notes ?? '',
+    emergencyContact: r.emergency_contact ?? null,
     flag:             r.flag,
     notes:            r.notes,
     createdAt:        r.created_at,
@@ -69,20 +97,28 @@ function rowToContractor(r: ContractorRow): Contractor {
 
 function contractorToRow(c: NewContractor): Partial<ContractorRow> {
   const row: Partial<ContractorRow> = {}
-  if (c.id              !== undefined) row.id               = c.id
-  if (c.name            !== undefined) row.name             = c.name
-  if (c.primaryRole     !== undefined) row.primary_role     = c.primaryRole
-  if (c.phone           !== undefined) row.phone            = c.phone
-  if (c.email           !== undefined) row.email            = c.email
-  if (c.availability    !== undefined) row.availability     = c.availability
-  if (c.experienceLevel !== undefined) row.experience_level = c.experienceLevel
-  if (c.specialties     !== undefined) row.specialties      = c.specialties
-  if (c.photoUrl        !== undefined) row.photo_url        = c.photoUrl
-  if (c.companyName     !== undefined) row.company_name     = c.companyName
-  if (c.companyRole     !== undefined) row.company_role     = c.companyRole
-  if (c.ratePerDay      !== undefined) row.rate_per_day     = c.ratePerDay
-  if (c.flag            !== undefined) row.flag             = c.flag
-  if (c.notes           !== undefined) row.notes            = c.notes
+  if (c.id               !== undefined) row.id                = c.id
+  if (c.name             !== undefined) row.name              = c.name
+  if (c.primaryRole      !== undefined) row.primary_role      = c.primaryRole
+  if (c.secondaryRoles   !== undefined) row.secondary_roles   = c.secondaryRoles
+  if (c.skills           !== undefined) row.skills            = c.skills
+  if (c.phone            !== undefined) row.phone             = c.phone
+  if (c.email            !== undefined) row.email             = c.email
+  if (c.location         !== undefined) row.location          = c.location
+  if (c.availability     !== undefined) row.availability      = c.availability
+  if (c.experienceLevel  !== undefined) row.experience_level  = c.experienceLevel
+  if (c.specialties      !== undefined) row.specialties       = c.specialties
+  if (c.photoUrl         !== undefined) row.photo_url         = c.photoUrl
+  if (c.companyName      !== undefined) row.company_name      = c.companyName
+  if (c.companyRole      !== undefined) row.company_role      = c.companyRole
+  // dayRate (form field) wins over the legacy ratePerDay alias when both set.
+  if (c.ratePerDay       !== undefined) row.rate_per_day      = c.ratePerDay
+  if (c.dayRate          !== undefined) row.rate_per_day      = c.dayRate
+  if (c.weeklyRate       !== undefined) row.weekly_rate       = c.weeklyRate
+  if (c.rateNotes        !== undefined) row.rate_notes        = c.rateNotes
+  if (c.emergencyContact !== undefined) row.emergency_contact = c.emergencyContact
+  if (c.flag             !== undefined) row.flag              = c.flag
+  if (c.notes            !== undefined) row.notes             = c.notes
   return row
 }
 

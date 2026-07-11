@@ -14,8 +14,23 @@ export interface TaskComment {
   id: string
   taskId: string
   authorId: string | null
+  authorName: string
   text: string
+  photoStoragePath: string | null
+  photoName: string | null
   createdAt: string
+}
+
+// One entry in a task's status trail. Persisted rows come from the
+// task_status_history table (trigger-written); optimistic entries appended
+// client-side carry byName directly.
+export interface TaskStatusEntry {
+  from: string | null
+  to: string
+  by: string | null      // profile UUID (changed_by) — resolve name via profiles
+  byName?: string        // present on optimistic client-side entries
+  at: string
+  note: string | null
 }
 
 export interface Task {
@@ -24,10 +39,13 @@ export interface Task {
   title: string
   description: string
   assigneeId: string | null
+  assignedBy: string | null
   priority: TaskPriority
   status: TaskStatus
-  statusHistory: Array<Record<string, unknown>>
+  statusHistory: TaskStatusEntry[]
   blockedReason: string
+  expectationsNote: string
+  completionNote: string
   dueDate: string | null
   completionPhotos: Array<Record<string, unknown>>
   comments: TaskComment[]
@@ -46,9 +64,12 @@ interface TaskRow {
   title: string
   description: string
   assignee_id: string | null
+  assigned_by: string | null
   priority: TaskPriority
   status: TaskStatus
   blocked_reason: string
+  expectations_note: string
+  completion_note: string
   due_date: string | null
   completion_photos: Array<Record<string, unknown>>
   instruction_package: Record<string, unknown> | null
@@ -61,25 +82,45 @@ interface CommentRow {
   id: string
   task_id: string
   author_id: string | null
+  author_name: string | null
   body: string
+  photo_storage_path: string | null
+  photo_name: string | null
   created_at: string
+}
+
+interface StatusHistoryRow {
+  id: string
+  task_id: string
+  from_status: string | null
+  to_status: string
+  changed_by: string | null
+  changed_at: string
+  note: string | null
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const asUuidOrNull = (v: unknown): string | null =>
   typeof v === 'string' && UUID_RE.test(v) ? v : null
 
-function rowToTask(r: TaskRow, comments: TaskComment[] = []): Task {
+function rowToTask(
+  r: TaskRow,
+  comments: TaskComment[] = [],
+  statusHistory: TaskStatusEntry[] = [],
+): Task {
   return {
     id:                  r.id,
     productionId:        r.production_id,
     title:               r.title,
     description:         r.description,
     assigneeId:          r.assignee_id,
+    assignedBy:          r.assigned_by,
     priority:            r.priority,
     status:              r.status,
-    statusHistory:       [],
+    statusHistory,
     blockedReason:       r.blocked_reason,
+    expectationsNote:    r.expectations_note ?? '',
+    completionNote:      r.completion_note ?? '',
     dueDate:             r.due_date,
     completionPhotos:    r.completion_photos ?? [],
     comments,
@@ -92,11 +133,24 @@ function rowToTask(r: TaskRow, comments: TaskComment[] = []): Task {
 
 function rowToComment(r: CommentRow): TaskComment {
   return {
-    id:        r.id,
-    taskId:    r.task_id,
-    authorId:  r.author_id,
-    text:      r.body,
-    createdAt: r.created_at,
+    id:               r.id,
+    taskId:           r.task_id,
+    authorId:         r.author_id,
+    authorName:       r.author_name ?? '',
+    text:             r.body,
+    photoStoragePath: r.photo_storage_path,
+    photoName:        r.photo_name,
+    createdAt:        r.created_at,
+  }
+}
+
+function rowToStatusEntry(r: StatusHistoryRow): TaskStatusEntry {
+  return {
+    from: r.from_status,
+    to:   r.to_status,
+    by:   r.changed_by,
+    at:   r.changed_at,
+    note: r.note,
   }
 }
 
@@ -110,6 +164,9 @@ function taskToRow(t: NewTask): Partial<TaskRow> {
   if (t.priority            !== undefined) row.priority            = t.priority
   if (t.status              !== undefined) row.status              = t.status
   if (t.blockedReason       !== undefined) row.blocked_reason      = t.blockedReason
+  if (t.expectationsNote    !== undefined) row.expectations_note   = t.expectationsNote
+  if (t.completionNote      !== undefined) row.completion_note     = t.completionNote
+  if (t.assignedBy          !== undefined) row.assigned_by         = t.assignedBy || null
   if (t.dueDate             !== undefined) row.due_date            = t.dueDate || null
   if (t.completionPhotos    !== undefined) row.completion_photos   = t.completionPhotos
   if (t.instructionPackage  !== undefined) row.instruction_package = t.instructionPackage
@@ -121,8 +178,9 @@ function taskToRow(t: NewTask): Partial<TaskRow> {
 
 /**
  * Fetch all tasks visible to the current user (RLS-filtered) along with their
- * comments. Comments are fetched separately and grouped, so this is two
- * round-trips. Acceptable at studio scale (low hundreds of tasks).
+ * comments and status history. Comments/history are fetched separately and
+ * grouped, so this is three round-trips. Acceptable at studio scale (low
+ * hundreds of tasks).
  */
 export async function listTasks(): Promise<Task[]> {
   const { data: tasks, error: tasksErr } = await supabase
@@ -133,21 +191,39 @@ export async function listTasks(): Promise<Task[]> {
   if (!tasks || tasks.length === 0) return []
 
   const taskIds = tasks.map(t => t.id)
-  const { data: comments, error: commentsErr } = await supabase
-    .from('task_comments')
-    .select('*')
-    .in('task_id', taskIds)
-    .order('created_at', { ascending: true })
-  if (commentsErr) throw commentsErr
+  const [commentsRes, historyRes] = await Promise.all([
+    supabase
+      .from('task_comments')
+      .select('*')
+      .in('task_id', taskIds)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('task_status_history')
+      .select('*')
+      .in('task_id', taskIds)
+      .order('changed_at', { ascending: true }),
+  ])
+  if (commentsRes.error) throw commentsRes.error
+  // History is best-effort — an RLS hiccup here shouldn't sink the task list.
+  if (historyRes.error) console.warn('[tasks] status history fetch failed:', historyRes.error.message)
 
   const byTask: Record<string, TaskComment[]> = {}
-  for (const c of comments ?? []) {
+  for (const c of commentsRes.data ?? []) {
     const mapped = rowToComment(c as CommentRow)
     if (!byTask[mapped.taskId]) byTask[mapped.taskId] = []
     byTask[mapped.taskId].push(mapped)
   }
 
-  return tasks.map(t => rowToTask(t as TaskRow, byTask[t.id] || []))
+  const historyByTask: Record<string, TaskStatusEntry[]> = {}
+  for (const h of historyRes.data ?? []) {
+    const row = h as StatusHistoryRow
+    if (!historyByTask[row.task_id]) historyByTask[row.task_id] = []
+    historyByTask[row.task_id].push(rowToStatusEntry(row))
+  }
+
+  return tasks.map(t =>
+    rowToTask(t as TaskRow, byTask[t.id] || [], historyByTask[t.id] || []),
+  )
 }
 
 export async function createTask(t: NewTask): Promise<Task> {
@@ -188,14 +264,22 @@ export async function deleteTask(id: string): Promise<void> {
 export async function createComment(
   taskId: string,
   authorId: string,
-  text: string,
+  comment: {
+    text: string
+    authorName?: string
+    photoStoragePath?: string | null
+    photoName?: string | null
+  },
 ): Promise<TaskComment> {
   const { data, error } = await supabase
     .from('task_comments')
     .insert({
-      task_id:   taskId,
-      author_id: asUuidOrNull(authorId),
-      body:      text,
+      task_id:            taskId,
+      author_id:          asUuidOrNull(authorId),
+      author_name:        comment.authorName || '',
+      body:               comment.text,
+      photo_storage_path: comment.photoStoragePath || null,
+      photo_name:         comment.photoName || null,
     })
     .select('*')
     .single()
