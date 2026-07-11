@@ -1,12 +1,30 @@
 # Balance — Session Handoff
 
-*Written 2026-07-08. Read this first in a new session, then delete/replace when stale.*
+*Updated 2026-07-11. Read this first in a new session, then delete/replace when stale.*
 
 ## TL;DR — the one thing that matters right now
 
-**The auth-loop fix (`3553910`) is VERIFIED WORKING as of 2026-07-08.** Fresh
-incognito → Google login → dashboard, no loop. The old "IN FLIGHT" block is kept
-below for reference only. Everything is stable; pick up from the debt list.
+**Phase 0 (bug-fix blitz from docs/AUDIT-2026-07.md) is implemented and committed
+locally but NOT pushed.** Before pushing to master (which auto-deploys via
+Vercel), the user must run migration
+`supabase/migrations/20260711000000_phase7a_persist_dropped_fields.sql` in the
+Supabase SQL editor — the new code writes columns that migration creates
+(task notes, comment photos, contractor fields). Sequence: run migration →
+`git push` → verify prod. Pushing first would make task/comment/contractor
+saves fail in prod until the migration runs (errors now surface as toasts).
+
+Phase 0 shipped: persisted the silently-dropped fields, fixed comment photos
+end-to-end, wired the full 6-status task workflow (quick-status pills +
+blocked-reason prompt), status history read from task_status_history, New Task
+from the Tasks page, one canonical "done" definition, damage-count fix,
+Analytics hooks fix, editable feedback resolution notes, breadcrumb sync,
+`is_admin()` defined in a migration, and a toast system with
+optimistic-rollback on every failed write.
+
+Next: Phase 1 from docs/AUDIT-2026-07.md — identity unification, port
+Gear/To-Dos/Feedback to Supabase, run phase6h, test baseline.
+
+The auth-loop fix (`3553910`) is verified working (2026-07-08).
 
 ---
 
