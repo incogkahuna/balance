@@ -266,7 +266,7 @@ function ComingSoonRow({ item, canEdit, canDelete, done, onToggleDone, onDelete 
         onClose={() => setConfirmDelete(false)}
         onConfirm={reallyDelete}
         title="Delete item"
-        message={`Delete "${item.title || item.text || 'this item'}"? This can't be undone.`}
+        message={`Delete "${item.text || 'this item'}"? This can't be undone.`}
         confirmLabel="Delete"
         danger
       />

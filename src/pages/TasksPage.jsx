@@ -3,11 +3,13 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { isPast, parseISO } from 'date-fns'
 import {
   CheckSquare, AlertTriangle, Clock, CheckCheck, ListTodo,
-  Search, Film, User, ArrowUpDown,
+  Search, Film, User, ArrowUpDown, Plus,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, TASK_STATUS, TASK_PRIORITY, USERS } from '../data/models.js'
+import { ROLES, TASK_STATUS, TASK_PRIORITY, USERS, PRODUCTION_STATUS } from '../data/models.js'
 import { TaskCard } from '../components/tasks/TaskCard.jsx'
+import { TaskForm } from '../components/tasks/TaskForm.jsx'
+import { Modal } from '../components/ui/Modal.jsx'
 import { EmptyState } from '../components/ui/EmptyState.jsx'
 import clsx from 'clsx'
 
@@ -64,6 +66,32 @@ export function TasksPage() {
   const [productionId, setProductionId] = useState('all')   // 'all' or a production.id
   const [assigneeId, setAssigneeId]   = useState('all')   // 'all' or a user.id
   const [sortBy, setSortBy]           = useState('dueAsc')
+
+  // ── New Task modal ──────────────────────────────────────────────────────
+  // Tasks need a production; pick one first, then the normal TaskForm runs.
+  // Insert is RLS-gated to admin/supervisor, so crew don't see the button.
+  const [showNewTask, setShowNewTask] = useState(false)
+  const [newTaskProdId, setNewTaskProdId] = useState('')
+  const openNewTask = () => {
+    // If the list is already scoped to one production, start there.
+    setNewTaskProdId(productionId !== 'all' ? productionId : '')
+    setShowNewTask(true)
+  }
+  const closeNewTask = () => { setShowNewTask(false); setNewTaskProdId('') }
+
+  // Productions offered in the picker — live ones first, then the rest.
+  const STATUS_ORDER = {
+    [PRODUCTION_STATUS.ACTIVE]: 0,
+    [PRODUCTION_STATUS.INCOMING]: 1,
+    [PRODUCTION_STATUS.WRAP]: 2,
+    [PRODUCTION_STATUS.COMPLETED]: 3,
+  }
+  const pickableProductions = useMemo(() =>
+    productions.slice().sort((a, b) =>
+      (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) ||
+      (a.name || '').localeCompare(b.name || '')
+    ),
+  [productions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // The base list everyone-on-this-account can see. Crew see only their own
   // tasks regardless of any later filter; admin/sup see everything.
@@ -185,14 +213,21 @@ export function TasksPage() {
             <p className="hud-label mb-1">PRODUCTION WORK</p>
             <h1 className="text-xl sm:text-2xl font-semibold text-orbital-text tracking-tight">Tasks</h1>
           </div>
-          {search || productionId !== 'all' || assigneeId !== 'all' ? (
-            <button
-              onClick={() => { setSearch(''); setProductionId('all'); setAssigneeId('all') }}
-              className="text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
-            >
-              Clear filters
-            </button>
-          ) : null}
+          <div className="flex items-center gap-3">
+            {search || productionId !== 'all' || assigneeId !== 'all' ? (
+              <button
+                onClick={() => { setSearch(''); setProductionId('all'); setAssigneeId('all') }}
+                className="text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
+              >
+                Clear filters
+              </button>
+            ) : null}
+            {isAdmin && (
+              <button onClick={openNewTask} className="btn-primary">
+                <Plus size={15} /> New Task
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── Stats strip ──────────────────────────────────────────────── */}
@@ -306,6 +341,35 @@ export function TasksPage() {
           </div>
         )}
       </div>
+
+      {/* ── New Task modal — pick a production, then the standard form ──── */}
+      <Modal open={showNewTask} onClose={closeNewTask} title="New Task" size="lg">
+        {!newTaskProdId ? (
+          pickableProductions.length === 0 ? (
+            <p className="text-sm text-orbital-subtle py-4 text-center">
+              No productions yet — create one first from the Productions page.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <p className="label">Which production is this task for?</p>
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {pickableProductions.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setNewTaskProdId(p.id)}
+                    className="w-full flex items-center justify-between gap-3 p-3 rounded-lg border border-orbital-border bg-orbital-surface hover:border-blue-500/40 transition-colors text-left"
+                  >
+                    <span className="text-sm font-medium text-orbital-text truncate">{p.name}</span>
+                    <span className="text-xs text-orbital-subtle flex-shrink-0">{p.status}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        ) : (
+          <TaskForm productionId={newTaskProdId} onClose={closeNewTask} />
+        )}
+      </Modal>
     </div>
   )
 }

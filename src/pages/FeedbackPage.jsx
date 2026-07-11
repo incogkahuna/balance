@@ -158,6 +158,7 @@ export function FeedbackPage() {
                 isExpanded={expandedId === item.id}
                 onToggleExpand={() => setExpandedId(id => id === item.id ? null : item.id)}
                 onUpdateStatus={(status) => updateFeedbackItem(item.id, { status })}
+                onUpdateResolution={(resolutionNote) => updateFeedbackItem(item.id, { resolutionNote })}
                 onDelete={() => setDeleteTarget(item)}
               />
             ))}
@@ -186,11 +187,15 @@ export function FeedbackPage() {
 }
 
 // ── FeedbackRow ─────────────────────────────────────────────────────────────
-function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus, onDelete }) {
+function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus, onUpdateResolution, onDelete }) {
   const kindMeta   = KIND_META[item.kind] || KIND_META[FEEDBACK_KIND.IDEA]
   const statusMeta = STATUS_META[item.status] || STATUS_META[FEEDBACK_STATUS.NEW]
   const KindIcon   = kindMeta.icon
   const StatusIcon = statusMeta.icon
+
+  // Admin resolution-note editor state. Draft is local; Save persists.
+  const [editingNote, setEditingNote] = useState(false)
+  const [noteDraft, setNoteDraft] = useState(item.resolutionNote || '')
 
   const submittedDate = item.submittedAt
     ? format(parseISO(item.submittedAt), 'MMM d, yyyy')
@@ -242,7 +247,7 @@ function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus
           {item.description && (
             <p className="text-sm text-orbital-subtle whitespace-pre-wrap mt-3">{item.description}</p>
           )}
-          {item.resolutionNote && (
+          {item.resolutionNote && !editingNote && (
             <div
               className="mt-3 p-3 rounded"
               style={{ background: statusMeta.bg, border: `1px solid ${statusMeta.border}` }}
@@ -256,26 +261,63 @@ function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus
 
           {/* Admin controls */}
           {isAdmin && (
-            <div className="flex items-center gap-2 mt-4 flex-wrap">
-              <label className="text-[10px] text-orbital-dim font-telemetry tracking-wider">SET STATUS</label>
-              <select
-                className="text-xs px-2 py-1 bg-orbital-surface border border-orbital-border text-orbital-text rounded"
-                value={item.status}
-                onChange={(e) => onUpdateStatus(e.target.value)}
-              >
-                {Object.values(FEEDBACK_STATUS).map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-              <button
-                onClick={onDelete}
-                className="ml-auto inline-flex items-center gap-1 px-2 py-1 text-xs text-orbital-subtle hover:text-red-400 transition-colors"
-                title="Delete"
-              >
-                <Trash2 size={11} />
-                Delete
-              </button>
-            </div>
+            <>
+              <div className="flex items-center gap-2 mt-4 flex-wrap">
+                <label className="text-[10px] text-orbital-dim font-telemetry tracking-wider">SET STATUS</label>
+                <select
+                  className="text-xs px-2 py-1 bg-orbital-surface border border-orbital-border text-orbital-text rounded"
+                  value={item.status}
+                  onChange={(e) => onUpdateStatus(e.target.value)}
+                >
+                  {Object.values(FEEDBACK_STATUS).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+                {!editingNote && (
+                  <button
+                    onClick={() => { setNoteDraft(item.resolutionNote || ''); setEditingNote(true) }}
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
+                  >
+                    <MessageSquare size={11} />
+                    {item.resolutionNote ? 'Edit resolution' : 'Add resolution'}
+                  </button>
+                )}
+                <button
+                  onClick={onDelete}
+                  className="ml-auto inline-flex items-center gap-1 px-2 py-1 text-xs text-orbital-subtle hover:text-red-400 transition-colors"
+                  title="Delete"
+                >
+                  <Trash2 size={11} />
+                  Delete
+                </button>
+              </div>
+
+              {editingNote && (
+                <div className="mt-3 space-y-2">
+                  <textarea
+                    className="input min-h-[64px] resize-y text-xs"
+                    placeholder="Resolution note — what was done, or why it won't be…"
+                    value={noteDraft}
+                    onChange={e => setNoteDraft(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { onUpdateResolution(noteDraft.trim()); setEditingNote(false) }}
+                      className="btn-primary text-xs px-3 py-1.5"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingNote(false)}
+                      className="btn-ghost text-xs px-3 py-1.5"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

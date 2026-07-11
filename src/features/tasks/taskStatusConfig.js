@@ -94,12 +94,23 @@ export function getValidTransitions(currentStatus, userRole, isAssignee) {
   return map[currentStatus] || []
 }
 
-/** Quick helper: is a task considered "done" (no further crew action needed) */
+// ── Canonical "done" semantics ────────────────────────────────────────────────
+// One definition, used everywhere (Dashboard, Team, Analytics) so a task never
+// counts as complete on one page and incomplete on another:
+//   done     = the work is finished (Complete OR Verified)
+//   verified = a supervisor has additionally signed off (Verified only)
+
+/** The work is finished — no further crew action needed. */
 export function isTaskDone(task) {
+  return task.status === TASK_STATUS.COMPLETE || task.status === TASK_STATUS.VERIFIED
+}
+
+/** A supervisor has signed off. Subset of isTaskDone. */
+export function isTaskVerified(task) {
   return task.status === TASK_STATUS.VERIFIED
 }
 
-/** Is a task blocking progress (blocked or overdue and not verified) */
+/** Is a task blocking progress */
 export function isTaskBlocking(task) {
   return task.status === TASK_STATUS.BLOCKED
 }

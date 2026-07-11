@@ -6,6 +6,7 @@ import {
   UserSquare2,
 } from 'lucide-react'
 import { USERS, ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
+import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { useApp } from '../context/AppContext.jsx'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
@@ -329,24 +330,30 @@ function TeamMemberDetail({ user }) {
     [tasks, user.id]
   )
 
-  const isDone = (t) => t.status === TASK_STATUS.VERIFIED || t.status === TASK_STATUS.COMPLETE
-  const isOpen = (t) => !isDone(t) && t.status !== TASK_STATUS.BLOCKED
+  const isOpen = (t) => !isTaskDone(t) && t.status !== TASK_STATUS.BLOCKED
 
   const openTasks      = myTasks.filter(isOpen)
-  const completedTasks = myTasks.filter(isDone)
+  const completedTasks = myTasks.filter(isTaskDone)
   const blockedTasks   = myTasks.filter(t => t.status === TASK_STATUS.BLOCKED)
   const inProgressTasks = myTasks.filter(t => t.status === TASK_STATUS.IN_PROGRESS).length
 
   // ── Time-to-complete & on-time rate ──────────────────────────────────────
-  // Turnaround = days between task creation and last update on completed tasks.
-  // Caveat: updated_at gets bumped on any update, not strictly on completion.
-  // For demo seed values this approximates "how long did it take to finish."
-  // A future iteration could pull from task_status_history for exact transition times.
+  // Completion time comes from the task's status history (the exact moment it
+  // moved to Complete/Verified, trigger-recorded server-side). Falls back to
+  // updated_at for tasks completed before history was surfaced.
+  const completionTime = (t) => {
+    const entry = (t.statusHistory || []).findLast?.(
+      e => e.to === TASK_STATUS.COMPLETE || e.to === TASK_STATUS.VERIFIED
+    )
+    return entry?.at || t.updatedAt
+  }
+
   const tasksWithTurnaround = completedTasks
     .map(t => {
-      if (!t.createdAt || !t.updatedAt) return null
-      const days = differenceInCalendarDays(parseISO(t.updatedAt), parseISO(t.createdAt))
-      return { task: t, days: Math.max(0, days) }
+      const doneAt = completionTime(t)
+      if (!t.createdAt || !doneAt) return null
+      const days = differenceInCalendarDays(parseISO(doneAt), parseISO(t.createdAt))
+      return { task: t, days: Math.max(0, days), doneAt }
     })
     .filter(Boolean)
 
@@ -354,10 +361,13 @@ function TeamMemberDetail({ user }) {
     ? tasksWithTurnaround.reduce((sum, x) => sum + x.days, 0) / tasksWithTurnaround.length
     : null
 
-  // On-time rate: of completed tasks with a due date, how many were updated on or before that date?
-  const completedWithDue = completedTasks.filter(t => t.dueDate && t.updatedAt)
-  const onTimeCount = completedWithDue.filter(t =>
-    differenceInCalendarDays(parseISO(t.dueDate), parseISO(t.updatedAt)) >= 0
+  // On-time rate: of completed tasks with a due date, how many were finished
+  // on or before that date?
+  const completedWithDue = completedTasks
+    .map(t => ({ t, doneAt: completionTime(t) }))
+    .filter(({ t, doneAt }) => t.dueDate && doneAt)
+  const onTimeCount = completedWithDue.filter(({ t, doneAt }) =>
+    differenceInCalendarDays(parseISO(t.dueDate), parseISO(doneAt)) >= 0
   ).length
   const onTimeRate = completedWithDue.length > 0
     ? Math.round((onTimeCount / completedWithDue.length) * 100)
@@ -376,7 +386,7 @@ function TeamMemberDetail({ user }) {
   // ── Recent completed (last 5, most-recent first) ─────────────────────────
   const recentlyCompleted = useMemo(() => {
     return [...tasksWithTurnaround]
-      .sort((a, b) => parseISO(b.task.updatedAt) - parseISO(a.task.updatedAt))
+      .sort((a, b) => parseISO(b.doneAt) - parseISO(a.doneAt))
       .slice(0, 5)
   }, [tasksWithTurnaround])
 

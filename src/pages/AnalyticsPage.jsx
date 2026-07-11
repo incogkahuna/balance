@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import { useApp } from '../context/AppContext.jsx'
 import { USERS, ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
+import { isTaskDone, isTaskVerified } from '../features/tasks/taskStatusConfig.js'
 import { Navigate } from 'react-router-dom'
 
 const CHART_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ef4444']
@@ -22,10 +23,9 @@ export function AnalyticsPage() {
   const cursorFillColor = theme === 'dark' ? '#27282e' : '#e5e7eb'
   const legendTextColor = theme === 'dark' ? '#6e6f78' : '#6b7280'
 
-  // Admin only
-  if (currentUser?.role !== ROLES.ADMIN) {
-    return <Navigate to="/dashboard" replace />
-  }
+  // NOTE: the admin-only redirect lives BELOW the hooks (just before the JSX
+  // return). An early return here would change the hook count when the role
+  // changes mid-session — a Rules of Hooks violation that can crash React.
 
   // ─── Productions per month (last 6 months) ───────────────────────────────
   const productionsPerMonth = useMemo(() => {
@@ -43,11 +43,12 @@ export function AnalyticsPage() {
   }, [productions])
 
   // ─── Task completion by person ────────────────────────────────────────────
+  // "Completed" uses the canonical done definition (Complete OR Verified).
   const tasksByPerson = useMemo(() => {
     return USERS.map(user => {
       const assigned = tasks.filter(t => t.assigneeId === user.id)
-      const completed = assigned.filter(t => t.status === TASK_STATUS.VERIFIED).length
-      const pending = assigned.filter(t => t.status !== TASK_STATUS.VERIFIED).length
+      const completed = assigned.filter(isTaskDone).length
+      const pending = assigned.length - completed
       const rate = assigned.length > 0 ? Math.round((completed / assigned.length) * 100) : 0
       return { name: user.name, completed, pending, total: assigned.length, rate }
     }).filter(p => p.total > 0)
@@ -90,7 +91,7 @@ export function AnalyticsPage() {
   const totalProductions = productions.length
   const completedProductions = productions.filter(p => p.status === PRODUCTION_STATUS.COMPLETED).length
   const totalTasks = tasks.length
-  const verifiedTasks = tasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
+  const verifiedTasks = tasks.filter(isTaskVerified).length
   const avgRating = useMemo(() => {
     const rated = productions.filter(p => p.feedback?.rating)
     if (rated.length === 0) return null
@@ -103,6 +104,11 @@ export function AnalyticsPage() {
     borderRadius: 2,
     color: 'var(--orbital-text)',
     fontSize: 12,
+  }
+
+  // Admin only — after every hook has run (see note above).
+  if (currentUser?.role !== ROLES.ADMIN) {
+    return <Navigate to="/dashboard" replace />
   }
 
   return (

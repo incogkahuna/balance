@@ -4,6 +4,7 @@ import { Film, CheckSquare, AlertTriangle, Clock, ChevronRight } from 'lucide-re
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS, TODO_STATUS, TODO_VISIBILITY, USERS } from '../data/models.js'
 import { StatusBadge, TaskStatusBadge, PriorityBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
+import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { Avatar } from '../components/ui/Avatar.jsx'
 import { UpcomingMilestones } from '../features/productions/roadmap/UpcomingMilestones.jsx'
 import { TickerBanner } from '../components/ui/TickerBanner.jsx'
@@ -154,7 +155,7 @@ export function DashboardPage() {
             <SectionHeader
               label="My Tasks"
               action={myPendingTasks.length > 3 && (
-                <button onClick={() => navigate('/productions')}
+                <button onClick={() => navigate('/tasks?filter=mine')}
                   className="flex items-center gap-0.5 text-[11px] text-orbital-subtle hover:text-orbital-text transition-colors">
                   View all <ChevronRight size={12} />
                 </button>
@@ -217,7 +218,7 @@ export function DashboardPage() {
               <div className="card divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
                 {activeProds.slice(0, 5).map(prod => {
                   const prodTasks      = tasks.filter(t => t.productionId === prod.id)
-                  const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
+                  const completedTasks = prodTasks.filter(isTaskDone).length
                   const pct            = prodTasks.length > 0 ? (completedTasks / prodTasks.length) * 100 : 0
                   const accent         = STATUS_COLOR[prod.status] || '#52525b'
                   return (

@@ -19,11 +19,13 @@ const STATIC_LABELS = {
   '/productions':     'Productions',
   '/productions/new': 'New Production',
   '/tasks':           'Tasks',
+  '/todos':           'To-Dos',
   '/schedule':        'Schedule',
   '/team':            'Team',
   '/contractors':     'Contractors',
   '/analytics':       'Analytics',
-  '/coming-soon':     'Coming Soon',
+  '/coming-soon':     'Roadmap',   // sidebar renamed Coming Soon → Roadmap
+  '/feedback':        'Bugs & Ideas',
   '/resources':       'Resources',
   '/gear':            'Gear',
 }

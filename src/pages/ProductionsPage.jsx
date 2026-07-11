@@ -5,6 +5,7 @@ import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, Rot
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
+import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { computeRoadmapHealth, HEALTH_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
 import { AvatarGroup } from '../components/ui/Avatar.jsx'
@@ -383,7 +384,7 @@ function ProductionCard({
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const prodTasks      = tasks.filter(t => t.productionId === prod.id)
-  const completedTasks = prodTasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
+  const completedTasks = prodTasks.filter(isTaskDone).length
   const memberIds      = prod.assignedMembers.map(m => m.userId)
   const stageManager   = prod.stageManagerId ? getContractor(prod.stageManagerId) : null
   const health         = computeRoadmapHealth(prod.roadmap)
@@ -398,7 +399,7 @@ function ProductionCard({
   const countdown    = computeCountdown(prod)
   const nextMile     = getNextMilestone(prod.roadmap)
   const addonCount   = prod.addons?.length || 0
-  const damageCount  = prod.addons?.filter(a => a.damageFlag).length || 0
+  const damageCount  = prod.addons?.filter(a => a.damaged).length || 0
   const concernCount = prod.bible?.concerns?.length || 0
   const showDetailSection = nextMile || addonCount > 0 || concernCount > 0
 
