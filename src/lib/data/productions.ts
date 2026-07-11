@@ -7,7 +7,9 @@ import { supabase } from '../supabase'
 // components keep working with minimal changes.
 
 export type ProductionStatus = 'Incoming' | 'Active' | 'Wrap' | 'Completed'
-export type ProductionType   = 'LED Volume' | 'Mobile Build' | 'Other'
+// Free-form since phase6b (the DB CHECK was dropped) — usually mirrors the
+// picked LED wall's name. The old 'LED Volume' | 'Mobile Build' union was a lie.
+export type ProductionType   = string
 export type LocationType     = 'In-House (Orbital Studios)' | 'Mobile'
 
 export interface AssignedMember {
