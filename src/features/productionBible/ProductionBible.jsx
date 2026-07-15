@@ -42,6 +42,60 @@ export function ProductionBible({ production }) {
     updateBible(production.id, { ...bible, [sectionKey]: data })
   }
 
+  // Called by DocumentsReceived after an AI scan of a stored screenshot/PDF —
+  // folds extracted contacts into Key Players and concerns into Key Concerns
+  // in a single bible write. Returns counts for the caller's feedback toast.
+  const handleAiExtract = (extraction, sourceName) => {
+    const players = [...bible.keyPlayers]
+    let addedPlayers = 0
+    for (const c of extraction.contacts || []) {
+      if (!c?.name && !c?.email) continue
+      const email = (c.email || '').toLowerCase()
+      const exists = players.some(p =>
+        (email && p.email && p.email.toLowerCase() === email) ||
+        (c.name && p.name && p.name.toLowerCase() === c.name.toLowerCase())
+      )
+      if (exists) continue
+      players.push({
+        id: crypto.randomUUID(),
+        name: c.name || email.split('@')[0],
+        role: c.role || '',
+        company: c.company || '',
+        phone: c.phone || '',
+        email,
+        notes: `Extracted by AI from "${sourceName}"`,
+        tag: 'Client Side',
+      })
+      addedPlayers++
+    }
+
+    const concerns = [...bible.concerns]
+    let addedConcerns = 0
+    const HIGH_CATEGORIES = new Set(['tight-timeline', 'conflict', 'missing-resource'])
+    for (const c of extraction.concerns || []) {
+      if (!c?.title) continue
+      const exists = concerns.some(x =>
+        x.title.toLowerCase().includes(c.title.toLowerCase().slice(0, 40))
+      )
+      if (exists) continue
+      concerns.push({
+        id: crypto.randomUUID(),
+        title: c.title.slice(0, 90),
+        description: `Extracted by AI from "${sourceName}"`,
+        severity: HIGH_CATEGORIES.has(c.category) ? 'High' : 'Medium',
+        status: 'Open',
+        resolutionNote: '',
+        createdAt: new Date().toISOString(),
+      })
+      addedConcerns++
+    }
+
+    if (addedPlayers > 0 || addedConcerns > 0) {
+      updateBible(production.id, { ...bible, keyPlayers: players, concerns })
+    }
+    return { addedPlayers, addedConcerns }
+  }
+
   // Track which sections are collapsed on mobile
   const [open, setOpen] = useState(() =>
     Object.fromEntries(SECTIONS.map(s => [s.key, s.defaultOpen]))
@@ -67,6 +121,7 @@ export function ProductionBible({ production }) {
             <DocumentsReceived
               documents={bible.documents}
               onChange={(data) => handleSectionChange('documents', data)}
+              onAiExtract={handleAiExtract}
             />
           )}
           {key === 'concerns' && (

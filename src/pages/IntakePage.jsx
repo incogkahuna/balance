@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { X, ChevronLeft } from 'lucide-react'
 import clsx from 'clsx'
 import { useApp } from '../context/AppContext.jsx'
-import { mockParseInputs, generateQuestions, buildProductionFromDraft } from '../features/intake/intakeUtils.js'
+import { mockParseInputs, mergeTier2Results, generateQuestions, buildProductionFromDraft } from '../features/intake/intakeUtils.js'
+import { parseIntakeInputs } from '../lib/parseIntake.ts'
 import { InputStage }     from '../features/intake/InputStage.jsx'
 import { ParsingStage }   from '../features/intake/ParsingStage.jsx'
 import { QuestionsStage } from '../features/intake/QuestionsStage.jsx'
@@ -43,29 +44,60 @@ export function IntakePage() {
     crewEdits:    {},   // { [userId]: { included } }
   })
 
-  // Computed questions (recalculated after parsing)
+  // Computed questions (recalculated after parsing). The ref mirrors state so
+  // handleParsingComplete can stay referentially stable — ParsingStage restarts
+  // its animation timers if onComplete's identity changes mid-stage.
   const [questions, setQuestions] = useState([])
+  const questionsRef = useRef([])
+  const setQuestionsBoth = useCallback((qs) => {
+    questionsRef.current = qs
+    setQuestions(qs)
+  }, [])
+
+  // Tier 2 (Claude vision) parse status — ParsingStage holds until it settles.
+  const [aiPending, setAiPending] = useState(false)
+  const parseRunRef = useRef(0)
 
   // Created production id (for redirect)
   const createdIdRef = useRef(null)
 
   // ── Stage: Input → Parsing ─────────────────────────────────────────────────
-  // Parse eagerly here — before the animation — so parsingSummary and extracted
-  // fields are fully populated when ParsingStage renders and displays them.
+  // Two tiers run here:
+  //   Tier 1 — heuristic parser, synchronous, always available (offline too).
+  //   Tier 2 — Claude with vision via the parse-intake edge function. Reads
+  //            screenshots for real. Merged over Tier 1 when it lands; any
+  //            failure (not deployed, offline, timeout) silently keeps Tier 1.
   const handleInputsReady = useCallback((inputs) => {
-    const { extracted, contacts, concerns, detectedCrew, parsingSummary } = mockParseInputs(inputs)
-    const qs = generateQuestions(extracted, {})
+    const tier1 = mockParseInputs(inputs)
     // Reset answers/edits when re-submitting inputs so questions regenerate cleanly
-    setDraft(d => ({ ...d, inputs, extracted, contacts, concerns, detectedCrew, parsingSummary, answers: {}, edits: {}, crewEdits: {} }))
-    setQuestions(qs)
+    setDraft(d => ({ ...d, inputs, ...tier1, answers: {}, edits: {}, crewEdits: {} }))
+    setQuestionsBoth(generateQuestions(tier1.extracted, {}))
     setStage('parsing')
-  }, [])
+
+    const runId = ++parseRunRef.current
+    setAiPending(true)
+    parseIntakeInputs(inputs)
+      .then((tier2) => {
+        if (parseRunRef.current !== runId) return // stale run (user went back)
+        const merged = mergeTier2Results(tier1, tier2)
+        setDraft(d => ({ ...d, ...merged }))
+        setQuestionsBoth(generateQuestions(merged.extracted, {}))
+      })
+      .catch((err) => {
+        // Tier 2 is an enhancement — heuristics carry the flow.
+        console.info('[Intake] AI parse unavailable, using heuristics:', err?.message || err)
+      })
+      .finally(() => {
+        if (parseRunRef.current === runId) setAiPending(false)
+      })
+  }, [setQuestionsBoth])
 
   // ── Stage: Parsing complete ────────────────────────────────────────────────
   // Parsing already happened in handleInputsReady — just advance the stage.
+  // Reads questions via ref so this callback never changes identity.
   const handleParsingComplete = useCallback(() => {
-    setStage(questions.length > 0 ? 'questions' : 'review')
-  }, [questions.length])
+    setStage(questionsRef.current.length > 0 ? 'questions' : 'review')
+  }, [])
 
   // ── Stage: Q&A ────────────────────────────────────────────────────────────
   const handleAnswer = useCallback((field, value) => {
@@ -256,6 +288,7 @@ export function IntakePage() {
         {stage === 'parsing' && (
           <ParsingStage
             parsingSummary={draft.parsingSummary}
+            pending={aiPending}
             onComplete={handleParsingComplete}
           />
         )}

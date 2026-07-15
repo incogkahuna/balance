@@ -8,9 +8,10 @@ third-party APIs. Lives here because:
 
 ## Functions
 
-| Name         | Purpose                                                  | Required secrets   |
-|--------------|----------------------------------------------------------|--------------------|
-| `transcribe` | Audio blob → OpenAI Whisper → transcript text            | `OPENAI_API_KEY`   |
+| Name           | Purpose                                                      | Required secrets    |
+|----------------|--------------------------------------------------------------|---------------------|
+| `transcribe`   | Audio blob → OpenAI Whisper → transcript text                | `OPENAI_API_KEY`    |
+| `parse-intake` | Intake text + screenshots → Claude (vision) → structured production draft. Powers the intake wizard's Tier 2 parse and the Production Bible "Scan with AI" | `ANTHROPIC_API_KEY` |
 
 `SUPABASE_URL` and `SUPABASE_ANON_KEY` are injected automatically by
 Supabase Edge.

@@ -11,11 +11,12 @@ const STEPS = [
   { id: 6, text: 'Building your draft',            delay: 2100 },
 ]
 
-const DONE_AT = 2200  // when the spinner flips to checkmark
+const DONE_AT = 2200  // when the heuristic pass visually completes
 
-export function ParsingStage({ parsingSummary = [], onComplete }) {
+export function ParsingStage({ parsingSummary = [], pending = false, onComplete }) {
   const [visibleSteps, setVisibleSteps] = useState([])
   const [done,         setDone]         = useState(false)
+  const [minElapsed,   setMinElapsed]   = useState(false)
 
   // Longer pause when "Found" panel has content so the user can read it
   const hasFindings = parsingSummary.length > 0
@@ -35,31 +36,40 @@ export function ParsingStage({ parsingSummary = [], onComplete }) {
       setDone(true)
     }, DONE_AT))
 
-    // Advance stage
+    // Animation floor reached — actual advance also waits on the AI parse.
     timers.push(setTimeout(() => {
-      onComplete()
+      setMinElapsed(true)
     }, advanceAt))
 
     return () => timers.forEach(clearTimeout)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onComplete])
+  }, [])
+
+  // Advance when the animation floor has passed AND the Tier 2 (Claude) parse
+  // has settled. `pending` flips false on success OR failure — the wizard
+  // never blocks on the AI being available.
+  useEffect(() => {
+    if (!minElapsed || pending) return
+    const t = setTimeout(onComplete, 400)
+    return () => clearTimeout(t)
+  }, [minElapsed, pending, onComplete])
 
   return (
     <div className="flex flex-col items-center gap-8 py-8">
 
-      {/* Central animation */}
+      {/* Central animation — stays spinning while the AI parse is in flight */}
       <div className="relative flex items-center justify-center">
         <div className={clsx(
           'w-20 h-20 rounded-full border-2 flex items-center justify-center transition-all duration-700',
-          done ? 'border-green-400 bg-green-500/10' : 'border-blue-400/50 bg-blue-500/10'
+          done && !pending ? 'border-green-400 bg-green-500/10' : 'border-blue-400/50 bg-blue-500/10'
         )}>
-          {done
+          {done && !pending
             ? <CheckCircle size={36} className="text-green-400" />
             : <Loader size={32} className="text-blue-400 animate-spin" />
           }
         </div>
         {/* Pulse ring */}
-        {!done && (
+        {(!done || pending) && (
           <div className="absolute w-20 h-20 rounded-full border border-blue-400/30 animate-ping" />
         )}
       </div>
@@ -67,11 +77,13 @@ export function ParsingStage({ parsingSummary = [], onComplete }) {
       {/* Title */}
       <div className="text-center">
         <h2 className="text-lg font-semibold text-orbital-text">
-          {done ? 'Analysis complete' : 'Analysing your inputs…'}
+          {done && pending ? 'Reading screenshots & fine detail…'
+            : done ? 'Analysis complete'
+            : 'Analysing your inputs…'}
         </h2>
         <p className="text-sm text-orbital-subtle mt-1">
-          {done
-            ? (hasFindings ? 'Here\'s what I found' : 'Building your draft now')
+          {done && pending ? 'AI is going deeper on your inputs'
+            : done ? (hasFindings ? 'Here\'s what I found' : 'Building your draft now')
             : 'Finding everything I can'
           }
         </p>

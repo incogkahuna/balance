@@ -1,22 +1,56 @@
 import { useState, useRef } from 'react'
-import { FileText, Image, Upload, Trash2, Eye, Plus, Calendar } from 'lucide-react'
+import { FileText, Image, Upload, Trash2, Eye, Plus, Calendar, Sparkles, Loader } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { Modal } from '../../components/ui/Modal.jsx'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx'
 import { EmptyState } from '../../components/ui/EmptyState.jsx'
+import { useToast } from '../../context/ToastContext.jsx'
+import { parseIntakeInputs } from '../../lib/parseIntake.ts'
 
 // File url is base64 in v1. To swap in Supabase storage:
 //   1. Replace the FileReader block in handleFileSelect with a Supabase upload call
 //   2. Store the returned public URL as `url` instead of the base64 string
 //   3. No other changes needed — the rest of the component uses `url` generically
 
-export function DocumentsReceived({ documents = [], onChange }) {
+export function DocumentsReceived({ documents = [], onChange, onAiExtract }) {
+  const toast = useToast()
   const [showModal, setShowModal] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [previewDoc, setPreviewDoc] = useState(null)
   const [form, setForm] = useState({ name: '', dateReceived: '', notes: '' })
   const [pendingFile, setPendingFile] = useState(null) // { url, fileType, fileName }
+  const [scanningId, setScanningId] = useState(null)   // doc id being AI-scanned
   const fileRef = useRef(null)
+
+  // ── AI scan — read a stored screenshot with the parse-intake function ──────
+  // Extracted contacts land in Key Players, concerns in Key Concerns (via
+  // onAiExtract, which the parent owns). Works on image documents (base64).
+  const handleAiScan = async (doc) => {
+    if (!doc.url?.startsWith('data:image/') || !onAiExtract) return
+    setScanningId(doc.id)
+    try {
+      const extraction = await parseIntakeInputs([
+        { id: doc.id, type: 'image', preview: doc.url, fileName: doc.name },
+      ])
+      const { addedPlayers, addedConcerns } = onAiExtract(extraction, doc.name)
+      if (addedPlayers === 0 && addedConcerns === 0) {
+        toast.info(`Scanned "${doc.name}" — nothing new to add (already captured or no contacts/concerns found).`)
+      } else {
+        const parts = []
+        if (addedPlayers)  parts.push(`${addedPlayers} key player${addedPlayers > 1 ? 's' : ''}`)
+        if (addedConcerns) parts.push(`${addedConcerns} concern${addedConcerns > 1 ? 's' : ''}`)
+        toast.success(`Scanned "${doc.name}" — added ${parts.join(' and ')}.`)
+      }
+    } catch (err) {
+      toast.error(
+        err?.status === 404 || err?.status === 0
+          ? 'AI scanning needs the parse-intake function deployed — see supabase/functions/README.'
+          : `AI scan failed — ${err?.message || 'unknown error'}`
+      )
+    } finally {
+      setScanningId(null)
+    }
+  }
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -90,6 +124,8 @@ export function DocumentsReceived({ documents = [], onChange }) {
               doc={doc}
               onPreview={() => setPreviewDoc(doc)}
               onDelete={() => setDeleteTarget(doc)}
+              onAiScan={onAiExtract ? () => handleAiScan(doc) : null}
+              scanning={scanningId === doc.id}
               isImage={isImage}
               isPDF={isPDF}
             />
@@ -183,8 +219,9 @@ export function DocumentsReceived({ documents = [], onChange }) {
   )
 }
 
-function DocRow({ doc, onPreview, onDelete, isImage, isPDF }) {
+function DocRow({ doc, onPreview, onDelete, onAiScan, scanning, isImage, isPDF }) {
   const canPreview = doc.url && (isImage(doc.fileType) || isPDF(doc.fileType))
+  const canAiScan  = !!onAiScan && !!doc.url?.startsWith('data:image/')
 
   return (
     <div className="card p-3 flex items-center gap-3">
@@ -209,6 +246,19 @@ function DocRow({ doc, onPreview, onDelete, isImage, isPDF }) {
         </div>
       </div>
       <div className="flex gap-1 flex-shrink-0">
+        {canAiScan && (
+          <button
+            onClick={onAiScan}
+            disabled={scanning}
+            title="Scan with AI — pull contacts & concerns into the bible"
+            className="p-1.5 rounded hover:bg-purple-500/10 text-orbital-subtle hover:text-purple-400 transition-colors disabled:opacity-60"
+          >
+            {scanning
+              ? <Loader size={14} className="animate-spin text-purple-400" />
+              : <Sparkles size={14} />
+            }
+          </button>
+        )}
         {canPreview && (
           <button onClick={onPreview} className="p-1.5 rounded hover:bg-orbital-muted text-orbital-subtle hover:text-blue-400 transition-colors">
             <Eye size={14} />

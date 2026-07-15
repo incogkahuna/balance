@@ -451,6 +451,111 @@ export function mockParseInputs(inputs) {
   }
 }
 
+// ─── Tier 2 merge ─────────────────────────────────────────────────────────────
+// Fold the Claude (vision) extraction into the Tier 1 heuristic result.
+// Claude saw everything the heuristics saw PLUS the screenshots, so a
+// non-empty Claude field wins; empty Claude fields keep the heuristic value.
+// Output shape is identical to mockParseInputs so callers can treat the two
+// tiers interchangeably.
+const AI_SOURCE = 'claude'
+const AI_SOURCE_NAME = 'AI analysis'
+const DATE_RE_ISO = /^\d{4}-\d{2}-\d{2}$/
+
+export function mergeTier2Results(tier1, tier2) {
+  const extracted = { ...tier1.extracted }
+
+  const setField = (field, value) => {
+    if (!value) return
+    extracted[field] = { value, confidence: 'high', source: AI_SOURCE, sourceName: AI_SOURCE_NAME }
+  }
+
+  setField('title',  tier2.title)
+  setField('client', tier2.client)
+  setField('productionType', tier2.productionType)
+  setField('locationType',   tier2.locationType)
+  setField('locationName',   tier2.locationAddress)
+  if (DATE_RE_ISO.test(tier2.startDate)) setField('startDate', tier2.startDate)
+  if (DATE_RE_ISO.test(tier2.endDate))   setField('endDate',   tier2.endDate)
+
+  // ── Contacts — merge by email (preferred) then by name ──
+  const contacts = [...tier1.contacts]
+  for (const c of tier2.contacts || []) {
+    if (!c?.name && !c?.email) continue
+    const email = (c.email || '').toLowerCase()
+    const existing = contacts.find(x =>
+      (email && x.email && x.email.toLowerCase() === email) ||
+      (c.name && x.name && x.name.toLowerCase() === c.name.toLowerCase())
+    )
+    if (existing) {
+      // Claude often fills gaps the regexes couldn't (role, company, phone)
+      if (!existing.phone && c.phone)       existing.phone = c.phone
+      if (!existing.company && c.company)   existing.company = c.company
+      if (!existing.roleGuess && c.role)    existing.roleGuess = c.role
+      if (!existing.email && email)         existing.email = email
+      existing.confidence = 'high'
+    } else {
+      contacts.push({
+        id:         crypto.randomUUID(),
+        name:       c.name || (email ? email.split('@')[0] : ''),
+        email,
+        phone:      c.phone || '',
+        company:    c.company || '',
+        roleGuess:  c.role || '',
+        confidence: 'high',
+        source:     AI_SOURCE,
+        sourceName: AI_SOURCE_NAME,
+      })
+    }
+  }
+
+  // ── Crew — map Claude's name strings back onto the known roster ──
+  const crewById = new Map(tier1.detectedCrew.map(c => [c.userId, c]))
+  const crewText = (tier2.crewNames || []).join('\n')
+  if (crewText.trim()) {
+    for (const hit of detectCrewMentions(crewText)) {
+      const existing = crewById.get(hit.userId)
+      if (!existing || CONF_RANK[hit.confidence] > CONF_RANK[existing.confidence]) {
+        crewById.set(hit.userId, { ...hit, source: AI_SOURCE, sourceName: AI_SOURCE_NAME })
+      }
+    }
+  }
+
+  // ── Concerns — append non-duplicates, AI first (usually higher quality) ──
+  const concerns = [...tier1.concerns]
+  for (const c of tier2.concerns || []) {
+    if (!c?.title) continue
+    const isDupe = concerns.some(x =>
+      x.title.toLowerCase().includes(c.title.toLowerCase().slice(0, 40)) ||
+      c.title.toLowerCase().includes(x.title.toLowerCase().slice(0, 40))
+    )
+    if (isDupe) continue
+    concerns.push({
+      id:          crypto.randomUUID(),
+      title:       c.title.slice(0, 90),
+      description: '',
+      category:    c.category || 'general',
+      confidence:  'high',
+      include:     false,
+      source:      AI_SOURCE,
+      sourceName:  AI_SOURCE_NAME,
+    })
+    if (concerns.length >= 8) break
+  }
+
+  const parsingSummary = [
+    ...tier1.parsingSummary.filter(line => !line.includes('uploaded — ready for review')),
+    ...(tier2.summary || []).map(line => `AI · ${line}`),
+  ]
+
+  return {
+    extracted,
+    contacts,
+    concerns,
+    detectedCrew: [...crewById.values()],
+    parsingSummary,
+  }
+}
+
 // ─── Question engine ──────────────────────────────────────────────────────────
 const QUESTION_DEFS = [
   {

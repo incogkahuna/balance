@@ -12,60 +12,48 @@ is green. The safe path to production, in order:
    in the Supabase SQL editor. Phase 0 code writes columns this migration creates
    (task notes, comment photos, contractor fields). Must run **before** the push
    or those saves fail in prod (failures now surface as toasts, so they'd be loud).
-2. **`git push`** — ships the 7 committed Phase 0 + docs commits. Vercel
-   auto-deploys `balance-orbital.vercel.app`. (The uncommitted Tier 2 WIP below is
-   NOT part of these commits, so it won't deploy — that's fine and intended.)
+2. **`git push`** — ships the committed Phase 0 + Tier 2 intake commits. Vercel
+   auto-deploys `balance-orbital.vercel.app`. (Tier 2 is fallback-safe before its
+   edge function is deployed — see next section.)
 3. **Verify prod** — real Google login → create a production → add a task with a
    note → mark it through the status workflow → confirm no toast errors.
-4. **Then** decide on the Tier 2 intake WIP (next section) and Phase 1.
+4. **Then** optionally deploy the `parse-intake` function (next section) and
+   start Phase 1.
 
 The auth-loop fix is verified working (2026-07-08). Details near the bottom.
 
 ---
 
-## UNCOMMITTED WIP — Intake Tier 2 (Claude) — decide what to do with this
+## COMMITTED — Intake Tier 2 (Claude screenshot parser), 2026-07-15
 
-There is a **coherent, compiles-clean, but uncommitted** set of changes in the
-working tree (created 2026-07-15) that wires up the long-deferred Claude intake
-parser — one feature across 8 files (285 insertions). `git status`:
+The long-deferred screenshot parser is **finished, browser-verified, and
+committed** at both sites that requested a parser:
 
-```
-?? supabase/functions/parse-intake/index.ts  edge fn (claude-opus-4-8 + vision)
-?? src/lib/parseIntake.ts                     Tier 2 client (throws-on-fail → Tier 1 fallback)
- M src/features/intake/intakeUtils.js         + mergeTier2Results()
- M src/pages/IntakePage.jsx                    Tier 1 sync, then Tier 2 async merge
- M src/features/intake/ParsingStage.jsx        parsing-stage UI for the async pass
- M src/features/productionBible/DocumentsReceived.jsx  "AI-scan" a stored doc
- M src/features/productionBible/ProductionBible.jsx     folds scan → Key Players/Concerns
- M supabase/functions/README.md                deploy notes
-```
+1. **Intake wizard** (`/productions/new`) — Tier 1 heuristics run synchronously
+   (instant, offline-safe); Tier 2 (`parse-intake` edge function,
+   `claude-opus-4-8` with vision + structured output) runs during the Analysing
+   stage and merges over Tier 1 via `mergeTier2Results`. Screenshots, pasted
+   text, and voice transcripts all flow through it. The Analysing stage holds
+   ("Reading screenshots & fine detail…") until the AI settles; the client caps
+   the wait at 60s.
+2. **Production Bible → Documents Received** — image documents get a ✨ "Scan
+   with AI" button that folds extracted contacts into Key Players and concerns
+   into Key Concerns (deduped, single bible write, toast feedback).
 
-**Two entry points, one client (`parseIntakeInputs`):**
-1. **Intake flow** — `handleInputsReady` runs Tier 1 heuristics synchronously
-   (instant), then fires Tier 2 async; on success `mergeTier2Results(tier1, tier2)`
-   over the draft + regenerates questions; on failure `.catch` → keep Tier 1.
-2. **Production Bible → Documents Received** — an "AI scan" button on a stored
-   screenshot/PDF runs `parseIntakeInputs` on it and folds extracted contacts into
-   Key Players and concerns into Key Concerns (via `onAiExtract`); uses the Phase 0
-   toast system for feedback.
+**Fallback verified live** (browser test, function undeployed): the wizard logs
+`[Intake] AI parse unavailable, using heuristics` and completes on Tier 1 —
+paste-brief → Review stage fully populated. So the code is safe in prod before
+the function exists; Tier 2 lights up when deployed. (Note: the in-app browser's
+console reader duplicates every entry — two identical log lines ≠ two runs.)
 
-Non-blocking *enhancement layer*, never a gate — so the client code is **safe to
-commit and push even before the edge function is deployed**; if the function
-isn't live, `parseIntakeInputs` throws and both entry points fall back cleanly.
-
-**It builds clean** (`npx vite build` ✓). Recommend committing it soon so it isn't
-lost to a stray `git checkout`/reset — even without deploying the function yet.
-
-**To make Tier 2 actually run in prod (user/dashboard actions):**
+**To turn Tier 2 on (user actions):**
 - `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...`
 - `supabase functions deploy parse-intake`
-- Edge fn uses model `claude-opus-4-8` with vision (sends screenshots as image
-  content). Confirm that model id is current before relying on it.
+- Then test: an intake with a call-sheet screenshot should populate dates and
+  contacts from the image, not just the pasted text.
 
-**Open question for the next session:** is this WIP finished, or mid-build? It
-compiles and the flow is wired, but it hasn't been tested against a live function
-(no key/deploy yet). Review `src/lib/parseIntake.ts` + the edge fn + the
-IntakePage diff, then either commit + deploy, or finish/adjust first.
+Email intake (foundation-plan 4c) remains out of scope — it needs inbound-email
+DNS/routing infrastructure, not just a parser.
 
 ---
 
