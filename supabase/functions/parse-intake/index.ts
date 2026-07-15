@@ -216,7 +216,12 @@ serve(async (req) => {
   try {
     response = await anthropic.messages.create({
       model: 'claude-opus-4-8',
-      max_tokens: 4096,
+      // Headroom for adaptive thinking + the structured JSON. A rich call sheet
+      // can yield many contacts and concerns; at 4k the thinking budget could
+      // crowd out the output and truncate it, which fails JSON.parse below and
+      // needlessly drops the wizard back to Tier 1. Non-streaming, so we stay
+      // well under both the SDK's HTTP timeout and the client's 60s cap.
+      max_tokens: 8192,
       thinking: { type: 'adaptive' },
       system:
         'You extract structured production-brief data for Balance, the ' +
@@ -226,6 +231,11 @@ serve(async (req) => {
         'threads, voice-memo transcripts, and screenshots. Be precise; prefer ' +
         'leaving a field empty over guessing.',
       output_config: {
+        // Extraction is well-scoped and this runs in a latency-sensitive
+        // background call (the client caps the wait at 60s) — medium effort
+        // keeps thinking fast and cheap without losing accuracy on messy
+        // screenshots.
+        effort: 'medium',
         format: { type: 'json_schema', schema: EXTRACTION_SCHEMA },
       },
       messages: [{ role: 'user', content }],
