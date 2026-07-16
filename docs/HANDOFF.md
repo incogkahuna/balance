@@ -1,24 +1,24 @@
 # Balance — Session Handoff
 
-*Updated 2026-07-15. Read this first, then delete/replace when stale.*
+*Updated 2026-07-16. Read this first, then delete/replace when stale.*
 *Working copy that has all this state: `C:\Users\danie\OneDrive\Documents\GitHub\balance` (the OneDrive checkout — NOT the Claude worktree, which is behind).*
 
 ## TL;DR — start here
 
-Two batches of work are sitting locally, unshipped. Nothing is broken; the build
-is green. The safe path to production, in order:
+**SHIPPED 2026-07-16:** the phase7a migration was run in Supabase (user-confirmed),
+then Phase 0 + the Tier 2 intake parser were pushed (`master @ a564db9`+) and the
+Vercel deploy verified live (new bundle's toast CSS confirmed on
+`balance-orbital.vercel.app`). Nothing is sitting locally.
 
-1. **Run migration** `supabase/migrations/20260711000000_phase7a_persist_dropped_fields.sql`
-   in the Supabase SQL editor. Phase 0 code writes columns this migration creates
-   (task notes, comment photos, contractor fields). Must run **before** the push
-   or those saves fail in prod (failures now surface as toasts, so they'd be loud).
-2. **`git push`** — ships the committed Phase 0 + Tier 2 intake commits. Vercel
-   auto-deploys `balance-orbital.vercel.app`. (Tier 2 is fallback-safe before its
-   edge function is deployed — see next section.)
-3. **Verify prod** — real Google login → create a production → add a task with a
-   note → mark it through the status workflow → confirm no toast errors.
-4. **Then** optionally deploy the `parse-intake` function (next section) and
-   start Phase 1.
+Remaining, in order:
+
+1. **Smoke-test prod** — real Google login → create a production → add a task
+   with a note → move it through the status workflow → confirm no error toasts.
+2. **Turn on Tier 2** (optional, anytime) — `supabase secrets set
+   ANTHROPIC_API_KEY=sk-ant-...` + `supabase functions deploy parse-intake`.
+3. **Run `phase6h`** in the SQL editor if it wasn't run alongside phase7a.
+4. **Start Phase 1** (identity unification → localStorage ports → tests) from
+   `docs/AUDIT-2026-07.md`.
 
 The auth-loop fix is verified working (2026-07-08). Details near the bottom.
 
