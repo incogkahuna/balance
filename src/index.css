@@ -158,6 +158,22 @@
     min-height: 100dvh;
   }
 
+  /* Native date/time picker indicator — black on light, white on dark, so
+     the calendar icon is visible everywhere (Danny item 12). WebKit renders
+     it as a black glyph; invert flips it for dark surfaces. */
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='datetime-local']::-webkit-calendar-picker-indicator,
+  input[type='time']::-webkit-calendar-picker-indicator {
+    filter: none;
+    opacity: 0.8;
+    cursor: pointer;
+  }
+  .dark input[type='date']::-webkit-calendar-picker-indicator,
+  .dark input[type='datetime-local']::-webkit-calendar-picker-indicator,
+  .dark input[type='time']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+
   /* iOS Safari zooms in on focus when input font-size < 16px. We use 14px
      visually on desktop, but bump to 16px on touch-primary devices so the
      keyboard doesn't trigger a zoom-and-scroll dance on phones. */

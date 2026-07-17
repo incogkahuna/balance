@@ -1,5 +1,44 @@
 # Danny: run this SQL (one paste, Supabase dashboard → SQL Editor)
 
+## 0) FIRST — profile duplicates (Danny/Wilder) + admin roles
+
+Profiles are 1:1 with Google sign-ins, so a "duplicate Danny" is a second
+sign-in under a different email (e.g. personal gmail vs @orbitalvs.com). The
+earlier promote-everyone SQL made those dupes admin too. Fix in two steps:
+
+**Step 1 — see what exists** (run this, look at the output):
+
+```sql
+select p.id, p.email, p.name, p.role, p.created_at,
+       (select count(*) from public.tasks t where t.created_by = p.id) as tasks_created
+from public.profiles p
+order by p.name, p.created_at;
+```
+
+**Step 2 — delete each duplicate at the AUTH level** (deleting only the
+profile row would just let it recreate on next login). Easiest: dashboard →
+Authentication → Users → find the duplicate email → Delete user (the profile
+cascades). Or by SQL, one per dupe id from step 1:
+
+```sql
+delete from auth.users where id = 'PASTE-DUPE-ID-HERE';
+```
+
+**Step 3 — make the verified accounts admin and keep it sticky:**
+
+```sql
+update public.profiles set role = 'admin'
+where email in ('dhorgan@orbitalvs.com');  -- add the other verified emails
+
+insert into public.role_assignments (email, role, display_name)
+values ('dhorgan@orbitalvs.com', 'admin', 'Danny')  -- repeat per person
+on conflict (email) do update set role = 'admin';
+```
+
+The `role_assignments` upsert means if anyone ever signs in fresh with that
+email, they come back as admin automatically. If the dupe emails are ones
+people might accidentally sign in with again, DON'T pre-authorize those.
+
 *Written 2026-07-16. Four modules shipped tonight need their tables/columns.
 The app is already live and **degrades gracefully** until you run this —
 activity silently doesn't count, to-dos/feedback stay in each browser,
@@ -185,6 +224,21 @@ create policy "feedback_items_delete"
 
 alter publication supabase_realtime add table public.feedback_items;
 ```
+
+## Voice transcription is down — one terminal command
+
+Danny's "transcription service is unreachable" error is real: the
+**`transcribe` edge function returns 404 (no longer deployed)** while
+parse-intake is fine (401 = deployed, auth-gated). The source is in the repo;
+redeploy from the repo root:
+
+```
+supabase functions deploy transcribe --project-ref ectyohuqgpnwivpjpuga
+```
+
+(The CLI on this machine is already logged in. The OpenAI key secret should
+still be set project-side — if the mic errors after redeploy, re-run
+`supabase secrets set OPENAI_API_KEY=... --project-ref ectyohuqgpnwivpjpuga`.)
 
 ## Also still on you (from before)
 
