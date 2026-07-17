@@ -113,7 +113,7 @@ export function AccountMenu() {
           {/* Ambient background */}
           <div className="p-4 border-b border-orbital-border">
             <p className="hud-label text-[10px] mb-2.5">Backdrop</p>
-            <div className="grid grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-4 gap-1.5">
               {BACKGROUND_PRESETS.map(p => (
                 <button
                   key={p.id}
@@ -179,6 +179,22 @@ function PresetThumb({ id }) {
       <span className="absolute inset-0">
         <span className="absolute rounded-full border" style={{ width: '130%', height: '130%', top: '-70%', right: '-60%', borderColor: 'var(--accent-ring)' }} />
         <span className="absolute rounded-full border border-dashed" style={{ width: '190%', height: '190%', top: '-105%', right: '-95%', borderColor: 'var(--accent-soft)' }} />
+      </span>
+    )
+  }
+  if (id === 'emblem') {
+    return (
+      <span className="absolute inset-0 flex items-center justify-center">
+        <OrbitalMark size={20} gradient={false} style={{ color: 'var(--accent-bright)', opacity: 0.85 }} />
+      </span>
+    )
+  }
+  if (id === 'wave') {
+    return (
+      <span className="absolute inset-0 grid grid-cols-3 place-items-center p-1">
+        {[0.9, 0.4, 0.3, 0.4, 0.9, 0.4, 0.3, 0.4, 0.9].map((op, i) => (
+          <OrbitalMark key={i} size={7} gradient={false} style={{ color: 'var(--accent-bright)', opacity: op }} />
+        ))}
       </span>
     )
   }

@@ -71,12 +71,20 @@
   --card-bg: #ffffff;
   --card-hover-border: #b9c9e2;
 
-  /* Background FX intensity — light mode keeps geometry whisper-quiet */
-  --fx-line:   rgba(42,123,187,0.10);
-  --fx-line-2: rgba(42,123,187,0.06);
-  --fx-star:   rgba(42,123,187,0.28);
-  --fx-glow-a: rgba(85,201,239,0.10);
-  --fx-glow-b: rgba(42,123,187,0.08);
+  /* Background FX intensity — light mode gets its OWN tuning: deeper ink
+     (pale blue at low alpha vanishes on white) and washes strong enough to
+     survive a bright surface. Not a scaled-down dark theme. */
+  --fx-line:     rgba(30,95,152,0.40);
+  --fx-line-2:   rgba(30,95,152,0.24);
+  --fx-star:     rgba(23,80,134,0.75);
+  --fx-star-hot: rgba(42,123,187,0.95);
+  --fx-glow-a:   rgba(85,201,239,0.45);
+  --fx-glow-b:   rgba(42,123,187,0.32);
+  --fx-watermark: 0.14;
+  --fx-emblem:    0.20;
+  --fx-wave-ink:  #2a7bbb;
+  --fx-wave-dim:  0.35;
+  --fx-wave-hot:  0.90;
 }
 
 /* ── Dark mode — deep space navy, the cinematic default ────────────────────── */
@@ -122,12 +130,19 @@
   --card-bg: rgba(13,18,32,0.72);
   --card-hover-border: #2f4368;
 
-  /* Background FX intensity — visible but composed */
-  --fx-line:   rgba(85,201,239,0.13);
-  --fx-line-2: rgba(85,201,239,0.07);
-  --fx-star:   rgba(190,225,250,0.55);
-  --fx-glow-a: rgba(85,201,239,0.13);
-  --fx-glow-b: rgba(42,123,187,0.16);
+  /* Background FX intensity — Danny's dial-up: "be bold, we can dial back".
+     ~3-4× the first-drop values so the geometry actually reads. */
+  --fx-line:     rgba(85,201,239,0.42);
+  --fx-line-2:   rgba(85,201,239,0.22);
+  --fx-star:     rgba(214,236,252,0.95);
+  --fx-star-hot: rgba(150,220,252,1);
+  --fx-glow-a:   rgba(85,201,239,0.38);
+  --fx-glow-b:   rgba(42,123,187,0.45);
+  --fx-watermark: 0.18;
+  --fx-emblem:    0.26;
+  --fx-wave-ink:  #58c4ec;
+  --fx-wave-dim:  0.30;
+  --fx-wave-hot:  0.95;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -476,13 +491,23 @@
 /* satellite dot riding a ring */
 .bgfx-sat {
   position: absolute;
-  top: -3px;
+  top: -4px;
   left: 50%;
-  width: 6px;
-  height: 6px;
+  width: 9px;
+  height: 9px;
   border-radius: 9999px;
   background: var(--brand-grad);
-  box-shadow: 0 0 12px 2px var(--fx-glow-a);
+  box-shadow: 0 0 18px 4px var(--fx-glow-a);
+}
+/* soft brand wash anchoring the ring system to its corner */
+.bgfx-corner-glow {
+  position: absolute;
+  width: 90vmax;
+  height: 90vmax;
+  top: -48vmax;
+  right: -48vmax;
+  border-radius: 9999px;
+  background: radial-gradient(circle, var(--fx-glow-a), transparent 62%);
 }
 
 /* ── Preset: STARFIELD — two drifting star tiles, parallax speeds ──────────── */
@@ -494,19 +519,34 @@
   position: absolute;
   inset: -400px;
   background-image:
-    radial-gradient(1.2px 1.2px at 40px 60px,   var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.4px 1.4px at 40px 60px,   var(--fx-star) 50%, transparent 100%),
     radial-gradient(1px 1px     at 180px 220px, var(--fx-star) 50%, transparent 100%),
-    radial-gradient(1.4px 1.4px at 310px 90px,  var(--fx-star) 50%, transparent 100%),
-    radial-gradient(1px 1px     at 460px 300px, var(--fx-star) 50%, transparent 100%),
-    radial-gradient(1.1px 1.1px at 90px 350px,  var(--fx-star) 50%, transparent 100%),
-    radial-gradient(1.3px 1.3px at 540px 160px, var(--fx-star) 50%, transparent 100%);
+    radial-gradient(1.6px 1.6px at 310px 90px,  var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.1px 1.1px at 460px 300px, var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.2px 1.2px at 90px 350px,  var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 540px 160px, var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1px 1px     at 250px 385px, var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.3px 1.3px at 385px 255px, var(--fx-star) 50%, transparent 100%),
+    radial-gradient(2px 2px     at 120px 150px, var(--fx-star-hot) 50%, transparent 100%),
+    radial-gradient(1.1px 1.1px at 520px 330px, var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.8px 1.8px at 480px 40px,  var(--fx-star-hot) 50%, transparent 100%);
   background-size: 600px 420px;
   animation: bgfx-drift 300s linear infinite;
 }
 .bgfx-stars--far {
-  opacity: 0.5;
+  opacity: 0.65;
   background-size: 900px 640px;
   animation-duration: 520s;
+}
+/* sparse foreground layer — starfield preset only, adds depth */
+.bgfx-stars--near {
+  background-image:
+    radial-gradient(2.4px 2.4px at 200px 120px, var(--fx-star-hot) 50%, transparent 100%),
+    radial-gradient(2px 2px     at 700px 480px, var(--fx-star) 50%, transparent 100%),
+    radial-gradient(2.8px 2.8px at 450px 700px, var(--fx-star-hot) 50%, transparent 100%),
+    radial-gradient(2.2px 2.2px at 900px 200px, var(--fx-star) 50%, transparent 100%);
+  background-size: 1100px 860px;
+  animation-duration: 180s;
 }
 
 /* ── Preset: GRID — receding stage floor, slow sweep ───────────────────────── */
@@ -566,10 +606,62 @@
   animation: bgfx-float-b 58s ease-in-out infinite;
 }
 
-/* Giant ultra-faint emblem watermark (orbit preset) */
+/* Giant emblem watermark, low-left (orbit preset) — mostly on-screen so it
+   actually reads; intensity is theme-tuned via --fx-watermark */
 .bgfx-watermark {
   position: absolute;
-  opacity: 0.05;
+  left: -4vmin;
+  bottom: -8vmin;
+  width: 58vmin;
+  opacity: var(--fx-watermark);
+}
+
+/* ── Preset: EMBLEM — one monumental centered Orbital mark ─────────────────── */
+.bgfx-emblem {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bgfx-emblem-halo {
+  position: absolute;
+  width: 92vmin;
+  height: 92vmin;
+  border-radius: 9999px;
+  background: radial-gradient(circle, var(--fx-glow-b), transparent 68%);
+}
+.bgfx-emblem-mark {
+  position: relative;
+  width: 72vmin;
+  opacity: var(--fx-emblem);
+}
+
+/* ── Preset: LOGO WAVE — field of small marks, a flip wave rolls through ───── */
+.bgfx-wave {
+  position: absolute;
+  inset: -1.5%;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  perspective: 900px;
+  color: var(--fx-wave-ink);
+}
+.bgfx-wave-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bgfx-wave-mark {
+  width: clamp(26px, 3.6vmax, 46px);
+  opacity: var(--fx-wave-dim);
+  animation: bgfx-wave-flip 9.5s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+@keyframes bgfx-wave-flip {
+  0%        { transform: rotateY(0deg) scale(1);      opacity: var(--fx-wave-dim); }
+  8%        { transform: rotateY(180deg) scale(1.14); opacity: var(--fx-wave-hot); }
+  16%, 100% { transform: rotateY(360deg) scale(1);    opacity: var(--fx-wave-dim); }
 }
 
 /* Staggered entrance — login + hero moments. Pair with animation-delay. */

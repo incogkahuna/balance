@@ -15,6 +15,8 @@ export function BackgroundFX({ preset: forced }) {
   return (
     <div className="bgfx" aria-hidden="true">
       {preset === 'orbit'     && <OrbitLayer />}
+      {preset === 'emblem'    && <EmblemLayer />}
+      {preset === 'wave'      && <LogoWaveLayer />}
       {preset === 'starfield' && <StarfieldLayer />}
       {preset === 'grid'      && <GridLayer />}
       {preset === 'aurora'    && <AuroraLayer />}
@@ -38,6 +40,8 @@ function OrbitLayer() {
   ]
   return (
     <>
+      {/* brand wash anchoring the ring system to its corner */}
+      <div className="bgfx-corner-glow" />
       {rings.map((r, i) => (
         <div
           key={i}
@@ -52,14 +56,53 @@ function OrbitLayer() {
           {r.sat && <div className="bgfx-sat" />}
         </div>
       ))}
-      {/* faint far stars behind the rings */}
+      {/* far stars behind the rings */}
       <div className="bgfx-stars bgfx-stars--far" />
-      {/* emblem watermark, low-left, barely there */}
-      <div className="bgfx-watermark" style={{ left: '-6vmax', bottom: '-9vmax' }}>
-        <OrbitalMark size={Math.max(320, 0.42 * (typeof window !== 'undefined' ? window.innerHeight : 800))} gradient={false} className="text-orbital-text" />
+      {/* emblem watermark, low-left — sized/positioned in CSS so it reads */}
+      <div className="bgfx-watermark">
+        <OrbitalMark size={320} style={{ width: '100%', height: 'auto' }} />
       </div>
     </>
   )
+}
+
+// ── Emblem — one monumental centered mark. The brand, stated plainly. ────────
+function EmblemLayer() {
+  return (
+    <>
+      <div className="bgfx-stars bgfx-stars--far" />
+      <div className="bgfx-emblem">
+        <div className="bgfx-emblem-halo" />
+        <div className="bgfx-emblem-mark">
+          <OrbitalMark size={480} style={{ width: '100%', height: 'auto' }} />
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Logo Wave — a field of small marks; a flip wave rolls through diagonally.
+//    Delay = (col + row) stagger plus a deterministic per-cell jitter so the
+//    front reads organic, not mechanical.
+const WAVE_COLS = 9
+const WAVE_ROWS = 6
+function LogoWaveLayer() {
+  const cells = []
+  for (let row = 0; row < WAVE_ROWS; row++) {
+    for (let col = 0; col < WAVE_COLS; col++) {
+      const i = row * WAVE_COLS + col
+      const jitter = ((i * 7919) % 97) / 97
+      const delay = (col + row) * 0.32 + jitter * 0.45
+      cells.push(
+        <div key={i} className="bgfx-wave-cell">
+          <div className="bgfx-wave-mark" style={{ animationDelay: `${delay}s` }}>
+            <OrbitalMark size={30} gradient={false} style={{ width: '100%', height: 'auto' }} />
+          </div>
+        </div>
+      )
+    }
+  }
+  return <div className="bgfx-wave">{cells}</div>
 }
 
 function StarfieldLayer() {

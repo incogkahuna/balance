@@ -10,6 +10,8 @@ const BackgroundContext = createContext(null)
 const STORAGE_KEY = 'balance_bg_v1'
 export const BACKGROUND_PRESETS = [
   { id: 'orbit',     label: 'Orbit',     hint: 'Slow orbital ring system' },
+  { id: 'emblem',    label: 'Emblem',    hint: 'Monumental centered mark' },
+  { id: 'wave',      label: 'Logo Wave', hint: 'Mark field, rolling flip wave' },
   { id: 'starfield', label: 'Starfield', hint: 'Drifting star specks' },
   { id: 'grid',      label: 'Grid',      hint: 'Perspective stage grid' },
   { id: 'aurora',    label: 'Aurora',    hint: 'Soft nebula color wash' },
