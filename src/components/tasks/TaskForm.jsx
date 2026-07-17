@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
@@ -7,29 +7,19 @@ import { TASK_PRIORITY, TASK_STATUS, USERS, createTask } from '../../data/models
 export function TaskForm({ productionId, initial, onClose }) {
   const { currentUser, addTask, updateTask, deleteTask } = useApp()
 
-  // ── Eager-create placeholder ──────────────────────────────────────────────
-  // Add an empty task immediately so the auto-save effect has something to
-  // target. If the user closes without typing a title, we drop the placeholder.
+  // ── Create-on-first-title ─────────────────────────────────────────────────
+  // The old eager-create pattern inserted an empty placeholder on mount, but
+  // the data layer (rightly) rejects tasks without a title — so the remote
+  // insert always failed, the optimistic row was rolled back, and every
+  // subsequent auto-save tried to UPDATE a row that existed nowhere. Net
+  // effect: form-created tasks never persisted (intake-created ones, which
+  // carry a title at insert time, always did).
+  //
+  // Now we reserve the id up front but only CREATE once the first auto-save
+  // carries a non-empty title; every save after that is an UPDATE.
   const workingIdRef = useRef(initial?.id || null)
+  if (!workingIdRef.current) workingIdRef.current = crypto.randomUUID()
   const createdHereRef = useRef(false)
-
-  useEffect(() => {
-    if (initial?.id || workingIdRef.current) return
-    const placeholder = createTask({
-      productionId,
-      title: '',
-      assigneeId: '',
-      priority: TASK_PRIORITY.MEDIUM,
-      status: TASK_STATUS.NOT_STARTED,
-      assignedBy: currentUser?.id || '',
-      // Real auth UUID — satisfies the tasks.created_by FK to profiles.
-      createdBy: currentUser?.profileId || '',
-    })
-    workingIdRef.current = placeholder.id
-    createdHereRef.current = true
-    addTask(placeholder)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const [form, setForm] = useState({
     title: initial?.title || '',
@@ -43,15 +33,30 @@ export function TaskForm({ productionId, initial, onClose }) {
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
   // ── Auto-save ─────────────────────────────────────────────────────────────
-  const enabled = !!workingIdRef.current
   const { status: saveStatus, lastSavedAt, error: saveError } = useAutoSave(
     form,
     (value) => {
       const id = workingIdRef.current
       if (!id) return
-      updateTask(id, value)
+      // Editing an existing task (or one we already created) — plain update.
+      if (initial?.id || createdHereRef.current) {
+        updateTask(id, value)
+        return
+      }
+      // New task: wait for a title, then create with the full current form.
+      if (!value.title.trim()) return
+      createdHereRef.current = true
+      addTask(createTask({
+        ...value,
+        id,
+        productionId,
+        status: TASK_STATUS.NOT_STARTED,
+        assignedBy: currentUser?.id || '',
+        // Real auth UUID — satisfies the tasks.created_by FK to profiles.
+        createdBy: currentUser?.profileId || '',
+      }))
     },
-    { enabled, delay: 600 }
+    { delay: 600 }
   )
 
   // Close: drop placeholder if no title typed
