@@ -17,7 +17,7 @@ const CUSTOM_ROLE = '__custom_role__'
 const NO_WALL = '__no_wall__'
 
 export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, kind: kindProp }) {
-  const { currentUser, ledWalls = [], syncProductionWallAssignment } = useApp()
+  const { currentUser, ledWalls = [], productions = [], syncProductionWallAssignment } = useApp()
   const isEdit = Boolean(initial?.id)
   // Project kind (M4 / #5): tours + internal projects share the record shape
   // but skip production-only fields (LED wall / type / location).
@@ -240,12 +240,19 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, 
 
       <div>
         <label className="label">Client</label>
+        {/* Cross-fill (M7 / #16): repeat clients autocomplete from history */}
         <input
           className="input"
           value={form.client}
           onChange={e => set('client', e.target.value)}
           placeholder="e.g. Nike / W+K Agency"
+          list="pf-client-options"
         />
+        <datalist id="pf-client-options">
+          {[...new Set(productions.map(p => p.client).filter(Boolean))].sort().map(c => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

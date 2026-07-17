@@ -63,9 +63,14 @@ export function MilestoneForm({ production, initial, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Cross-fill (M7 / #16): default a new milestone into the production's
+  // window (start date, 9am) instead of an empty picker.
+  const defaultDate = !initial?.id && production?.startDate
+    ? `${production.startDate}T09:00`
+    : ''
   const [form, setForm] = useState({
     title:          initial?.title || '',
-    date:           initial?.date  || '',
+    date:           initial?.date  || defaultDate,
     type:           initial?.type  || MILESTONE_TYPE.PRE_PRODUCTION,
     priority:       initial?.priority || MILESTONE_PRIORITY.MEDIUM,
     description:    initial?.description || '',

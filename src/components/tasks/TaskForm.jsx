@@ -6,7 +6,10 @@ import { TASK_PRIORITY, TASK_STATUS, USERS, createTask } from '../../data/models
 import { DictationMic } from '../voice/DictationMic.tsx'
 
 export function TaskForm({ productionId, initial, onClose }) {
-  const { currentUser, addTask, updateTask, deleteTask } = useApp()
+  const { currentUser, addTask, updateTask, deleteTask, getProduction } = useApp()
+  // Cross-fill (M7 / #16): prep tasks are due by the shoot — default a new
+  // task's due date to the production's start date.
+  const production = productionId ? getProduction(productionId) : null
 
   // ── Create-on-first-title ─────────────────────────────────────────────────
   // The old eager-create pattern inserted an empty placeholder on mount, but
@@ -26,7 +29,7 @@ export function TaskForm({ productionId, initial, onClose }) {
     title: initial?.title || '',
     description: initial?.description || '',
     assigneeId: initial?.assigneeId || '',
-    dueDate: initial?.dueDate || '',
+    dueDate: initial?.dueDate || (initial?.id ? '' : production?.startDate) || '',
     priority: initial?.priority || TASK_PRIORITY.MEDIUM,
     expectationsNote: initial?.expectationsNote || '',
   })
