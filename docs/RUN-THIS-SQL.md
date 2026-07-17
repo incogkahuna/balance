@@ -1,0 +1,206 @@
+# Danny: run this SQL (one paste, Supabase dashboard → SQL Editor)
+
+*Written 2026-07-16. Four modules shipped tonight need their tables/columns.
+The app is already live and **degrades gracefully** until you run this —
+activity silently doesn't count, to-dos/feedback stay in each browser,
+kinds don't persist. Run it once and everything lights up.*
+
+Paste the whole block below into the SQL editor and hit Run. It's the exact
+content of the four migration files in `supabase/migrations/` (m1, m2, m4,
+m5 — dated 20260717) concatenated in order. If a statement fails with
+"already exists", that part ran before — safe to continue with the rest.
+
+```sql
+-- ═══════════════ M1 — activity_events (#12 real analytics) ═══════════════
+create table public.activity_events (
+  id             uuid primary key default gen_random_uuid(),
+  actor_id       uuid references public.profiles(id) on delete set null,
+  actor_name     text not null default '',
+  verb           text not null
+                   check (verb in ('created', 'updated', 'deleted', 'completed',
+                                   'assigned', 'status_changed', 'commented')),
+  entity_type    text not null
+                   check (entity_type in ('task', 'production', 'contractor',
+                                          'milestone', 'concern', 'feedback')),
+  entity_id      text not null default '',
+  entity_label   text not null default '',
+  production_id  uuid references public.productions(id) on delete set null,
+  meta           jsonb not null default '{}'::jsonb,
+  created_at     timestamptz not null default now()
+);
+
+create index activity_events_created_at_idx    on public.activity_events (created_at desc);
+create index activity_events_actor_id_idx      on public.activity_events (actor_id);
+create index activity_events_production_id_idx on public.activity_events (production_id);
+create index activity_events_entity_type_idx   on public.activity_events (entity_type);
+
+alter table public.activity_events enable row level security;
+
+create policy "activity_events_select"
+  on public.activity_events for select to authenticated
+  using (true);
+
+create policy "activity_events_insert"
+  on public.activity_events for insert to authenticated
+  with check (actor_id = auth.uid());
+
+alter publication supabase_realtime add table public.activity_events;
+
+-- ═══════════════ M2 — tasks + to-dos merge (#14) ═══════════════
+alter table public.tasks alter column production_id drop not null;
+
+alter table public.tasks add column visibility text not null default 'team'
+  check (visibility in ('team', 'personal'));
+
+alter table public.tasks add column completed_at timestamptz;
+
+create or replace function public.stamp_task_completed_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.status in ('Complete', 'Verified') then
+    if tg_op = 'INSERT' then
+      new.completed_at := now();
+    elsif old.status not in ('Complete', 'Verified') then
+      new.completed_at := now();
+    end if;
+  else
+    new.completed_at := null;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger tasks_stamp_completed_at
+  before insert or update of status on public.tasks
+  for each row execute function public.stamp_task_completed_at();
+
+create or replace function public.sync_production_task_ids()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  pid uuid;
+begin
+  pid := coalesce(new.production_id, old.production_id);
+  if pid is null then
+    return null;
+  end if;
+  update public.productions
+  set task_ids = coalesce(
+    (select array_agg(id order by created_at)
+     from public.tasks
+     where production_id = pid),
+    '{}'::uuid[]
+  )
+  where id = pid;
+  return null;
+end;
+$$;
+
+drop policy "tasks_select" on public.tasks;
+create policy "tasks_select"
+  on public.tasks for select to authenticated
+  using (
+    case when production_id is null then
+      visibility = 'team'
+      or created_by = auth.uid()
+      or assignee_id = auth.uid()::text
+    else
+      public.is_admin_or_supervisor()
+      or assignee_id = auth.uid()::text
+      or public.is_assigned_to_production(production_id)
+    end
+  );
+
+drop policy "tasks_insert" on public.tasks;
+create policy "tasks_insert"
+  on public.tasks for insert to authenticated
+  with check (
+    public.is_admin_or_supervisor()
+    or (production_id is null and created_by = auth.uid())
+  );
+
+create policy "tasks_update_creator_todo"
+  on public.tasks for update to authenticated
+  using (production_id is null and created_by = auth.uid())
+  with check (production_id is null and created_by = auth.uid());
+
+create policy "tasks_delete_creator_todo"
+  on public.tasks for delete to authenticated
+  using (production_id is null and created_by = auth.uid());
+
+-- ═══════════════ M4 — project kinds + debrief notes (#5, #6) ═══════════════
+alter table public.productions add column kind text not null default 'production'
+  check (kind in ('production', 'tour', 'internal'));
+
+alter table public.productions add column debrief_notes jsonb not null default '[]'::jsonb;
+
+create index productions_kind_idx on public.productions (kind);
+
+-- ═══════════════ M5 — feedback_items (#3 frictionless feedback) ═══════════════
+create table public.feedback_items (
+  id                 uuid primary key default gen_random_uuid(),
+  kind               text not null default 'note'
+                       check (kind in ('bug', 'idea', 'note')),
+  title              text not null,
+  description        text not null default '',
+  status             text not null default 'New'
+                       check (status in ('New', 'Acknowledged', 'In Progress', 'Shipped', 'Won''t Fix')),
+  submitted_by       uuid references public.profiles(id) on delete set null,
+  submitted_by_name  text not null default '',
+  resolution_note    text not null default '',
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+
+create index feedback_items_created_at_idx on public.feedback_items (created_at desc);
+create index feedback_items_status_idx     on public.feedback_items (status);
+
+create trigger feedback_items_set_updated_at
+  before update on public.feedback_items
+  for each row execute function public.set_updated_at();
+
+alter table public.feedback_items enable row level security;
+
+create policy "feedback_items_select"
+  on public.feedback_items for select to authenticated
+  using (true);
+
+create policy "feedback_items_insert"
+  on public.feedback_items for insert to authenticated
+  with check (submitted_by = auth.uid());
+
+create policy "feedback_items_update"
+  on public.feedback_items for update to authenticated
+  using (public.is_admin_or_supervisor())
+  with check (public.is_admin_or_supervisor());
+
+create policy "feedback_items_delete"
+  on public.feedback_items for delete to authenticated
+  using (public.is_admin());
+
+alter publication supabase_realtime add table public.feedback_items;
+```
+
+## Also still on you (from before)
+
+1. **Fake-data wipe (#10):** run `supabase/demo-wipe.sql`, then
+   `delete from public.contractors;` (you said clear ALL contractors), and
+   eyeball `select id, name, client, is_demo from public.productions order by created_at;`
+2. **Confirm `phase6h` migration** was ever run (notifications RLS hardening).
+3. Free→paid Supabase upgrade (stability — free tier pauses after ~7 idle days).
+
+## What happens after you run the block
+
+- Every task/production/contractor/milestone/comment action starts logging
+  to `activity_events` → Analytics fills in (Team Activity, feed, Task Flow).
+- Each person's browser auto-imports their old localStorage to-dos and
+  feedback reports into the shared tables on next load (originals kept in
+  `*_backup` localStorage keys).
+- To-dos become real shared tasks (team/personal visibility enforced by RLS).
+- New Tour / Internal projects persist their kind; debrief quick notes save.
+- The floating feedback widget's reports reach everyone, not just your browser.

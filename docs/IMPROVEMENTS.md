@@ -28,65 +28,71 @@ Nitzkin quoting work).
 | 20 | Auto status by dates | ✅ `computeDateDrivenStatus`: Incoming → Active on start day → Wrap past end → Completed 30 days after. Reconciles once per session on load, forward-only (never demotes a manual advance), admin/sup sessions only. |
 | 4 | Fake/uneditable review inputs | ✅ Mostly: dead fake checkbox list → real toggles; dead TYPE_OPTIONS (undefined since phase6b) removed; latent `PRODUCTION_TYPE.OTHER` undefined bug fixed. Remaining display-only: the milestone preview list (edit milestones post-create on the Roadmap tab) — revisit if Danny wants inline milestone editing in review. |
 
-## Module 1 — Data hygiene & truth (`#10`, `#12`)
+## Module 1 — Data hygiene & truth (`#10`, `#12`) — ✅ CODE SHIPPED 2026-07-16 (`9cecca6`)
 
-- **#10 wipe fake data:** run `supabase/demo-wipe.sql` (removes flagged demo
-  productions/tasks/contractors), then for the rest:
-  ```sql
-  delete from public.contractors;               -- Danny: clear ALL contractors
-  -- inspect anything else that looks seeded:
-  select id, name, client, is_demo from public.productions order by created_at;
-  ```
-  LED walls / To-Dos / Feedback are per-browser localStorage until their Supabase
-  port — clearing those means clearing them in the browser (or shipping the port,
-  which is the better fix).
-- **#12 analytics with real data + participation tracking:** build the
-  `activity_events` table (who did what, when — assigns, completions, creates,
-  status changes) and rebuild Analytics on top of it: per-person activity, task
-  assign/complete flows, app usage. This was already Phase-2 "activity feed"
-  groundwork — promoted here because it feeds analytics too. No fake numbers
-  anywhere; empty states where there's no data yet.
+- ⏳ **#10 wipe fake data (ON DANNY):** run `supabase/demo-wipe.sql`, then
+  `delete from public.contractors;` and inspect remaining seeded productions.
+  To-Dos + Feedback are no longer localStorage (M2/M5 ported them) — LED walls
+  are the last per-browser store.
+- ✅ **#12 analytics with real data:** `activity_events` table (append-only,
+  RLS write-as-self / read-all, realtime; **migration in
+  `docs/RUN-THIS-SQL.md` — Danny runs it**). `logActivity` in AppContext logs
+  after API success (truthful events) across production/task/contractor/
+  milestone/comment/feedback actions; auto-status changes tagged `meta.auto`.
+  AnalyticsPage rebuilt: Team Activity per-person bars, Recent Activity feed,
+  Task Flow by week, 7/30/90d window, roster from real assignees via
+  resolveUserName. No fake numbers; honest empty states everywhere.
 
-## Module 2 — Tasks & To-Dos consolidation (`#14`)
+## Module 2 — Tasks & To-Dos consolidation (`#14`) — ✅ SHIPPED 2026-07-16 (`f91fa60`)
 
-One work system instead of two. Design questions to settle with Danny at module
-start (production-bound vs freestanding, personal vs team visibility, where
-dailies live), then: merge To-Dos into tasks with an optional production link,
-port off localStorage to Supabase in the same stroke, keep the quick-add
-ergonomics the To-Dos page got right.
+One table, one CRUD path, two views. Design calls made (Danny can veto):
+**a to-do = task with `production_id null`**; freestanding tasks carry
+`visibility` — `team` (roster-visible, default) or `personal` (creator +
+assignee ONLY, no admin bypass); `completed_at` stamped by DB trigger; crew
+can create/manage their own freestanding tasks (production-task rules
+unchanged). ToDosPage keeps its exact quick-add ergonomics on the shared
+store; Dashboard reads freestanding tasks; TasksPage excludes them. One-time
+localStorage import per browser (halts + retries until the migration runs;
+originals kept in `balance_todos_v1_backup`). **Migration in RUN-THIS-SQL.md.**
 
-## Module 3 — Parsing & voice everywhere (`#2`, `#11`, `#19`)
+## Module 3 — Parsing & voice everywhere (`#2`, `#11`, `#19`) — ✅ SHIPPED 2026-07-16 (`949e9b7`)
 
-- **#11 contractor from screenshot:** "Add from screenshot" on the Contractors
-  page — reuse `parse-intake` (already extracts name/email/phone/company/role)
-  to prefill the contractor form from a photo of a call sheet, email sig, or
-  business card.
-- **#19 speech-to-text everywhere:** the Whisper pipeline (edge function +
-  `VoiceRecorder`) already exists and is deployed — add a mic button to every
-  long-text field (descriptions, notes, debrief, comments). No new model needed
-  (skip Gemma; Whisper is already wired and paid for).
+- ✅ **#11 contractor from screenshot:** "From Screenshot" button on the
+  Contractors page (admin) — drop/paste/pick an image, `parse-intake` (Claude
+  vision) extracts contacts, picking one prefills ContractorForm in create
+  mode (name/email/phone/role; company lands in notes).
+- ✅ **#19 speech-to-text everywhere:** new compact `DictationMic` (record →
+  stop → auto-transcribe via the deployed Whisper `transcribe` fn, no review
+  step, 120s cap) wired into 17+ long-text sites: TaskForm ×2, TaskCard ×3
+  (comment/completion/blocked), debrief FeedbackForm ×4, ProductionForm,
+  ContractorForm, MilestoneForm, ConcernForm ×2, Bugs & Ideas details,
+  GearPage ×2, AddonForm, debrief quick notes, feedback widget.
 
-## Module 4 — Beyond "productions" (`#5`, `#6`, `#18`)
+## Module 4 — Beyond "productions" (`#5`, `#6`, `#18`) — ✅ #5+#6 SHIPPED 2026-07-16 (`72ae7de`)
 
-- **#5 tours / tech scouts / prelights / wraps:** proposal — a `kind` field on
-  the record (Production / Tour / Tech Scout / Prelight / Wrap) driving tailored
-  fields, starter templates, and calendar treatment; prelights/scouts/wraps can
-  also attach to a parent production as phases. Tours get their own creation
-  path ("New Tour") that skips production-only fields. Confirm shape at module
-  start.
-- **#6 debrief rework:** add-ons as selectable dropdown items with cost × days
-  used; quick-notes capture DURING production (one-tap notes that accumulate);
-  end-of-production kicks out a formatted debrief document from the accumulated
-  notes + costed add-ons.
-- **#18 Nitzkin quoting app integration:** auto-trigger production statuses from
-  quotes. **Blocked on discovery** — need what the quoting app is (URL/repo/
-  export format) and what transitions it should drive.
+- ✅ **#5 project kinds:** `productions.kind` (production | tour | internal —
+  per Danny's chooser spec; prelights/wraps stay milestone types per M0).
+  "Create New Project" on /productions → Production (full intake wizard) /
+  Tour / Internal (quick form hiding LED wall + location). Kind chips on
+  cards. **Migration in RUN-THIS-SQL.md.**
+- ✅ **#6 debrief rework:** Quick Notes captured DURING production (one-line +
+  Enter + mic, author/date stamped, stored in `production.debrief_notes`);
+  AddonForm picks from `ADDON_PRESETS` (or custom) with **cost auto-computed
+  = day rate × days × quantity** (total editable); "Generate Document"
+  compiles debrief answers + costed add-on table + floor notes into a
+  copyable plain-text doc.
+- ⏳ **#18 Nitzkin quoting app integration:** still **blocked on discovery** —
+  need what the quoting app is (URL/repo/export format) and which status
+  transitions a quote should drive.
 
-## Module 5 — Frictionless feedback (`#3`)
+## Module 5 — Frictionless feedback (`#3`) — ✅ SHIPPED 2026-07-16 (`5f12851`)
 
-Global floating feedback control on every page (notes / feature / bug dropdown),
-2-field capture, no navigation. Depends on Feedback moving to Supabase (else
-reports stay trapped in each browser) — do the port as part of this module.
+Floating widget on every page: Note / Feature / Bug + title + optional
+details (with mic), Enter or Send — no navigation. Backed by the new
+`feedback_items` table (RLS: all read + file-as-self, admin/sup triage,
+admin delete, realtime) with graceful localStorage fallback until the
+migration runs + one-time import of pre-M5 local reports. Bugs & Ideas page
+gained the Note kind. **Migration in RUN-THIS-SQL.md.**
 
 ## Module 6 — UI/brand overhaul — FIRST DROP SHIPPED 2026-07-16 (`4305232`)
 
@@ -139,12 +145,14 @@ orbitalvs.com (Inter Tight brand face, official emblem + gradient throughout).
     `src/components/brand/OrbitalLogo.jsx` (official emblem paths),
     `src/components/layout/AccountMenu.jsx` (picker), `public/brand/*`.
 
-## Module 7 — Automation & cross-fill (`#16`)
+## Module 7 — Automation & cross-fill (`#16`) — ✅ SHIPPED 2026-07-16 (`e2b3d32`)
 
-Field-by-field audit: every typed input that could be derived, prefilled from
-another page, or defaulted, gets wired (dates → status, wall pick → type →
-location, contacts → bible → debrief participants, etc.). Runs last on purpose —
-every earlier module reduces the surface this has to cover.
+Final pass on top of what earlier modules already wired (type→location + skipped
+intake question, dates→status ladder, wall pick→gear reservation sync, addon
+cost auto-calc, contractor-from-screenshot prefill, intake contacts→bible key
+players): new task due date defaults to production start; new milestone
+defaults into the production window (start, 9am); client field autocompletes
+from production history.
 
 ## Proposed order
 

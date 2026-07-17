@@ -46,26 +46,53 @@ Earlier this week (also live): Phase 0 bug blitz, phase7a migration (user
 ran it), Tier 2 Claude screenshot parser (`parse-intake` edge function —
 DEPLOYED and working, key set), toast system + optimistic rollback.
 
-## ⭑ IMMEDIATE NEXT TASK — get Danny's eyes on M6, then tune
+## ⭑ IMMEDIATE NEXT TASKS
 
-Two dial-up drops shipped 2026-07-16, both pushed → Vercel:
-- **`4bb8c29`** — dark FX 3-4×, light mode's own deep-ink tuning, new
-  **Emblem** + **Logo Wave** presets, orbit watermark fixed, corner glow.
-- **`6baf4a7`** — wave slowed; new **Logo Flip** preset (marks flip at
-  random, no travelling front); **per-backdrop Speed + Intensity sliders**
-  in the account menu (speed = `--fx-speed` on every animation via
-  `calc(base/speed)`, intensity = `.bgfx` opacity; persisted per browser).
-8 presets total. All verified in dev (both themes, live slider drag, zero
-console errors).
+1. **Danny runs `docs/RUN-THIS-SQL.md`** (one paste in the Supabase SQL
+   editor — M1 activity_events, M2 tasks merge, M4 kinds+debrief, M5
+   feedback). The live app degrades gracefully until then: activity isn't
+   counted, to-dos/feedback stay per-browser, kinds don't persist. After he
+   runs it, each browser auto-imports its local to-dos + feedback reports.
+2. **Danny's verdict on the whole drop** — M6 backdrops (he can self-tune
+   speed/intensity in the account menu now) AND the six modules below.
+3. **Nitzkin discovery (#18)** — the only 22-list item still blocked: what
+   the quoting app is, which statuses quotes drive.
 
-**Next session: get Danny's verdict.** He can now self-tune speed/intensity
-live from the account menu, so most "too fast / too strong" notes he'll fix
-himself. If he wants base changes: intensity ceiling + per-theme look live in
-the two `--fx-*` blocks in `src/index.css` (light ~L74, dark ~L126); preset
-motion/geometry is the BACKGROUND FX section + `BackgroundFX.jsx`; slider
-bounds are `BG_SPEED`/`BG_INTENSITY` in `BackgroundContext.jsx`.
-Then M6 remaining: page composition polish, image-upload backdrops, full
-account page, #17 constellation rework (own session).
+## Session log — MODULES M1–M7 SHIPPED (2026-07-16 evening, all pushed)
+
+After the M6 dial-ups (`4bb8c29`, `6baf4a7` — bold FX, Emblem/Logo Wave/
+Logo Flip presets, per-backdrop speed+intensity sliders), Danny said
+**"complete all the rest of my request list"** → autonomous module run:
+
+- **M1 (`9cecca6`)** — activity_events + logActivity across all CRUD (logs
+  after API success; auto-status tagged meta.auto); Analytics rebuilt on
+  real participation (Team Activity, feed, Task Flow, 7/30/90d window,
+  real-assignee roster). No fake numbers, honest empty states.
+- **M2 (`f91fa60`)** — To-Dos merged into tasks (production_id nullable,
+  visibility team|personal — personal = creator+assignee ONLY, no admin
+  bypass; completed_at DB-trigger-stamped; crew can create freestanding).
+  Same quick-add UX, now Supabase+realtime. One-time localStorage import.
+- **M3 (`949e9b7`)** — Contractors "From Screenshot" (parse-intake vision →
+  contact → prefilled form); DictationMic (tap-record-tap-transcribe via
+  deployed Whisper) on 17+ long-text fields.
+- **M4 (`72ae7de`)** — productions.kind (production|tour|internal) + "Create
+  New Project" chooser (Production→intake wizard; Tour/Internal→quick form,
+  no wall/location); kind chips; debrief rework: during-production Quick
+  Notes, ADDON_PRESETS with cost=rate×days×qty auto-calc, Generate Document
+  (copyable compiled debrief).
+- **M5 (`5f12851`)** — feedback_items table + floating feedback widget on
+  every page (Note/Feature/Bug, 2 fields, mic); localStorage fallback +
+  import; Bugs & Ideas gained Notes.
+- **M7 (`e2b3d32`)** — cross-fills: task due date ← production start,
+  milestone date ← production window, client autocomplete ← history.
+
+All verified in dev via JS eval (dev-bypass mode: optimistic→rollback paths
+confirmed; server writes need real sessions). **Not load-tested against the
+live DB yet — first real-session pass after Danny runs the SQL is the test.**
+
+Still open on the list: **#18 Nitzkin** (blocked on discovery), **#17
+constellation rework** (own session), M6-remaining polish (page composition,
+image-upload backdrops, full account page).
 
 ## Module queue after that (order agreed with Danny)
 
