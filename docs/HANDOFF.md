@@ -46,19 +46,21 @@ Earlier this week (also live): Phase 0 bug blitz, phase7a migration (user
 ran it), Tier 2 Claude screenshot parser (`parse-intake` edge function —
 DEPLOYED and working, key set), toast system + optimistic rollback.
 
-## ⭑ IMMEDIATE NEXT TASK — M6 dial-up (Danny's direct feedback)
+## ⭑ IMMEDIATE NEXT TASK — get Danny's eyes on the M6 dial-up, then tune
 
-Danny reviewed drop 1: **"classy start, just too understated."** The full
-spec is in IMPROVEMENTS.md → Module 6 → "M6 NEXT PASS". Summary:
-- Backdrops far more visible (3-4× intensity in dark; he can barely see them)
-- Light mode needs its own strong tuning (currently near-invisible on white)
-- Two NEW presets he wants: **"Emblem"** (one big centered Orbital logo) and
-  **"Logo Wave"** (grid of small marks flipping as a wave rolls through)
-- The orbit watermark barely shows — make the emblem read
-- He liked: stars, the non-gradient elements. Confirmed the files in
-  `public/brand/` ARE the final marketing assets.
-- Tone guard: elegant geometry only, NO emoji/cartoonish icons. "Be bold,
-  we can dial back."
+The dial-up **shipped 2026-07-16 (`4bb8c29`, pushed → Vercel)**: dark FX
+3-4×, light mode's own deep-ink tuning, new **Emblem** (72vmin centered
+gradient mark) + **Logo Wave** (9×6 flip-wave field) presets, orbit
+watermark repositioned so it reads, corner glow, denser/brighter stars.
+Verified in dev (both themes, all 7 presets, picker, zero console errors).
+
+**Next session: ask Danny for his verdict per preset/theme.** He said "be
+bold, we can dial back" — this pass IS bold, so expect dial-back requests.
+All intensity lives in the two `--fx-*` blocks in `src/index.css` (light
+~L74, dark ~L126) — single knob per theme. Preset motion/geometry is
+`index.css` BACKGROUND FX section + `BackgroundFX.jsx`.
+Then M6 remaining: page composition polish, image-upload backdrops, full
+account page, #17 constellation rework (own session).
 
 ## Module queue after that (order agreed with Danny)
 

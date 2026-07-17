@@ -101,25 +101,24 @@ orbitalvs.com (Inter Tight brand face, official emblem + gradient throughout).
   cinematic login rebuild; emblem favicon; sidebar/topbar lockups.
 - ✅ **#21 v1:** AccountMenu — avatar → identity + role chip, theme switcher,
   backdrop picker with mini-previews, sign out.
-- ⏳ **M6 NEXT PASS — Danny's review of drop 1 (2026-07-16): "classy start,
-  too understated." Concrete dial-up spec:**
-  1. **Backdrops need to be A LOT more visible** — he can barely see them.
-     Multiply the `--fx-*` opacities aggressively (try 3-4× in dark; the rings
-     read as nearly invisible). Stars: more of them + brighter. The gradient
-     accents: more present.
-  2. **Light mode shows almost nothing** — FX intensity on white needs its own
-     much-stronger tuning, not a scaled-down dark theme.
-  3. **New preset: "Emblem"** — one BIG centered Orbital logo as the backdrop
-     (think watermark at 60-80vmin, centered behind content, visible not
-     ghostly).
-  4. **New preset: "Logo Wave"** — a grid of many small Orbital marks that
-     flip/rotate as a wave rolls through the field (staggered CSS animation
-     delays by grid position gives the wave; randomize phase a touch).
-  5. The orbit watermark was only partially visible — reposition/scale so the
-     emblem reads.
-  - Then: page-level composition polish (dashboard layout, detail pages),
-    image-upload backdrops (needs storage), full account page, and
-    **#17 constellation/grav-map rework** (its own session — big canvas).
+- ✅ **M6 DIAL-UP SHIPPED 2026-07-16 (`4bb8c29`)** — all five points of Danny's
+  drop-1 review ("classy start, too understated"):
+  1. Dark `--fx-*` ~3-4× (lines 0.13→0.42, stars 0.55→0.95 + denser tile with
+     hot accent stars, glows ~3×); orbit got a corner glow + bigger satellite.
+  2. Light mode has its OWN tuning: deeper ink `rgba(30,95,152,…)` at strong
+     alphas (0.40 lines / 0.75 stars), not a scaled-down dark theme.
+  3. **"Emblem" preset** — 72vmin centered gradient mark, 0.26 opacity dark /
+     0.20 light, soft halo + far stars.
+  4. **"Logo Wave" preset** — 9×6 field of small marks, diagonal rotateY flip
+     wave (per-cell delay + deterministic jitter), theme-driven ink vars.
+  5. Orbit watermark repositioned/rescaled (58vmin, gradient fill, opacity
+     0.18/0.14 via `--fx-watermark`) — mostly on-screen now, reads clearly.
+  Verified in dev both themes, all 7 presets, picker thumbs, no console
+  errors. **AWAITING DANNY'S EYES — he said "be bold, we can dial back", so
+  expect a tune request (single knob: the `--fx-*` blocks in `index.css`).**
+- ⏳ **M6 remaining:** page-level composition polish (dashboard layout, detail
+  pages), image-upload backdrops (needs storage), full account page, and
+  **#17 constellation/grav-map rework** (its own session — big canvas).
   - Key files: `src/components/layout/BackgroundFX.jsx`,
     `src/context/BackgroundContext.jsx` (preset registry),
     `src/index.css` (BACKGROUND FX section + `--fx-*` vars in both themes),
