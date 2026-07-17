@@ -88,17 +88,22 @@ Global floating feedback control on every page (notes / feature / bug dropdown),
 2-field capture, no navigation. Depends on Feedback moving to Supabase (else
 reports stay trapped in each browser) — do the port as part of this module.
 
-## Module 6 — UI/brand overhaul (`#15`, `#22`, `#21`, `#17`)
+## Module 6 — UI/brand overhaul — FIRST DROP SHIPPED 2026-07-16 (`4305232`)
 
-- **#15/#22 high-end feel + Orbital identity:** design pass across the app —
-  Orbital logo integration (need the vector asset), customizable animated
-  geometric backgrounds (à la Danny's networth calculator — get reference/repo),
-  optional image backgrounds selectable per user, kill the "word doc" feel.
-- **#21 user profile/account page:** click avatar → account details, settings,
-  background/theme choice, sign-out.
-- **#17 Resources constellation/grav-map rework:** make the 3D view convey real
-  information elegantly (or replace with something that does). Big canvas item —
-  scope at module start.
+Direction: "mission control, cinematic" — dark instrument-panel sibling of
+orbitalvs.com (Inter Tight brand face, official emblem + gradient throughout).
+
+- ✅ **#15/#22 partially:** official brand vectors in `public/brand/`;
+  OrbitalMark/OrbitalLogo components (exact emblem paths, official gradient,
+  spin = loading spinner); space-navy dark theme + glass cards; brand-gradient
+  buttons/focus/hud-ticks; **customizable ambient backdrops** (Orbit /
+  Starfield / Grid / Aurora / Minimal — pure CSS, per-user persisted);
+  cinematic login rebuild; emblem favicon; sidebar/topbar lockups.
+- ✅ **#21 v1:** AccountMenu — avatar → identity + role chip, theme switcher,
+  backdrop picker with mini-previews, sign out.
+- ⏳ **M6 next passes:** page-level composition polish (dashboard layout,
+  detail pages), image-upload backdrops (needs storage), full account page,
+  and **#17 constellation/grav-map rework** (its own session — big canvas).
 
 ## Module 7 — Automation & cross-fill (`#16`)
 
