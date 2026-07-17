@@ -27,6 +27,7 @@ import {
   subscribeToContractors,
 } from '../lib/data/contractors.ts'
 import { listProfiles as listProfilesApi } from '../lib/data/profiles.ts'
+import { recordActivity } from '../lib/data/activity.ts'
 
 const AppContext = createContext(null)
 
@@ -333,6 +334,38 @@ export function AppProvider({ children }) {
     return null
   }, [profilesList, contractors])
 
+  // ─── Activity logging (M1 / #12) ────────────────────────────────────────────
+  // Append-only who-did-what trail feeding Analytics. Fire-and-forget: a
+  // failed insert (RLS, missing table pre-migration, offline) must never
+  // break the user action it rides on — it just doesn't get counted.
+  // Refs mirror state so change-detection in the CRUD callbacks can read
+  // previous values without adding state to their dependency arrays.
+  const tasksRef = useRef(tasks)
+  useEffect(() => { tasksRef.current = tasks }, [tasks])
+  const productionsRef = useRef(productions)
+  useEffect(() => { productionsRef.current = productions }, [productions])
+
+  const profileRef = useRef(profile)
+  useEffect(() => { profileRef.current = profile }, [profile])
+  const currentUserNameRef = useRef('')
+
+  const logActivity = useCallback((verb, entityType, { id, label, productionId, meta } = {}) => {
+    const actor = profileRef.current
+    if (!actor?.id) return // dev bypass / signed out — nothing to attribute
+    recordActivity({
+      actorId: actor.id,
+      actorName: currentUserNameRef.current || actor.name || '',
+      verb,
+      entityType,
+      entityId: id ? String(id) : '',
+      entityLabel: label || '',
+      productionId: productionId || null,
+      meta: meta || {},
+    }).catch((err) => {
+      console.debug('[AppContext] activity log skipped:', err?.message || err)
+    })
+  }, [])
+
   // ─── mutateProduction — optimistic local + remote ──────────────────────────
   // All sub-entity mutations (addons, milestones, bible, etc) flow through
   // this helper. Computes the patch from the current production, applies it
@@ -414,6 +447,9 @@ export function AppProvider({ children }) {
     }
   }, [profile, devViewAs])
 
+  // Keep the activity-log name ref in sync with the resolved display name.
+  useEffect(() => { currentUserNameRef.current = currentUser?.name || '' }, [currentUser])
+
   // ─── Auth ──────────────────────────────────────────────────────────────────
   // Sign-in is handled directly via AuthContext.signInWithGoogle on LoginPage.
   // We keep `logout` exposed here for backwards compatibility with existing
@@ -429,40 +465,60 @@ export function AppProvider({ children }) {
   // errors for now; UI-level error handling lands in a follow-up.
   const addProduction = useCallback((production) => {
     setProductionsState(prev => [production, ...prev])
-    createProductionApi(production).catch((err) => {
-      console.error('[AppContext] createProduction failed:', err)
-      toast.error(`Couldn't create production — ${err?.message || 'unknown error'}`)
-      // Rollback optimistic insert
-      setProductionsState(prev => prev.filter(p => p.id !== production.id))
-    })
-  }, [toast])
+    createProductionApi(production)
+      .then(() => {
+        logActivity('created', 'production', {
+          id: production.id, label: production.name, productionId: production.id,
+        })
+      })
+      .catch((err) => {
+        console.error('[AppContext] createProduction failed:', err)
+        toast.error(`Couldn't create production — ${err?.message || 'unknown error'}`)
+        // Rollback optimistic insert
+        setProductionsState(prev => prev.filter(p => p.id !== production.id))
+      })
+  }, [toast, logActivity])
 
-  const updateProduction = useCallback((id, updates) => {
-    let prevProduction = null
+  const updateProduction = useCallback((id, updates, opts = {}) => {
+    let prevProduction = productionsRef.current.find(p => p.id === id) || null
     setProductionsState(prev => prev.map(p => {
       if (p.id !== id) return p
       prevProduction = p
       return { ...p, ...updates, updatedAt: new Date().toISOString() }
     }))
-    updateProductionApi(id, updates).catch((err) => {
-      console.error('[AppContext] updateProduction failed:', err)
-      toast.error(`Couldn't save production changes — ${err?.message || 'unknown error'}`)
-      if (prevProduction) {
-        setProductionsState(prev => prev.map(p => p.id === id ? prevProduction : p))
-      }
-    })
-  }, [toast])
+    updateProductionApi(id, updates)
+      .then(() => {
+        if (updates.status && prevProduction && updates.status !== prevProduction.status) {
+          logActivity('status_changed', 'production', {
+            id, label: prevProduction.name, productionId: id,
+            meta: { from: prevProduction.status, to: updates.status, ...(opts.auto ? { auto: true } : {}) },
+          })
+        }
+      })
+      .catch((err) => {
+        console.error('[AppContext] updateProduction failed:', err)
+        toast.error(`Couldn't save production changes — ${err?.message || 'unknown error'}`)
+        if (prevProduction) {
+          setProductionsState(prev => prev.map(p => p.id === id ? prevProduction : p))
+        }
+      })
+  }, [toast, logActivity])
 
   const deleteProduction = useCallback((id) => {
+    const prev = productionsRef.current.find(p => p.id === id)
     setProductionsState(prev => prev.filter(p => p.id !== id))
     // Tasks cascade-delete server-side via the FK on production_id, but mirror
     // it locally for snappy UI.
     setTasksState(prev => prev.filter(t => t.productionId !== id))
-    deleteProductionApi(id).catch((err) => {
-      console.error('[AppContext] deleteProduction failed:', err)
-      toast.error(`Couldn't delete production — ${err?.message || 'unknown error'}. Refresh to restore the list.`)
-    })
-  }, [toast])
+    deleteProductionApi(id)
+      .then(() => {
+        logActivity('deleted', 'production', { id, label: prev?.name || '' })
+      })
+      .catch((err) => {
+        console.error('[AppContext] deleteProduction failed:', err)
+        toast.error(`Couldn't delete production — ${err?.message || 'unknown error'}. Refresh to restore the list.`)
+      })
+  }, [toast, logActivity])
 
   const getProduction = useCallback((id) => {
     return productions.find(p => p.id === id)
@@ -486,7 +542,7 @@ export function AppProvider({ children }) {
       if (!target || target === p.status) continue
       const forward =
         (PRODUCTION_STATUS_RANK[target] ?? -1) > (PRODUCTION_STATUS_RANK[p.status] ?? 99)
-      if (forward) updateProduction(p.id, { status: target })
+      if (forward) updateProduction(p.id, { status: target }, { auto: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productionsLoading, productions, currentUser])
@@ -499,38 +555,71 @@ export function AppProvider({ children }) {
     // Ensure comments array exists for component compatibility
     const taskWithComments = { ...task, comments: task.comments || [], statusHistory: task.statusHistory || [] }
     setTasksState(prev => [taskWithComments, ...prev])
-    createTaskApi(task).catch((err) => {
-      console.error('[AppContext] createTask failed:', err)
-      // The eager-create placeholder is blank on purpose — only worth a toast
-      // once the user typed something (updateTask covers the rest).
-      if (task.title) toast.error(`Couldn't create task — ${err?.message || 'unknown error'}`)
-      setTasksState(prev => prev.filter(t => t.id !== task.id))
-    })
-  }, [toast])
+    createTaskApi(task)
+      .then(() => {
+        logActivity('created', 'task', {
+          id: task.id, label: task.title || '', productionId: task.productionId || null,
+        })
+      })
+      .catch((err) => {
+        console.error('[AppContext] createTask failed:', err)
+        // The eager-create placeholder is blank on purpose — only worth a toast
+        // once the user typed something (updateTask covers the rest).
+        if (task.title) toast.error(`Couldn't create task — ${err?.message || 'unknown error'}`)
+        setTasksState(prev => prev.filter(t => t.id !== task.id))
+      })
+  }, [toast, logActivity])
 
   const updateTask = useCallback((id, updates) => {
-    let prevTask = null
+    let prevTask = tasksRef.current.find(t => t.id === id) || null
     setTasksState(prev => prev.map(t => {
       if (t.id !== id) return t
       prevTask = t
       return { ...t, ...updates, updatedAt: new Date().toISOString() }
     }))
-    updateTaskApi(id, updates).catch((err) => {
-      console.error('[AppContext] updateTask failed:', err)
-      toast.error(`Couldn't save task changes — ${err?.message || 'unknown error'}`)
-      if (prevTask) {
-        setTasksState(prev => prev.map(t => t.id === id ? prevTask : t))
-      }
-    })
-  }, [toast])
+    updateTaskApi(id, updates)
+      .then(() => {
+        if (!prevTask) return
+        const base = {
+          id, label: updates.title ?? prevTask.title ?? '',
+          productionId: prevTask.productionId || null,
+        }
+        if (updates.status && updates.status !== prevTask.status) {
+          const done = updates.status === 'Complete' || updates.status === 'Verified'
+          logActivity(done ? 'completed' : 'status_changed', 'task', {
+            ...base, meta: { from: prevTask.status, to: updates.status },
+          })
+        }
+        if ('assigneeId' in updates && updates.assigneeId && updates.assigneeId !== prevTask.assigneeId) {
+          logActivity('assigned', 'task', {
+            ...base,
+            meta: { assigneeId: updates.assigneeId, assigneeName: resolveUserName(updates.assigneeId) || '' },
+          })
+        }
+      })
+      .catch((err) => {
+        console.error('[AppContext] updateTask failed:', err)
+        toast.error(`Couldn't save task changes — ${err?.message || 'unknown error'}`)
+        if (prevTask) {
+          setTasksState(prev => prev.map(t => t.id === id ? prevTask : t))
+        }
+      })
+  }, [toast, logActivity, resolveUserName])
 
   const deleteTask = useCallback((id) => {
+    const prev = tasksRef.current.find(t => t.id === id)
     setTasksState(prev => prev.filter(t => t.id !== id))
-    deleteTaskApi(id).catch((err) => {
-      console.error('[AppContext] deleteTask failed:', err)
-      toast.error(`Couldn't delete task — ${err?.message || 'unknown error'}. Refresh to restore the list.`)
-    })
-  }, [toast])
+    deleteTaskApi(id)
+      .then(() => {
+        logActivity('deleted', 'task', {
+          id, label: prev?.title || '', productionId: prev?.productionId || null,
+        })
+      })
+      .catch((err) => {
+        console.error('[AppContext] deleteTask failed:', err)
+        toast.error(`Couldn't delete task — ${err?.message || 'unknown error'}. Refresh to restore the list.`)
+      })
+  }, [toast, logActivity])
 
   const getTasksForProduction = useCallback((productionId) => {
     return tasks.filter(t => t.productionId === productionId)
@@ -566,6 +655,11 @@ export function AppProvider({ children }) {
         authorName: optimistic.authorName,
         photoStoragePath: optimistic.photoStoragePath,
         photoName: optimistic.photoName,
+      }).then(() => {
+        const task = tasksRef.current.find(t => t.id === taskId)
+        logActivity('commented', 'task', {
+          id: taskId, label: task?.title || '', productionId: task?.productionId || null,
+        })
       }).catch((err) => {
         console.error('[AppContext] createComment failed:', err)
         toast.error(`Comment didn't send — ${err?.message || 'unknown error'}`)
@@ -577,7 +671,7 @@ export function AppProvider({ children }) {
         ))
       })
     }
-  }, [profile, toast])
+  }, [profile, toast, logActivity])
 
   // ─── Add-ons ───────────────────────────────────────────────────────────────
   const addAddon = useCallback((productionId, addon) => {
@@ -606,12 +700,16 @@ export function AppProvider({ children }) {
   // ─── Contractors CRUD ─────────────────────────────────────────────────────
   const addContractor = useCallback((contractor) => {
     setContractorsState(prev => [contractor, ...prev])
-    createContractorApi(contractor).catch((err) => {
-      console.error('[AppContext] createContractor failed:', err)
-      if (contractor.name) toast.error(`Couldn't add contractor — ${err?.message || 'unknown error'}`)
-      setContractorsState(prev => prev.filter(c => c.id !== contractor.id))
-    })
-  }, [toast])
+    createContractorApi(contractor)
+      .then(() => {
+        logActivity('created', 'contractor', { id: contractor.id, label: contractor.name || '' })
+      })
+      .catch((err) => {
+        console.error('[AppContext] createContractor failed:', err)
+        if (contractor.name) toast.error(`Couldn't add contractor — ${err?.message || 'unknown error'}`)
+        setContractorsState(prev => prev.filter(c => c.id !== contractor.id))
+      })
+  }, [toast, logActivity])
 
   const updateContractor = useCallback((id, updates) => {
     let prevContractor = null
@@ -727,7 +825,13 @@ export function AppProvider({ children }) {
     _updateRoadmap(productionId, r => ({
       ...r, milestones: [...(r.milestones || []), milestone],
     }))
-  }, [_updateRoadmap])
+    logActivity('created', 'milestone', {
+      id: milestone.id,
+      label: milestone.title || milestone.name || milestone.type || '',
+      productionId,
+      meta: milestone.type ? { type: milestone.type } : {},
+    })
+  }, [_updateRoadmap, logActivity])
 
   const updateMilestone = useCallback((productionId, milestoneId, updates) => {
     _updateRoadmap(productionId, r => ({
