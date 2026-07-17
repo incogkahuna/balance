@@ -805,7 +805,9 @@ export function buildProductionFromDraft(draft, currentUser) {
     },
   })
 
-  const tasks      = generateStarterTasks(productionType, productionId, createdBy)
+  // Starter tasks are opt-out on the Review step — respect the toggles.
+  const tasks = generateStarterTasks(productionType, productionId, createdBy)
+    .filter(t => draft.taskEdits?.[t.title]?.included !== false)
   const milestones = generateRoadmapMilestones(productionType, startDate, endDate, createdBy)
 
   return { production, tasks, milestones }

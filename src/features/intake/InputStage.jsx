@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { Upload, FileText, Mic, X, Image, Plus, ArrowRight, Loader } from 'lucide-react'
+import { Upload, FileText, Mic, X, Image, Plus, ArrowRight, Loader, CheckCircle } from 'lucide-react'
 import clsx from 'clsx'
 import { VoiceRecorder } from '../../components/voice/VoiceRecorder.tsx'
+import { useToast } from '../../context/ToastContext.jsx'
 
 const recordingSupported = typeof window !== 'undefined' && typeof MediaRecorder !== 'undefined'
 
@@ -16,12 +17,14 @@ const STUDIO_VOCAB_PROMPT =
 
 // ─── InputStage ───────────────────────────────────────────────────────────────
 export function InputStage({ onNext }) {
+  const toast = useToast()
   const [inputs,     setInputs]     = useState([])
   const [textValue,  setTextValue]  = useState('')
   const [dragging,   setDragging]   = useState(false)
   const [voiceText,  setVoiceText]  = useState('')
   const fileInputRef                = useRef(null)
   const textareaRef                 = useRef(null)
+  const imageCount = inputs.filter(i => i.type === 'image').length
 
   const handleTranscript = useCallback((transcript) => {
     setVoiceText(prev => prev ? `${prev} ${transcript}` : transcript)
@@ -52,7 +55,8 @@ export function InputStage({ onNext }) {
     setVoiceText('')
   }
 
-  // Add image files
+  // Add image files. The toast is the immediate "it worked" signal — the
+  // attachment list lives below the fold, which read as "nothing happened".
   const addFiles = useCallback((files) => {
     Array.from(files).forEach(file => {
       if (!file.type.startsWith('image/')) return
@@ -67,10 +71,11 @@ export function InputStage({ onNext }) {
           preview:  e.target.result,
           addedAt:  new Date().toISOString(),
         }])
+        toast.success(`Screenshot "${file.name}" attached — it'll be read during analysis.`)
       }
       reader.readAsDataURL(file)
     })
-  }, [])
+  }, [toast])
 
   const removeInput = id => setInputs(prev => prev.filter(i => i.id !== id))
 
@@ -161,7 +166,15 @@ export function InputStage({ onNext }) {
               Emails, texts, schedules, briefs — anything you have
             </p>
           </div>
-          <span className="text-xs text-blue-400 font-medium">or click to browse</span>
+          <span className="text-xs text-blue-400 font-medium">
+            click to browse — or just paste a screenshot (Ctrl+V) anywhere on this page
+          </span>
+          {imageCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/15 border border-green-500/30 text-xs font-medium text-green-400">
+              <CheckCircle size={12} />
+              {imageCount} screenshot{imageCount > 1 ? 's' : ''} attached
+            </span>
+          )}
         </div>
         <input
           ref={fileInputRef}

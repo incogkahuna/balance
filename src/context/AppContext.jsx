@@ -1,5 +1,5 @@
-import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
-import { USERS, LED_WALLS_SEED, createWallAssignment } from '../data/models.js'
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { USERS, LED_WALLS_SEED, createWallAssignment, ROLES, computeDateDrivenStatus, PRODUCTION_STATUS_RANK } from '../data/models.js'
 import { FEEDBACK_STATUS } from '../data/models.js'
 import { useAuth } from './AuthContext.tsx'
 import { useToast } from './ToastContext.jsx'
@@ -467,6 +467,29 @@ export function AppProvider({ children }) {
   const getProduction = useCallback((id) => {
     return productions.find(p => p.id === id)
   }, [productions])
+
+  // ─── Auto status by dates ──────────────────────────────────────────────────
+  // Once per session after productions hydrate: promote any production whose
+  // dates have moved past its stored status (Incoming → Active on start day,
+  // → Wrap past the end date, → Completed 30 days after). Forward-only, so a
+  // manually advanced status is never demoted. Admin/sup only — production
+  // UPDATE is RLS-gated, so other roles would just generate failed writes.
+  const autoStatusRanRef = useRef(false)
+  useEffect(() => {
+    if (productionsLoading || autoStatusRanRef.current) return
+    const role = currentUser?.role
+    if (role !== ROLES.ADMIN && role !== ROLES.SUPERVISOR) return
+    if (productions.length === 0) return
+    autoStatusRanRef.current = true
+    for (const p of productions) {
+      const target = computeDateDrivenStatus(p)
+      if (!target || target === p.status) continue
+      const forward =
+        (PRODUCTION_STATUS_RANK[target] ?? -1) > (PRODUCTION_STATUS_RANK[p.status] ?? 99)
+      if (forward) updateProduction(p.id, { status: target })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productionsLoading, productions, currentUser])
 
   // ─── Tasks CRUD ────────────────────────────────────────────────────────────
   // Tasks live in Postgres. The productions.task_ids array is auto-maintained

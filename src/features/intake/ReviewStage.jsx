@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import clsx from 'clsx'
-import { PRODUCTION_TYPE, LOCATION_TYPE } from '../../data/models.js'
+import { LOCATION_TYPE } from '../../data/models.js'
 import { useApp } from '../../context/AppContext.jsx'
 import { resolveField, generateRoadmapMilestones, generateStarterTasks } from './intakeUtils.js'
 import { MILESTONE_TYPE_CONFIG } from '../productions/roadmap/roadmapUtils.js'
@@ -264,8 +264,8 @@ function MilestonePreviewRow({ milestone }) {
 }
 
 // ─── ReviewStage ──────────────────────────────────────────────────────────────
-export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onToggleCrew, onFinalize }) {
-  const { extracted, answers, edits, contacts = [], concerns = [], inputs = [], contactEdits = {}, concernEdits = {}, detectedCrew = [], crewEdits = {} } = draft
+export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onToggleCrew, onToggleTask, onFinalize }) {
+  const { extracted, answers, edits, contacts = [], concerns = [], inputs = [], contactEdits = {}, concernEdits = {}, detectedCrew = [], crewEdits = {}, taskEdits = {} } = draft
   const { ledWalls = [], users = [] } = useApp()
 
   const resolve = field => resolveField(field, extracted, answers, edits)
@@ -302,16 +302,12 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
   const previewMilestones = generateRoadmapMilestones(
     r.productionType.value, r.startDate.value, r.endDate.value, ''
   )
-  const previewTasks = generateStarterTasks(r.productionType.value || PRODUCTION_TYPE.OTHER, 'preview', '')
+  const previewTasks = generateStarterTasks(r.productionType.value || '', 'preview', '')
+  const includedTaskCount = previewTasks.filter(t => taskEdits[t.title]?.included !== false).length
 
   // Missing required fields
   const missingFields = ['title', 'client'].filter(f => !resolve(f).value)
 
-  const TYPE_OPTIONS = [
-    { label: 'LED Volume',    value: PRODUCTION_TYPE.LED_VOLUME   },
-    { label: 'Mobile Build',  value: PRODUCTION_TYPE.MOBILE_BUILD },
-    { label: 'Other',         value: PRODUCTION_TYPE.OTHER        },
-  ]
   const LOCATION_OPTIONS = [
     { label: 'In-House (Orbital Studios)', value: LOCATION_TYPE.IN_HOUSE },
     { label: 'Mobile / On Location',       value: LOCATION_TYPE.MOBILE  },
@@ -491,28 +487,52 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
         </p>
       </Section>
 
-      {/* Starter tasks */}
+      {/* Starter tasks — opt-in per task, all included by default */}
       <Section
         icon={CheckCircle}
         title="Starter Tasks"
-        badge={previewTasks.length}
+        badge={includedTaskCount}
         defaultOpen={false}
       >
+        <p className="text-xs text-orbital-subtle px-1 mb-2">
+          Suggested for this production type — untick any you don't want created.
+        </p>
         <div className="space-y-1.5">
-          {previewTasks.map((t, i) => (
-            <div key={i} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-white/[0.02]">
-              <div className="w-4 h-4 rounded border border-orbital-border/50 flex-shrink-0" />
-              <span className="text-sm text-orbital-text">{t.title}</span>
-              <span className={clsx(
-                'ml-auto text-[10px] font-medium uppercase tracking-wider flex-shrink-0',
-                t.priority === 'High' ? 'text-amber-400' : t.priority === 'Critical' ? 'text-red-400' : 'text-orbital-subtle/60'
-              )}>
-                {t.priority}
-              </span>
-            </div>
-          ))}
+          {previewTasks.map((t) => {
+            const included = taskEdits[t.title]?.included !== false
+            return (
+              <button
+                key={t.title}
+                onClick={() => onToggleTask?.(t.title, !included)}
+                className={clsx(
+                  'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all',
+                  included ? 'bg-white/[0.02] hover:bg-white/[0.05]' : 'bg-white/[0.01] opacity-50 hover:opacity-75'
+                )}
+              >
+                <div className={clsx(
+                  'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors',
+                  included ? 'bg-blue-500/20 border-blue-500/50' : 'border-orbital-border/50'
+                )}>
+                  {included && <Check size={11} className="text-blue-400" />}
+                </div>
+                <span className={clsx('text-sm', included ? 'text-orbital-text' : 'text-orbital-subtle line-through')}>
+                  {t.title}
+                </span>
+                <span className={clsx(
+                  'ml-auto text-[10px] font-medium uppercase tracking-wider flex-shrink-0',
+                  t.priority === 'High' ? 'text-amber-400' : t.priority === 'Critical' ? 'text-red-400' : 'text-orbital-subtle/60'
+                )}>
+                  {t.priority}
+                </span>
+              </button>
+            )
+          })}
         </div>
-        <p className="text-xs text-orbital-subtle px-1">These starter tasks will be created automatically.</p>
+        <p className="text-xs text-orbital-subtle px-1">
+          {includedTaskCount === 0
+            ? 'No starter tasks will be created.'
+            : `${includedTaskCount} task${includedTaskCount === 1 ? '' : 's'} will be created with the production.`}
+        </p>
       </Section>
 
       {/* Detected concerns */}

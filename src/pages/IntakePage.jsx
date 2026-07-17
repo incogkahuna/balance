@@ -42,6 +42,7 @@ export function IntakePage() {
     contactEdits: {},   // { [contactId]: { name, role, included } }
     concernEdits: {},   // { [concernId]: { included } }
     crewEdits:    {},   // { [userId]: { included } }
+    taskEdits:    {},   // { [taskTitle]: { included } } — starter tasks are opt-out
   })
 
   // Computed questions (recalculated after parsing). The ref mirrors state so
@@ -139,6 +140,16 @@ export function IntakePage() {
       crewEdits: {
         ...d.crewEdits,
         [userId]: { ...(d.crewEdits[userId] || {}), included },
+      },
+    }))
+  }, [])
+
+  const handleToggleTask = useCallback((taskTitle, included) => {
+    setDraft(d => ({
+      ...d,
+      taskEdits: {
+        ...d.taskEdits,
+        [taskTitle]: { ...(d.taskEdits[taskTitle] || {}), included },
       },
     }))
   }, [])
@@ -309,6 +320,7 @@ export function IntakePage() {
             onEditContact={handleEditContact}
             onToggleConcern={handleToggleConcern}
             onToggleCrew={handleToggleCrew}
+            onToggleTask={handleToggleTask}
             onFinalize={handleFinalize}
           />
         )}

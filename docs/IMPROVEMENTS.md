@@ -10,17 +10,23 @@ Numbers (#N) refer to Danny's original list. Keep statuses current as modules la
 |---|---|---|
 | 13 | Task creating isn't saving | **FIXED + shipped** (`a903c49`). Root cause: the form pre-created an empty placeholder the API rejected (title required), so every auto-save updated a nonexistent row. Now the task is created on the first keystroke of a title. Note: before the role fix, RLS would ALSO have blocked crew-role creates. Verify in prod. |
 
-## Module 0 — Quick wins (small, independent, one batch)
+## Module 0 — Quick wins — ✅ SHIPPED 2026-07-16 (plus decisions)
 
-| # | Item | Plan |
+Decisions from Danny: Little Dipper no longer exists (purged everywhere);
+prelight + wrap live as **milestone types** (Prelight added with its own color);
+tours become their own thing later via a "Create New Project → Internal / Tour /
+Production" chooser (M4, needs a `kind` column migration — bundled with the
+Nitzkin quoting work).
+
+| # | Item | Status |
 |---|---|---|
-| 1 | TVC AOTO → "in-house or mobile?" is redundant | Production type implies location type; auto-fill and skip the question. **Needs mapping confirmed:** TVC AOTO → In-House; Mobile CAR process CLI → Mobile; Little Dipper → ? |
-| 2 | No confirmation when screenshot submitted | Visible confirmation at the top of the intake (chip/count + toast) instead of only the bottom list. Paste-to-add already works app-wide on that page — surface it in the UI copy so people know. |
-| 7 | Can't open documents added via intake | Bug: intake stores screenshots into the Bible with an empty `url` (`intakeUtils.js` buildProductionFromDraft) — pass the image data through so preview works. |
-| 8 | Fake tasks added during production creation | Starter tasks become an opt-in section on the Review step (checkbox list, all visible, deselect what you don't want) instead of silently added. |
-| 9 | Package not editable after production created | Investigate + unlock the instruction package editor on the production page post-creation. |
-| 20 | Auto status by dates | Derive Incoming/Active from dates; auto-flip to Completed ~1 month past end date (with a manual override that always wins). |
-| 4 | Review-production fields that are fake/uneditable | Make every field on the intake Review step genuinely editable. Inventory which ones are display-only and wire them. |
+| 1 | Redundant in-house/mobile question | ✅ TYPE_LOCATION_MAP: TVC AOTO → In-House, Mobile CAR → Mobile; the intake skips the location question when the type answers it; buildProductionFromDraft derives it. Verified live. |
+| 2 | No screenshot confirmation | ✅ Toast on attach + green "N screenshots attached" chip in the drop zone + copy now says paste (Ctrl+V) works anywhere on the page. |
+| 7 | Can't open intake documents | ✅ Screenshots now stored in the Bible with real image data + MIME type — preview and AI-scan work. |
+| 8 | Fake starter tasks | ✅ Review step now has per-task include/exclude toggles (all on by default, live count of what will be created). Verified live. |
+| 9 | Package not editable | ✅ No code bug — it's editable for admin/supervisor; Danny's account was crew at the time. Retest as admin. |
+| 20 | Auto status by dates | ✅ `computeDateDrivenStatus`: Incoming → Active on start day → Wrap past end → Completed 30 days after. Reconciles once per session on load, forward-only (never demotes a manual advance), admin/sup sessions only. |
+| 4 | Fake/uneditable review inputs | ✅ Mostly: dead fake checkbox list → real toggles; dead TYPE_OPTIONS (undefined since phase6b) removed; latent `PRODUCTION_TYPE.OTHER` undefined bug fixed. Remaining display-only: the milestone preview list (edit milestones post-create on the Roadmap tab) — revisit if Danny wants inline milestone editing in review. |
 
 ## Module 1 — Data hygiene & truth (`#10`, `#12`)
 

@@ -37,6 +37,43 @@ export const TYPE_LOCATION_MAP = {
   [PRODUCTION_TYPE.MOBILE_CAR_PROCESS]: LOCATION_TYPE.MOBILE,
 }
 
+// ─── Date-driven status ───────────────────────────────────────────────────────
+// Statuses ranked so auto-transitions only ever move FORWARD — a manually
+// advanced status is never demoted by the calendar.
+export const PRODUCTION_STATUS_RANK = {
+  [PRODUCTION_STATUS.INCOMING]:  0,
+  [PRODUCTION_STATUS.ACTIVE]:    1,
+  [PRODUCTION_STATUS.WRAP]:      2,
+  [PRODUCTION_STATUS.COMPLETED]: 3,
+}
+
+/**
+ * What the calendar says this production's status should be:
+ *   before start        → Incoming
+ *   start … end (incl.) → Active
+ *   past end            → Wrap
+ *   >30 days past end   → Completed
+ * Returns null when there's no usable start date. Date-only string
+ * comparison (YYYY-MM-DD) keeps this timezone-proof.
+ */
+export function computeDateDrivenStatus(production, todayStr = new Date().toISOString().slice(0, 10)) {
+  const start = (production.startDate || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return null
+  const end = ((production.endDate || '').slice(0, 10).match(/^\d{4}-\d{2}-\d{2}$/))
+    ? production.endDate.slice(0, 10)
+    : start
+
+  // 30-day grace window after the end date before auto-completing.
+  const cutoff = new Date(end + 'T00:00:00Z')
+  cutoff.setUTCDate(cutoff.getUTCDate() + 30)
+  const cutoffStr = cutoff.toISOString().slice(0, 10)
+
+  if (todayStr > cutoffStr) return PRODUCTION_STATUS.COMPLETED
+  if (todayStr > end)       return PRODUCTION_STATUS.WRAP
+  if (todayStr >= start)    return PRODUCTION_STATUS.ACTIVE
+  return PRODUCTION_STATUS.INCOMING
+}
+
 export const TASK_PRIORITY = {
   LOW: 'Low',
   MEDIUM: 'Medium',
