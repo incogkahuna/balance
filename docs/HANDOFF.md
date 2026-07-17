@@ -1,152 +1,121 @@
 # Balance — Session Handoff
 
-*Updated 2026-07-16. Read this first, then delete/replace when stale.*
-*Working copy that has all this state: `C:\Users\danie\OneDrive\Documents\GitHub\balance` (the OneDrive checkout — NOT the Claude worktree, which is behind).*
+*Updated 2026-07-16 (end of a long working session with Danny). Read this
+first, then `docs/IMPROVEMENTS.md` (the working plan), then go.*
 
-## TL;DR — start here
+## What this project is right now
 
-**SHIPPED 2026-07-16:** the phase7a migration was run in Supabase (user-confirmed),
-then Phase 0 + the Tier 2 intake parser were pushed (`master @ a564db9`+) and the
-Vercel deploy verified live (new bundle's toast CSS confirmed on
-`balance-orbital.vercel.app`). Nothing is sitting locally.
+Balance is Orbital Studios' production-management app (React 18 + Vite +
+Tailwind + Supabase, deployed on Vercel at `balance-orbital.vercel.app`,
+repo `github.com/incogkahuna/balance`, branch `master`). Danny (owner,
+`dhorgan@orbitalvs.com`) decided AGAINST a full rebuild — instead we're
+working module-by-module through his 22-item improvement list, triaged in
+**`docs/IMPROVEMENTS.md`** (that file is the plan of record; keep its
+statuses current). `docs/AUDIT-2026-07.md` is the deeper original audit.
 
-Remaining, in order:
+## Session log — what shipped TODAY (2026-07-16), all pushed & live
 
-1. **Smoke-test prod** — real Google login → create a production → add a task
-   with a note → move it through the status workflow → confirm no error toasts.
-2. **Turn on Tier 2** (optional, anytime) — `supabase secrets set
-   ANTHROPIC_API_KEY=sk-ant-...` + `supabase functions deploy parse-intake`.
-3. **Run `phase6h`** in the SQL editor if it wasn't run alongside phase7a.
-4. **Start Phase 1** (identity unification → localStorage ports → tests) from
-   `docs/AUDIT-2026-07.md`.
+1. **Roles fixed via SQL** (user ran it): every existing profile promoted to
+   admin; `laura@orbitalvs.com` + `aida@orbitalvs.com` pre-authorized as
+   admin in `role_assignments`. Danny's "can't edit production" mystery was
+   his account defaulting to crew.
+2. **Task-creation data-loss bug fixed** (`a903c49`): TaskForm eager-created
+   an empty placeholder the API rejected (title required) → tasks never
+   persisted. Now creates on first title keystroke. This also explained his
+   "fake tasks stay, my tasks vanish" complaints (intake starter tasks always
+   had titles, so they persisted).
+3. **Module 0 quick wins** (`9a6a460`, `8a141ee`): Little Dipper purged
+   (stage no longer exists); TVC AOTO→In-House / Mobile CAR→Mobile auto-map
+   + redundant intake question skipped; intake screenshots land openable in
+   the Bible (real dataURL + MIME); starter tasks are opt-out toggles on
+   Review; screenshot-attach toast + count chip + paste hint; date-driven
+   status ladder (Incoming→Active→Wrap→Completed+30d, forward-only,
+   admin-session reconcile on load); Prelight milestone type added;
+   Analytics hooks fix etc. — full table in IMPROVEMENTS.md.
+4. **Module 6 (UI) first drop** (`4305232`): official Orbital brand system.
+   Marketing vectors live in `public/brand/`; `OrbitalMark`/`OrbitalLogo`
+   components use the exact emblem paths + official gradient
+   (#55c9ef→#2a7bbb); Inter Tight typography (brand face from orbitalvs.com);
+   space-navy dark theme (#070a12) with glass cards; brand-gradient buttons;
+   customizable ambient backdrops (Orbit/Starfield/Grid/Aurora/Minimal) via
+   `BackgroundFX` + `BackgroundContext`, per-user persisted; `AccountMenu`
+   (identity + theme + backdrop picker + sign out = his #21 v1); cinematic
+   forced-dark login rebuild; emblem favicon; sidebar/topbar lockups.
 
-The auth-loop fix is verified working (2026-07-08). Details near the bottom.
+Earlier this week (also live): Phase 0 bug blitz, phase7a migration (user
+ran it), Tier 2 Claude screenshot parser (`parse-intake` edge function —
+DEPLOYED and working, key set), toast system + optimistic rollback.
 
----
+## ⭑ IMMEDIATE NEXT TASK — M6 dial-up (Danny's direct feedback)
 
-## COMMITTED — Intake Tier 2 (Claude screenshot parser), 2026-07-15
+Danny reviewed drop 1: **"classy start, just too understated."** The full
+spec is in IMPROVEMENTS.md → Module 6 → "M6 NEXT PASS". Summary:
+- Backdrops far more visible (3-4× intensity in dark; he can barely see them)
+- Light mode needs its own strong tuning (currently near-invisible on white)
+- Two NEW presets he wants: **"Emblem"** (one big centered Orbital logo) and
+  **"Logo Wave"** (grid of small marks flipping as a wave rolls through)
+- The orbit watermark barely shows — make the emblem read
+- He liked: stars, the non-gradient elements. Confirmed the files in
+  `public/brand/` ARE the final marketing assets.
+- Tone guard: elegant geometry only, NO emoji/cartoonish icons. "Be bold,
+  we can dial back."
 
-The long-deferred screenshot parser is **finished, browser-verified, and
-committed** at both sites that requested a parser:
+## Module queue after that (order agreed with Danny)
 
-1. **Intake wizard** (`/productions/new`) — Tier 1 heuristics run synchronously
-   (instant, offline-safe); Tier 2 (`parse-intake` edge function,
-   `claude-opus-4-8` with vision + structured output) runs during the Analysing
-   stage and merges over Tier 1 via `mergeTier2Results`. Screenshots, pasted
-   text, and voice transcripts all flow through it. The Analysing stage holds
-   ("Reading screenshots & fine detail…") until the AI settles; the client caps
-   the wait at 60s.
-2. **Production Bible → Documents Received** — image documents get a ✨ "Scan
-   with AI" button that folds extracted contacts into Key Players and concerns
-   into Key Concerns (deduped, single bible write, toast feedback).
+M1 data truth (activity_events table + rebuilt no-fake Analytics — his #12;
+wipe SQL for #10 is written in IMPROVEMENTS.md, user runs it) → M2 Tasks+
+To-Dos merge (#14) → M3 parsing/voice everywhere (#11 contractor-from-
+screenshot, #19 mic on long text fields — reuse deployed Whisper `transcribe`
+fn, NOT Gemma) → M4 beyond-productions → M5 global feedback widget → M7
+automation. **M4 notes from Danny:** tours are their own thing — "Create New
+Project" button → Internal / Tour / Production chooser (needs a `kind`
+column migration); prelight/wrap stay as milestone types (done); tours
+likely pull from Google Calendar later; **Nitzkin quoting-app integration
+was promised "tomorrow"** (= imminent) — discovery needed: what the app is,
+which statuses quotes should drive.
 
-**Fallback verified live** (browser test, function undeployed): the wizard logs
-`[Intake] AI parse unavailable, using heuristics` and completes on Tier 1 —
-paste-brief → Review stage fully populated. So the code is safe in prod before
-the function exists; Tier 2 lights up when deployed. (Note: the in-app browser's
-console reader duplicates every entry — two identical log lines ≠ two runs.)
+## Environment facts (verify against live before trusting)
 
-**To turn Tier 2 on (user actions):**
-- `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...`
-- `supabase functions deploy parse-intake`
-- Then test: an intake with a call-sheet screenshot should populate dates and
-  contacts from the image, not just the pasted text.
+- **Working copy:** `C:\Users\danie\OneDrive\Documents\GitHub\balance` is
+  Danny's authoritative checkout. A Claude session may run in
+  `C:\Users\danie\balance` — check `git log` freshness; push/pull to sync.
+  OneDrive causes file-lock flakiness.
+- **Supabase:** ref `ectyohuqgpnwivpjpuga` (one `q`), FREE tier —
+  auto-pauses after ~7 idle days → NXDOMAIN that looks like an outage;
+  un-pause in dashboard. Migrations through `phase7a` are applied; `phase6h`
+  status unconfirmed. Edge functions `transcribe` + `parse-intake` deployed
+  with keys set.
+- **Vercel:** auto-deploys on push to master. Verify deploys by fetching the
+  site and checking for a new asset hash.
+- **Local dev:** `.claude/launch.json` has "Balance (Vite)" (port 5173). DEV
+  login bypass on /login (no real Supabase session → RLS returns no data;
+  UI work only). In-app-browser screenshots time out in this environment —
+  verify via JS eval (`javascript_tool`) instead.
+- **Danny's workflow:** he runs SQL in the Supabase dashboard editor when
+  given a block; commit early/often; he switches models via /model — keep
+  handoffs model-agnostic.
 
-Email intake (foundation-plan 4c) remains out of scope — it needs inbound-email
-DNS/routing infrastructure, not just a parser.
+## Open items on the user
 
----
+- Run the fake-data wipe (IMPROVEMENTS.md M1: `demo-wipe.sql` + clear all
+  contractors) when ready.
+- Confirm `phase6h` migration was run.
+- Nitzkin quoting app details (tomorrow's session).
+- Free→paid Supabase upgrade still pending (stability).
 
-## COMMITTED, UNPUSHED — Phase 0 bug-fix blitz (7 commits ahead of origin)
+## Key code map (for orientation, verify line numbers live)
 
-From `docs/AUDIT-2026-07.md` (the July functionality audit + Monday-parity plan).
-Commits `150f379` → `638bab4`. What shipped:
-
-- **Persisted silently-dropped fields** — task notes, comment photos, contractor
-  fields now actually save (needs `phase7a` migration in the DB).
-- **Toast system + optimistic-update rollback** — failed Supabase writes now show
-  a toast and roll back instead of `console.error`-and-pretend-saved. *(This
-  resolves the "silent write failures" debt item that older docs still list.)*
-- Full **6-status task workflow** — quick-status pills + blocked-reason prompt;
-  status history read from `task_status_history`; one canonical "done" definition.
-- **New Task from the Tasks page**; damage-count fix; Analytics hooks-order fix;
-  editable feedback resolution notes; breadcrumb sync; `is_admin()` defined in a
-  migration; ProductionType TS type matches the free-form reality.
-
----
-
-## Environment / access facts
-
-- **Production URL:** `https://balance-orbital.vercel.app`. Old
-  `balance-six-gamma.vercel.app` is **dead** (DEPLOYMENT_NOT_FOUND) — ignore it.
-- **Supabase:** ref `ectyohuqgpnwivpjpuga` (ONE `q`). **FREE tier** (`balance-dev`)
-  — auto-pauses after ~7 days of no authenticated traffic, and a paused free
-  project has its DNS pulled → `NXDOMAIN` (looks like the project vanished). If
-  login/data suddenly dies with NXDOMAIN, un-pause it in the dashboard. Moving to
-  paid is the #1 stability fix.
-- **Supabase Auth URL config must match the live domain:** Site URL +
-  Redirect URLs (`https://balance-orbital.vercel.app/**`). Changing the deploy
-  domain breaks login until these are updated.
-- **Repo:** authoritative working copy is the **OneDrive** checkout
-  `C:\Users\danie\OneDrive\Documents\GitHub\balance` (has the unpushed commits +
-  the Tier 2 WIP). OneDrive causes file-watcher/lock flakiness — a future cleanup
-  is to move to e.g. `C:\dev\balance`. Push target:
-  `github.com/incogkahuna/balance`, branch `master`.
-- **Local dev:** `npx vite --port 5174 --host` from the repo root. DEV-only login
-  bypass on the LoginPage (amber panel) — pick any team member, no OAuth. Gated on
-  `import.meta.env.DEV`. Gives app access but NOT a real Supabase session, so live
-  data reads return nothing under RLS — use it for UI work; use real Google login
-  to touch data.
-- **Branch hygiene:** if `git push` reports a stray branch (a past session once
-  landed on `security-tightening`), `git checkout master && git merge --ff-only <branch>`.
-
-## Pending USER actions (dashboard/infra — Claude can't do these)
-
-1. **Run `phase7a` migration** (blocks the Phase 0 push — see TL;DR).
-2. **Run `phase6h` migration** — `supabase/migrations/20260609000000_phase6h_notifications_rls_hardening.sql`,
-   committed earlier, likely still not applied. Hardens notifications INSERT.
-3. **Tier 2 deploy** (only if shipping the WIP) — `ANTHROPIC_API_KEY` secret +
-   `supabase functions deploy parse-intake`.
-4. **Move off free Supabase tier** (stops the auto-pause).
-5. **Custom domain** eventually — `balance.orbitalvs.com` (they own `orbitalvs.com`);
-   CNAME + one more Supabase Site-URL update. `orbital.app` is someone else's — dead end.
-
-## Next up — Phase 1 (from `docs/AUDIT-2026-07.md`)
-
-1. **Split identity model** — legacy string ids (`'mark'`, `'danny'`) vs auth
-   UUIDs; email-bridged at runtime, unbridgeable in the DB. Blocks proper RLS.
-   Highest-value fix (~2-3 days). Doing this first unblocks the rest.
-2. **Port localStorage-only entities to Supabase** — LED walls, To-Dos, Bugs &
-   Ideas don't sync between users today (each browser is its own DB). ~1 day each.
-3. Establish a **test baseline** (currently zero automated tests) — Vitest on the
-   pure functions (intakeUtils, roadmapUtils, data mappers) first.
-
-## Architecture quick-ref
-
-- Data: Supabase (productions/tasks/contractors/notifications, realtime) +
-  localStorage (walls/todos/feedback — see Phase 1 #2). All via
-  `src/context/AppContext.jsx`; snake↔camel mappers in `src/lib/data/*.ts`.
-- Auth: Google OAuth (PKCE) via Supabase; email→legacy-id map in
-  `AppContext.currentUser`; explicit code exchange in `AuthContext.tsx`.
-- Writes: optimistic + rollback + toast (Phase 0). Errors are now visible.
-- 3D: three + @react-three/fiber@8 + drei@9 + postprocessing@2.19 (pinned for
-  React 18). `src/features/prototype/GravMap.jsx` (3D) + `Constellation.jsx`
-  (2D) are sibling tabs on `/resources`. Legend explains the visual language.
-- Conventions: one-click state changes, ConfirmDialog for destructive actions,
-  hud-label page headers, eager-create + 600 ms auto-save on forms.
-- Deeper roadmap + rationale: `docs/ROADMAP.md`. Full audit: `docs/AUDIT-2026-07.md`.
-
----
-
-## RESOLVED — Google OAuth login loop (verified 2026-07-08)
-
-Loop after login (pick account → back to login, forever). Cause: Supabase's
-Site-URL fallback dropped the user at `/?code=...`; React Router's catch-all
-(`/` → `/dashboard`, `<Navigate replace>`) fired during the first render, before
-any `useEffect`, stripping the `?code=` before the client could exchange it.
-Fix (`b322128`, `3553910`): `detectSessionInUrl: false` in `src/lib/supabase.ts`;
-in `src/context/AuthContext.tsx` capture the code at **module load**
-(`CAPTURED_OAUTH_CODE`, before ReactDOM renders) and `exchangeCodeForSession` it.
-Verified via fresh incognito login. **Keep** the `CAPTURED_OAUTH_CODE` logic and
-the `[AuthContext]` diagnostic logs — they're the fastest way to diagnose the next
-auto-pause/redirect incident.
+- Data hub: `src/context/AppContext.jsx` (all CRUD, optimistic+rollback+
+  toast, auto-status effect, profiles roster, resolveUserName).
+- Intake: `src/pages/IntakePage.jsx` (Tier 1 sync + Tier 2 async merge),
+  `src/features/intake/intakeUtils.js` (heuristics, mergeTier2Results,
+  starter tasks/milestones, buildProductionFromDraft),
+  `src/lib/parseIntake.ts` ↔ `supabase/functions/parse-intake/index.ts`
+  (claude-opus-4-8 vision + structured output).
+- Brand/UI: `src/components/brand/OrbitalLogo.jsx`,
+  `src/components/layout/BackgroundFX.jsx`, `AccountMenu.jsx`,
+  `src/context/BackgroundContext.jsx`, `src/index.css` (tokens + FX),
+  `public/brand/` (official vectors).
+- Tasks: `src/components/tasks/TaskForm.jsx` (create-on-first-title),
+  `TaskCard.jsx` (status pills via getValidTransitions, comments w/ photos),
+  `src/features/tasks/taskStatusConfig.js` (canonical done helpers).

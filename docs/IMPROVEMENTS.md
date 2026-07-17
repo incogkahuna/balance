@@ -101,9 +101,30 @@ orbitalvs.com (Inter Tight brand face, official emblem + gradient throughout).
   cinematic login rebuild; emblem favicon; sidebar/topbar lockups.
 - ✅ **#21 v1:** AccountMenu — avatar → identity + role chip, theme switcher,
   backdrop picker with mini-previews, sign out.
-- ⏳ **M6 next passes:** page-level composition polish (dashboard layout,
-  detail pages), image-upload backdrops (needs storage), full account page,
-  and **#17 constellation/grav-map rework** (its own session — big canvas).
+- ⏳ **M6 NEXT PASS — Danny's review of drop 1 (2026-07-16): "classy start,
+  too understated." Concrete dial-up spec:**
+  1. **Backdrops need to be A LOT more visible** — he can barely see them.
+     Multiply the `--fx-*` opacities aggressively (try 3-4× in dark; the rings
+     read as nearly invisible). Stars: more of them + brighter. The gradient
+     accents: more present.
+  2. **Light mode shows almost nothing** — FX intensity on white needs its own
+     much-stronger tuning, not a scaled-down dark theme.
+  3. **New preset: "Emblem"** — one BIG centered Orbital logo as the backdrop
+     (think watermark at 60-80vmin, centered behind content, visible not
+     ghostly).
+  4. **New preset: "Logo Wave"** — a grid of many small Orbital marks that
+     flip/rotate as a wave rolls through the field (staggered CSS animation
+     delays by grid position gives the wave; randomize phase a touch).
+  5. The orbit watermark was only partially visible — reposition/scale so the
+     emblem reads.
+  - Then: page-level composition polish (dashboard layout, detail pages),
+    image-upload backdrops (needs storage), full account page, and
+    **#17 constellation/grav-map rework** (its own session — big canvas).
+  - Key files: `src/components/layout/BackgroundFX.jsx`,
+    `src/context/BackgroundContext.jsx` (preset registry),
+    `src/index.css` (BACKGROUND FX section + `--fx-*` vars in both themes),
+    `src/components/brand/OrbitalLogo.jsx` (official emblem paths),
+    `src/components/layout/AccountMenu.jsx` (picker), `public/brand/*`.
 
 ## Module 7 — Automation & cross-fill (`#16`)
 
