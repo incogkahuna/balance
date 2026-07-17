@@ -3,6 +3,13 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useApp } from '../context/AppContext.jsx'
 import { USERS } from '../data/models.js'
+import { BackgroundFX } from '../components/layout/BackgroundFX.jsx'
+import { OrbitalMark } from '../components/brand/OrbitalLogo.jsx'
+
+// ─── LoginPage — the airlock ─────────────────────────────────────────────────
+// The entry to Balance is a brand moment: forced-dark cinematic scene, the
+// official Orbital emblem, orbital-ring geometry, a stage-floor grid, and a
+// single luminous action. Everything rises in on a stagger.
 
 export function LoginPage() {
   const { session, loading, signInWithGoogle } = useAuth()
@@ -13,10 +20,13 @@ export function LoginPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-orbital-bg">
-        <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">
-          INITIALIZING
-        </p>
+      <div className="dark">
+        <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-orbital-bg">
+          <OrbitalMark size={40} spin />
+          <p className="font-telemetry text-[9px] tracking-[0.3em] text-orbital-subtle">
+            INITIALIZING
+          </p>
+        </div>
       </div>
     )
   }
@@ -26,8 +36,7 @@ export function LoginPage() {
   }
 
   // DEV bypass — if a devViewAs impersonation is already set in localStorage,
-  // currentUser will be non-null even without a real session. Send them
-  // straight to the dashboard so they don't get stuck on this login page.
+  // currentUser will be non-null even without a real session.
   if (import.meta.env.DEV && currentUser) {
     return <Navigate to="/dashboard" replace />
   }
@@ -48,84 +57,131 @@ export function LoginPage() {
     }
   }
 
+  // Forced dark: the airlock is always cinematic, whatever theme the user
+  // runs inside. Tailwind's `darkMode: 'class'` honors any ancestor `.dark`.
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-orbital-bg px-6 py-12">
-      <div className="mb-12 text-center">
-        <h1 className="text-4xl font-bold text-orbital-text tracking-tight mb-1">Balance</h1>
-        <p className="text-orbital-subtle text-sm font-medium">
-          Virtual Production Management — Orbital Studios
-        </p>
-      </div>
+    <div className="dark">
+      <div className="relative min-h-screen overflow-hidden bg-orbital-bg text-orbital-text">
+        {/* Scene: orbital rings above, stage grid below — the LED volume. */}
+        <BackgroundFX preset="orbit" />
+        <div className="bgfx" aria-hidden="true">
+          <div className="bgfx-horizon" />
+          <div className="bgfx-grid" />
+        </div>
 
-      <div className="w-full max-w-md">
-        <p className="section-title text-center mb-5">Sign in to continue</p>
+        <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6 py-14">
 
-        <button
-          onClick={handleSignIn}
-          disabled={signingIn}
-          className="w-full flex items-center justify-center gap-3 p-4 rounded-xl bg-orbital-surface border border-orbital-border hover:border-blue-500/50 hover:bg-orbital-muted transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <GoogleLogo />
-          <span className="font-semibold text-orbital-text">
-            {signingIn ? 'Redirecting…' : 'Continue with Google'}
-          </span>
-        </button>
-
-        {error && (
-          <p className="mt-4 text-xs text-red-400 text-center">{error}</p>
-        )}
-
-        <p className="mt-6 text-xs text-orbital-muted text-center">
-          Use your Orbital Studios Google account.
-          <br />
-          New here? Ask an admin to add you to the team.
-        </p>
-
-        {/* DEV-only quick login — bypasses OAuth entirely. Useful on
-            localhost where Supabase's redirect URL isn't whitelisted, or
-            for impersonating any team member to test role-gated UI. Never
-            renders in a production build. */}
-        {import.meta.env.DEV && (
-          <div
-            className="mt-8 p-4 rounded-xl"
-            style={{
-              background: 'rgba(251,191,36,0.06)',
-              border: '1px dashed rgba(251,191,36,0.45)',
-            }}
-          >
-            <p className="font-telemetry text-[10px] tracking-[0.22em] text-amber-400 mb-2 text-center">
-              DEV BYPASS — LOCALHOST ONLY
+          {/* Emblem + product */}
+          <div className="animate-rise flex flex-col items-center" style={{ animationDelay: '0.05s' }}>
+            <OrbitalMark size={84} />
+            <h1
+              className="mt-8 text-[34px] sm:text-[40px] font-bold leading-none text-orbital-text"
+              style={{ letterSpacing: '0.34em', marginRight: '-0.34em' }}
+            >
+              BALANCE
+            </h1>
+            <p
+              className="mt-3 font-telemetry text-[10px] text-orbital-subtle uppercase"
+              style={{ letterSpacing: '0.42em', marginRight: '-0.42em' }}
+            >
+              Orbital Studios
             </p>
-            <p className="text-[11px] text-orbital-subtle mb-3 text-center">
-              Pick a team member to enter as. Use the sidebar switcher to swap later.
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {USERS.map(u => (
-                <button
-                  key={u.id}
-                  onClick={() => handleDevQuickPick(u.id)}
-                  className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-orbital-surface border border-orbital-border hover:border-amber-500/50 hover:bg-orbital-muted transition-colors text-left"
-                >
-                  <span
-                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
-                    style={{ backgroundColor: u.color }}
-                  >
-                    {u.avatar}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-orbital-text truncate">{u.name}</p>
-                    <p className="text-[10px] text-orbital-dim uppercase tracking-wider">{u.role}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
           </div>
-        )}
-      </div>
 
-      <p className="mt-12 text-xs text-orbital-muted text-center">
-        Balance v1 — Built by Danny Horgan in partnership with Orbital Studios
-      </p>
+          {/* Tagline */}
+          <p
+            className="animate-rise mt-6 text-sm text-orbital-subtle text-center max-w-sm"
+            style={{ animationDelay: '0.18s' }}
+          >
+            Mission control for virtual production — stages, crews, and
+            timelines in one instrument.
+          </p>
+
+          {/* Action */}
+          <div className="animate-rise w-full max-w-sm mt-10" style={{ animationDelay: '0.3s' }}>
+            <button
+              onClick={handleSignIn}
+              disabled={signingIn}
+              className="group relative w-full flex items-center justify-center gap-3 px-4 py-4 transition-all active:scale-[0.985] disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: 'rgba(13,18,32,0.75)',
+                border: '1px solid var(--accent-ring)',
+                backdropFilter: 'blur(12px)',
+                boxShadow: '0 0 32px rgba(59,168,224,0.12), inset 0 1px 0 rgba(133,178,255,0.08)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 0 48px rgba(59,168,224,0.28), inset 0 1px 0 rgba(133,178,255,0.1)' }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 0 32px rgba(59,168,224,0.12), inset 0 1px 0 rgba(133,178,255,0.08)' }}
+            >
+              <GoogleLogo />
+              <span className="font-semibold text-orbital-text tracking-wide">
+                {signingIn ? 'Redirecting…' : 'Continue with Google'}
+              </span>
+            </button>
+
+            {error && (
+              <p className="mt-4 text-xs text-red-400 text-center">{error}</p>
+            )}
+
+            <p className="mt-5 text-[11px] text-orbital-subtle/80 text-center leading-relaxed">
+              Use your Orbital Studios Google account.
+              <br />
+              New here? Ask an admin to add you to the crew.
+            </p>
+          </div>
+
+          {/* DEV-only quick login — never renders in production builds. */}
+          {import.meta.env.DEV && (
+            <div
+              className="animate-rise w-full max-w-sm mt-10 p-4"
+              style={{
+                animationDelay: '0.42s',
+                background: 'rgba(251,191,36,0.05)',
+                border: '1px dashed rgba(251,191,36,0.4)',
+              }}
+            >
+              <p className="font-telemetry text-[10px] tracking-[0.22em] text-amber-400 mb-2 text-center">
+                DEV BYPASS — LOCALHOST ONLY
+              </p>
+              <p className="text-[11px] text-orbital-subtle mb-3 text-center">
+                Pick a team member to enter as. Use the sidebar switcher to swap later.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {USERS.map(u => (
+                  <button
+                    key={u.id}
+                    onClick={() => handleDevQuickPick(u.id)}
+                    className="flex items-center gap-2 px-2.5 py-2 bg-orbital-surface border border-orbital-border hover:border-amber-500/50 transition-colors text-left"
+                  >
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                      style={{ backgroundColor: u.color }}
+                    >
+                      {u.avatar}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium text-orbital-text truncate">{u.name}</p>
+                      <p className="text-[10px] text-orbital-dim uppercase tracking-wider">{u.role}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Telemetry footer */}
+          <div
+            className="animate-rise absolute bottom-6 left-0 right-0 flex items-center justify-center gap-6 font-telemetry text-[9px] tracking-[0.25em] text-orbital-subtle/60 uppercase"
+            style={{ animationDelay: '0.55s' }}
+          >
+            <span>34.05°N&thinsp;118.24°W</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-full bg-green-500 animate-indicator-pulse" />
+              Systems nominal
+            </span>
+            <span>Balance&thinsp;v1</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

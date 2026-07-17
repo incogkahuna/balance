@@ -3,8 +3,22 @@ import { Sidebar } from './Sidebar.jsx'
 import { MobileNav } from './MobileNav.jsx'
 import { TopBar } from './TopBar.jsx'
 import { Breadcrumbs } from './Breadcrumbs.jsx'
+import { BackgroundFX } from './BackgroundFX.jsx'
+import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAuth } from '../../context/AuthContext.tsx'
+
+// Branded hold screen — the slowly rotating emblem is the app's loading state.
+function HoldScreen({ label }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-orbital-bg">
+      <OrbitalMark size={44} spin />
+      <p className="font-telemetry text-[9px] tracking-[0.3em] text-orbital-subtle">
+        {label}
+      </p>
+    </div>
+  )
+}
 
 export function AppShell() {
   const { currentUser } = useApp()
@@ -15,24 +29,12 @@ export function AppShell() {
   // we MUST NOT redirect. A redirect here strips the code param, preventing
   // Supabase JS from completing the PKCE exchange. Show a placeholder instead.
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-orbital-bg">
-        <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">
-          INITIALIZING
-        </p>
-      </div>
-    )
+    return <HoldScreen label="INITIALIZING" />
   }
 
   // Session exists but profile is still resolving — same hold-off treatment.
   if (session && !currentUser) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-orbital-bg">
-        <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">
-          LOADING PROFILE
-        </p>
-      </div>
-    )
+    return <HoldScreen label="LOADING PROFILE" />
   }
 
   // ── DEV bypass ─────────────────────────────────────────────────────────────
@@ -49,10 +51,14 @@ export function AppShell() {
   }
 
   return (
-    <div className="flex min-h-screen bg-orbital-bg">
+    <div className="relative flex min-h-screen">
+      {/* Ambient geometry behind everything — user-selectable in the
+          account menu. Content stacks above it via the relative wrapper. */}
+      <BackgroundFX />
+
       <Sidebar />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="relative flex-1 flex flex-col min-w-0">
         {/* pb on mobile clears the fixed bottom MobileNav (~64px after the
             mobile-pass sizing bump) plus the iPhone home-indicator safe
             area inset, otherwise the last list row is hidden under the

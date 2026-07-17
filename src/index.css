@@ -1,5 +1,7 @@
-/* ─── Fonts ─────────────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+/* ─── Fonts ───────────────────────────────────────────────────────────────────
+   Inter Tight is the Orbital brand voice (orbitalvs.com headings) — tighter,
+   more editorial than plain Inter. Space Mono stays for telemetry/numerals. */
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -10,32 +12,47 @@
    All orbital-* Tailwind values resolve through these at runtime.
    ══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Light mode (default / :root) ──────────────────────────────────────────── */
+/* ── Brand constants (both themes) ─────────────────────────────────────────── */
 :root {
-  --orbital-bg:         #f2f3f7;   /* page background    */
+  /* Official Orbital gradient — from the marketing vector */
+  --brand-a:    #55c9ef;
+  --brand-b:    #2a7bbb;
+  --brand-grad: linear-gradient(180deg, #55c9ef 0%, #2a7bbb 100%);
+  --brand-grad-soft: linear-gradient(135deg, rgba(85,201,239,0.16), rgba(42,123,187,0.10));
+}
+
+/* ── Light mode (default / :root) — clean, site-like, blue-tinted neutrals ── */
+:root {
+  --orbital-bg:         #f3f5f9;   /* page background    */
   --orbital-surface:    #ffffff;   /* card / panel       */
-  --orbital-panel:      #f7f8fb;   /* elevated surfaces  */
-  --orbital-border:     #e1e3ea;   /* 1px separators     */
-  --orbital-chrome:     #c2c4ce;   /* active/hover edges */
-  --orbital-muted:      #ecedf2;   /* recessed / inset   */
-  --orbital-text:       #111215;   /* primary text       */
-  --orbital-subtle:     #575a6a;   /* secondary text     */
-  --orbital-dim:        #9496a3;   /* placeholder        */
+  --orbital-panel:      #f7f9fc;   /* elevated surfaces  */
+  --orbital-border:     #dfe4ee;   /* 1px separators     */
+  --orbital-chrome:     #bcc4d6;   /* active/hover edges */
+  --orbital-muted:      #eaeef5;   /* recessed / inset   */
+  --orbital-text:       #0e1420;   /* primary text       */
+  --orbital-subtle:     #55607a;   /* secondary text     */
+  --orbital-dim:        #94a0b8;   /* placeholder        */
 
   /* Sidebar / TopBar background — slightly separated from page */
-  --orbital-sidebar-bg: #e9eaee;
-  --orbital-sidebar-border: #d5d7e0;
+  --orbital-sidebar-bg: #eaedf4;
+  --orbital-sidebar-border: #d4dae8;
+
+  /* Accent (brand blue family) */
+  --accent:        #2a7bbb;
+  --accent-bright: #3ba8e0;
+  --accent-soft:   rgba(42,123,187,0.10);
+  --accent-ring:   rgba(59,168,224,0.35);
 
   /* Input fields */
-  --input-bg:           #f7f8fb;
-  --input-border:       #d1d3db;
-  --input-placeholder:  #9496a3;
+  --input-bg:           #f7f9fc;
+  --input-border:       #ccd4e2;
+  --input-placeholder:  #94a0b8;
 
   /* Ghost / secondary button */
-  --btn-secondary-bg:     rgba(0,0,0,0.04);
-  --btn-secondary-hover:  rgba(0,0,0,0.07);
-  --btn-secondary-border: #d1d3db;
-  --btn-ghost-hover:      rgba(0,0,0,0.05);
+  --btn-secondary-bg:     rgba(14,20,32,0.04);
+  --btn-secondary-hover:  rgba(14,20,32,0.07);
+  --btn-secondary-border: #ccd4e2;
+  --btn-ghost-hover:      rgba(14,20,32,0.05);
 
   /* Status text colors — legible on both surfaces */
   --status-incoming-text:  #1d4ed8;  /* blue-700  */
@@ -44,46 +61,73 @@
   --status-completed-text: #52525b;  /* zinc-600  */
 
   /* Scrollbar */
-  --scrollbar-thumb: #c4c6d0;
-  --scrollbar-hover: #a8aab6;
+  --scrollbar-thumb: #c2c9d8;
+  --scrollbar-hover: #a5aec2;
 
   /* Overlay */
-  --modal-overlay: rgba(0,0,0,0.4);
+  --modal-overlay: rgba(10,16,28,0.45);
+
+  /* Card treatment */
+  --card-bg: #ffffff;
+  --card-hover-border: #b9c9e2;
+
+  /* Background FX intensity — light mode keeps geometry whisper-quiet */
+  --fx-line:   rgba(42,123,187,0.10);
+  --fx-line-2: rgba(42,123,187,0.06);
+  --fx-star:   rgba(42,123,187,0.28);
+  --fx-glow-a: rgba(85,201,239,0.10);
+  --fx-glow-b: rgba(42,123,187,0.08);
 }
 
-/* ── Dark mode ─────────────────────────────────────────────────────────────── */
+/* ── Dark mode — deep space navy, the cinematic default ────────────────────── */
 .dark {
-  --orbital-bg:         #131416;
-  --orbital-surface:    #1a1b1e;
-  --orbital-panel:      #1f2024;
-  --orbital-border:     #27282e;
-  --orbital-chrome:     #353640;
-  --orbital-muted:      #101113;
-  --orbital-text:       #d0d1d5;
-  --orbital-subtle:     #6e6f78;
-  --orbital-dim:        #35363e;
+  --orbital-bg:         #070a12;   /* near-black blue    */
+  --orbital-surface:    #0d1220;   /* card / panel       */
+  --orbital-panel:      #111828;   /* elevated surfaces  */
+  --orbital-border:     #1b2437;   /* 1px separators     */
+  --orbital-chrome:     #2b3852;   /* active/hover edges */
+  --orbital-muted:      #0a0e19;   /* recessed / inset   */
+  --orbital-text:       #dbe3f0;   /* primary text       */
+  --orbital-subtle:     #77839c;   /* secondary text     */
+  --orbital-dim:        #3a4358;   /* placeholder        */
 
-  --orbital-sidebar-bg: #111214;
-  --orbital-sidebar-border: #22232a;
+  --orbital-sidebar-bg: #05070d;
+  --orbital-sidebar-border: #161e30;
 
-  --input-bg:           #0e0f11;
-  --input-border:       #27282e;
-  --input-placeholder:  #45464f;
+  --accent:        #3ba8e0;
+  --accent-bright: #55c9ef;
+  --accent-soft:   rgba(85,201,239,0.10);
+  --accent-ring:   rgba(85,201,239,0.30);
 
-  --btn-secondary-bg:     rgba(255,255,255,0.04);
-  --btn-secondary-hover:  rgba(255,255,255,0.07);
-  --btn-secondary-border: #2e2f36;
-  --btn-ghost-hover:      rgba(255,255,255,0.04);
+  --input-bg:           #080c16;
+  --input-border:       #1e2839;
+  --input-placeholder:  #46506a;
+
+  --btn-secondary-bg:     rgba(133,178,255,0.05);
+  --btn-secondary-hover:  rgba(133,178,255,0.09);
+  --btn-secondary-border: #24304a;
+  --btn-ghost-hover:      rgba(133,178,255,0.05);
 
   --status-incoming-text:  #60a5fa;  /* blue-400  */
   --status-active-text:    #4ade80;  /* green-400 */
   --status-wrap-text:      #fbbf24;  /* amber-400 */
   --status-completed-text: #71717a;  /* zinc-500  */
 
-  --scrollbar-thumb: #35363e;
-  --scrollbar-hover: #4a4b55;
+  --scrollbar-thumb: #263149;
+  --scrollbar-hover: #344262;
 
-  --modal-overlay: rgba(0,0,0,0.75);
+  --modal-overlay: rgba(2,4,10,0.78);
+
+  /* Card treatment — translucent glass over the FX layer */
+  --card-bg: rgba(13,18,32,0.72);
+  --card-hover-border: #2f4368;
+
+  /* Background FX intensity — visible but composed */
+  --fx-line:   rgba(85,201,239,0.13);
+  --fx-line-2: rgba(85,201,239,0.07);
+  --fx-star:   rgba(190,225,250,0.55);
+  --fx-glow-a: rgba(85,201,239,0.13);
+  --fx-glow-b: rgba(42,123,187,0.16);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -122,7 +166,7 @@
   ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
   ::selection {
-    background: rgba(59,130,246,0.2);
+    background: rgba(85,201,239,0.25);
     color: var(--orbital-text);
   }
 }
@@ -132,26 +176,48 @@
    ══════════════════════════════════════════════════════════════════════════════ */
 @layer components {
 
-  /* ── Panel / Card ────────────────────────────────────────────────────────── */
+  /* ── Panel / Card — glass over the FX layer in dark mode ─────────────────── */
   .card {
-    @apply bg-orbital-surface border border-orbital-border;
+    border: 1px solid var(--orbital-border);
+    background: var(--card-bg);
+    transition: border-color 0.2s ease;
   }
+  .dark .card {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: inset 0 1px 0 rgba(133,178,255,0.05);
+  }
+  .card:hover { border-color: var(--card-hover-border); }
+
   .card-elevated {
-    @apply bg-orbital-panel border border-orbital-chrome;
+    @apply border border-orbital-chrome;
+    background: var(--card-bg);
+  }
+  .dark .card-elevated {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: inset 0 1px 0 rgba(133,178,255,0.07), 0 12px 40px rgba(0,0,0,0.35);
   }
 
-  /* ── Buttons ─────────────────────────────────────────────────────────────── */
+  /* ── Buttons — primary carries the official brand gradient ───────────────── */
   .btn-primary {
     @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5
-           text-sm font-medium transition-colors
+           text-sm font-semibold transition-all
            disabled:opacity-40 disabled:cursor-not-allowed;
-    background: #2563eb;
-    border: 1px solid rgba(59,130,246,0.5);
-    color: #e8efff;
+    background: linear-gradient(180deg, #3ba8e0 0%, #2a7bbb 100%);
+    border: 1px solid rgba(85,201,239,0.45);
+    color: #f2faff;
     letter-spacing: 0.01em;
+    box-shadow: 0 1px 12px rgba(59,168,224,0.18);
   }
-  .btn-primary:hover:not(:disabled)  { background: #2d6ef0; }
-  .btn-primary:active:not(:disabled) { background: #1d56d8; }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #4cbcee 0%, #2f8bd2 100%);
+    box-shadow: 0 2px 18px rgba(59,168,224,0.32);
+  }
+  .btn-primary:active:not(:disabled) {
+    background: linear-gradient(180deg, #2f95cd 0%, #256da6 100%);
+    box-shadow: 0 1px 8px rgba(59,168,224,0.2);
+  }
 
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5
@@ -205,8 +271,8 @@
   }
   .input::placeholder { color: var(--input-placeholder); }
   .input:focus {
-    border-color: rgba(59,130,246,0.55);
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.08);
+    border-color: var(--accent-ring);
+    box-shadow: 0 0 0 2px var(--accent-soft);
   }
 
   /* ── Date / time inputs ─────────────────────────────────────────────────────
@@ -250,7 +316,7 @@
     border: 1px solid var(--input-border);
     outline: none;
   }
-  .select:focus { border-color: rgba(59,130,246,0.55); }
+  .select:focus { border-color: var(--accent-ring); }
 
   /* ── Labels ──────────────────────────────────────────────────────────────── */
   .label {
@@ -268,6 +334,18 @@
     @apply text-xs uppercase text-orbital-subtle;
     font-family: 'Space Mono', monospace;
     letter-spacing: 0.1em;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  /* Brand gradient tick before every HUD label — small, everywhere, ownable */
+  .hud-label::before {
+    content: '';
+    width: 3px;
+    height: 11px;
+    flex-shrink: 0;
+    background: var(--brand-grad);
+    border-radius: 1px;
   }
 
   /* ── Section header strip ───────────────────────────────────────────────── */
@@ -360,3 +438,150 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 .animate-toast-in { animation: toast-in 0.18s ease-out; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BRAND MOTION + BACKGROUND FX
+   The ambient layer behind every page. Pure CSS — no canvas, no JS per frame.
+   Preset selected per user via BackgroundContext; intensity is theme-driven
+   through the --fx-* custom properties.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* Slow emblem rotation — loading states, ambient brand moments */
+@keyframes orbital-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.animate-orbital-spin { animation: orbital-spin 14s linear infinite; }
+
+/* The fixed backdrop layer */
+.bgfx {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ── Preset: ORBIT — concentric hairline ring system, slow counter-rotation ── */
+.bgfx-ring {
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid var(--fx-line);
+}
+.bgfx-ring--dashed { border-style: dashed; border-color: var(--fx-line-2); }
+@keyframes bgfx-rotate     { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
+@keyframes bgfx-rotate-rev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+.bgfx-spin-slow    { animation: bgfx-rotate 160s linear infinite; }
+.bgfx-spin-slower  { animation: bgfx-rotate-rev 240s linear infinite; }
+/* satellite dot riding a ring */
+.bgfx-sat {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--brand-grad);
+  box-shadow: 0 0 12px 2px var(--fx-glow-a);
+}
+
+/* ── Preset: STARFIELD — two drifting star tiles, parallax speeds ──────────── */
+@keyframes bgfx-drift {
+  from { background-position: 0 0; }
+  to   { background-position: -1200px 400px; }
+}
+.bgfx-stars {
+  position: absolute;
+  inset: -400px;
+  background-image:
+    radial-gradient(1.2px 1.2px at 40px 60px,   var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1px 1px     at 180px 220px, var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.4px 1.4px at 310px 90px,  var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1px 1px     at 460px 300px, var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.1px 1.1px at 90px 350px,  var(--fx-star) 50%, transparent 100%),
+    radial-gradient(1.3px 1.3px at 540px 160px, var(--fx-star) 50%, transparent 100%);
+  background-size: 600px 420px;
+  animation: bgfx-drift 300s linear infinite;
+}
+.bgfx-stars--far {
+  opacity: 0.5;
+  background-size: 900px 640px;
+  animation-duration: 520s;
+}
+
+/* ── Preset: GRID — receding stage floor, slow sweep ───────────────────────── */
+.bgfx-grid {
+  position: absolute;
+  left: -30%;
+  right: -30%;
+  bottom: -12%;
+  height: 62%;
+  transform: perspective(620px) rotateX(62deg);
+  transform-origin: 50% 100%;
+  background-image:
+    linear-gradient(var(--fx-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--fx-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,0.9), transparent 85%);
+  mask-image: linear-gradient(to top, rgba(0,0,0,0.9), transparent 85%);
+}
+@keyframes bgfx-grid-move {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 56px, 0 0; }
+}
+.bgfx-grid { animation: bgfx-grid-move 4.5s linear infinite; }
+.bgfx-horizon {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 46%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fx-glow-a), transparent);
+}
+
+/* ── Preset: AURORA — soft brand-blue nebula wash (no purple clichés) ──────── */
+@keyframes bgfx-float-a {
+  0%, 100% { transform: translate3d(-8%, -4%, 0) scale(1); }
+  50%      { transform: translate3d(6%, 5%, 0) scale(1.15); }
+}
+@keyframes bgfx-float-b {
+  0%, 100% { transform: translate3d(6%, 4%, 0) scale(1.1); }
+  50%      { transform: translate3d(-7%, -6%, 0) scale(0.95); }
+}
+.bgfx-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+}
+.bgfx-blob--a {
+  width: 55vw; height: 55vw;
+  left: -12vw; top: -18vw;
+  background: radial-gradient(circle at 40% 40%, var(--fx-glow-a), transparent 65%);
+  animation: bgfx-float-a 46s ease-in-out infinite;
+}
+.bgfx-blob--b {
+  width: 60vw; height: 60vw;
+  right: -18vw; bottom: -22vw;
+  background: radial-gradient(circle at 60% 60%, var(--fx-glow-b), transparent 65%);
+  animation: bgfx-float-b 58s ease-in-out infinite;
+}
+
+/* Giant ultra-faint emblem watermark (orbit preset) */
+.bgfx-watermark {
+  position: absolute;
+  opacity: 0.05;
+}
+
+/* Staggered entrance — login + hero moments. Pair with animation-delay. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-rise {
+  animation: rise-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Motion off for users who ask for it — geometry stays, movement stops */
+@media (prefers-reduced-motion: reduce) {
+  .bgfx *, .animate-orbital-spin, .animate-rise { animation: none !important; }
+}

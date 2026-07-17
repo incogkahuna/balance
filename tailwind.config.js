@@ -42,7 +42,9 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        // Inter Tight is the Orbital brand face (orbitalvs.com) — tighter,
+        // more editorial than plain Inter.
+        sans: ['"Inter Tight"', 'system-ui', 'sans-serif'],
         mono: ['"Space Mono"', 'ui-monospace', 'monospace'],
       },
       // Minimal animation set — only functional, no decorative

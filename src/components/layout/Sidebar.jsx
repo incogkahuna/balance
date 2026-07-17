@@ -3,6 +3,7 @@ import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkle
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'
 import { DevProfileSwitcher } from '../dev/DevProfileSwitcher.jsx'
+import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
 
 // Nav grouped into labelled sections — 12 flat items had become a wall.
 // Sections render as a tiny telemetry header + their items. Role gates
@@ -66,22 +67,31 @@ export function Sidebar() {
         borderRight: '1px solid var(--orbital-sidebar-border)',
       }}
     >
-      {/* ── App identity ── */}
+      {/* ── App identity — the Orbital emblem anchors the whole chrome ── */}
       <div
-        className="flex items-center justify-between px-4 py-3 flex-shrink-0"
+        className="flex items-center justify-between pl-4 pr-3 py-3.5 flex-shrink-0"
         style={{ borderBottom: '1px solid var(--orbital-sidebar-border)' }}
       >
-        <div>
-          <span className="text-sm font-semibold tracking-tight text-orbital-text">
-            Balance
-          </span>
-          <span className="text-xs text-orbital-subtle ml-1.5">
-            / Orbital
-          </span>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <OrbitalMark size={22} />
+          <div className="flex flex-col min-w-0">
+            <span
+              className="text-[13px] font-semibold text-orbital-text leading-none"
+              style={{ letterSpacing: '0.24em', marginRight: '-0.24em' }}
+            >
+              BALANCE
+            </span>
+            <span
+              className="text-[8px] text-orbital-subtle leading-none mt-1 font-telemetry"
+              style={{ letterSpacing: '0.32em', marginRight: '-0.32em' }}
+            >
+              ORBITAL STUDIOS
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-indicator-pulse" />
-          <span className="text-[10px] text-orbital-subtle">LIVE</span>
+          <span className="text-[10px] text-orbital-subtle font-telemetry">LIVE</span>
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { AppProvider } from './context/AppContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
+import { BackgroundProvider } from './context/BackgroundContext.jsx'
 import { ToastProvider } from './context/ToastContext.jsx'
 import { NavHistoryProvider } from './context/NavHistoryContext.jsx'
 import { AppShell } from './components/layout/AppShell.jsx'
@@ -115,6 +116,7 @@ function RouteLoading() {
 export default function App() {
   return (
     <ThemeProvider>
+    <BackgroundProvider>
     <AuthProvider>
     <ToastProvider>
     <AppProvider>
@@ -151,6 +153,7 @@ export default function App() {
     </AppProvider>
     </ToastProvider>
     </AuthProvider>
+    </BackgroundProvider>
     </ThemeProvider>
   )
 }
