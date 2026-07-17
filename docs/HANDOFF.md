@@ -46,6 +46,22 @@ Earlier this week (also live): Phase 0 bug blitz, phase7a migration (user
 ran it), Tier 2 Claude screenshot parser (`parse-intake` edge function —
 DEPLOYED and working, key set), toast system + optimistic rollback.
 
+## Danny's live review round (2026-07-16 late) — SHIPPED (`52fe02d`, `f695d27`)
+
+Danny tested New Production live and filed 12 notes. All addressed except
+what needs him: **profile dedupe SQL** (duplicates of Danny/Wilder from
+multi-email sign-ins — block 0 in RUN-THIS-SQL.md) and **two function
+deploys** (`transcribe` was 404/undeployed — his mic error was real; and
+`parse-intake` needs redeploy for the new events extraction). Shipped:
+calendar icons theme-aware; parser extracts dated events (scout/prelight/
+shoot) → fills dates + seeds milestones; review makes EVERYTHING editable
+(milestones, concerns, starter tasks — now opt-in suggestions pending his
+real standard checklist); Key Players = external people (staff filtered
+out) with manual add + add-from-screenshot; docs (PDF) upload into Bible;
+sources open full-size; real Project Summary on the Summary sub-tab.
+**Open question for Danny: what's the real starter-task checklist per
+production type?**
+
 ## ⭑ IMMEDIATE NEXT TASKS
 
 1. **Danny runs `docs/RUN-THIS-SQL.md`** (one paste in the Supabase SQL
