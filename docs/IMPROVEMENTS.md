@@ -114,8 +114,22 @@ orbitalvs.com (Inter Tight brand face, official emblem + gradient throughout).
   5. Orbit watermark repositioned/rescaled (58vmin, gradient fill, opacity
      0.18/0.14 via `--fx-watermark`) — mostly on-screen now, reads clearly.
   Verified in dev both themes, all 7 presets, picker thumbs, no console
-  errors. **AWAITING DANNY'S EYES — he said "be bold, we can dial back", so
-  expect a tune request (single knob: the `--fx-*` blocks in `index.css`).**
+  errors.
+- ✅ **M6 DIAL-UP 2 SHIPPED 2026-07-16 (`6baf4a7`)** — Danny drop-2 feedback:
+  1. **Wave slowed** (step 0.32→0.55s, cycle 9.5→15s) — less frantic roll.
+  2. **New "Logo Flip" preset** — same 9×6 mark field but each mark flips on
+     its own decorrelated clock (two hashes → independent delay + 5.5-9.5s
+     cycle, 8% active window) so one or another flips at random, no front.
+  3. **Per-backdrop Speed + Intensity sliders** in AccountMenu (shown for any
+     non-Minimal preset, persisted per browser). Speed = `--fx-speed`
+     multiplier applied to EVERY preset's animation via `calc(base / speed)`;
+     intensity = `.bgfx` container opacity. Wave/flip base delays emit as
+     inline `--d`/`--dur` and scale in CSS, so dragging speed never re-renders
+     the mark tree. Bounds `BG_SPEED` (0.3–2×) / `BG_INTENSITY` (15–100%)
+     exported from BackgroundContext. 8 presets now → 4-col picker.
+  Verified in dev: flip preset (54 independent clocks), live slider drag
+  updates `--fx-speed`/opacity + durations instantly and persists, sliders
+  hide on Minimal, no console errors. **AWAITING DANNY'S EYES.**
 - ⏳ **M6 remaining:** page-level composition polish (dashboard layout, detail
   pages), image-upload backdrops (needs storage), full account page, and
   **#17 constellation/grav-map rework** (its own session — big canvas).

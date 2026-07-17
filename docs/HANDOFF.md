@@ -46,19 +46,24 @@ Earlier this week (also live): Phase 0 bug blitz, phase7a migration (user
 ran it), Tier 2 Claude screenshot parser (`parse-intake` edge function —
 DEPLOYED and working, key set), toast system + optimistic rollback.
 
-## ⭑ IMMEDIATE NEXT TASK — get Danny's eyes on the M6 dial-up, then tune
+## ⭑ IMMEDIATE NEXT TASK — get Danny's eyes on M6, then tune
 
-The dial-up **shipped 2026-07-16 (`4bb8c29`, pushed → Vercel)**: dark FX
-3-4×, light mode's own deep-ink tuning, new **Emblem** (72vmin centered
-gradient mark) + **Logo Wave** (9×6 flip-wave field) presets, orbit
-watermark repositioned so it reads, corner glow, denser/brighter stars.
-Verified in dev (both themes, all 7 presets, picker, zero console errors).
+Two dial-up drops shipped 2026-07-16, both pushed → Vercel:
+- **`4bb8c29`** — dark FX 3-4×, light mode's own deep-ink tuning, new
+  **Emblem** + **Logo Wave** presets, orbit watermark fixed, corner glow.
+- **`6baf4a7`** — wave slowed; new **Logo Flip** preset (marks flip at
+  random, no travelling front); **per-backdrop Speed + Intensity sliders**
+  in the account menu (speed = `--fx-speed` on every animation via
+  `calc(base/speed)`, intensity = `.bgfx` opacity; persisted per browser).
+8 presets total. All verified in dev (both themes, live slider drag, zero
+console errors).
 
-**Next session: ask Danny for his verdict per preset/theme.** He said "be
-bold, we can dial back" — this pass IS bold, so expect dial-back requests.
-All intensity lives in the two `--fx-*` blocks in `src/index.css` (light
-~L74, dark ~L126) — single knob per theme. Preset motion/geometry is
-`index.css` BACKGROUND FX section + `BackgroundFX.jsx`.
+**Next session: get Danny's verdict.** He can now self-tune speed/intensity
+live from the account menu, so most "too fast / too strong" notes he'll fix
+himself. If he wants base changes: intensity ceiling + per-theme look live in
+the two `--fx-*` blocks in `src/index.css` (light ~L74, dark ~L126); preset
+motion/geometry is the BACKGROUND FX section + `BackgroundFX.jsx`; slider
+bounds are `BG_SPEED`/`BG_INTENSITY` in `BackgroundContext.jsx`.
 Then M6 remaining: page composition polish, image-upload backdrops, full
 account page, #17 constellation rework (own session).
 
