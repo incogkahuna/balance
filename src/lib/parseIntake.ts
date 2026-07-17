@@ -24,6 +24,12 @@ export interface Tier2Concern {
     | 'conflict' | 'weather' | 'unresolved' | 'general'
 }
 
+export interface Tier2Event {
+  label: string
+  date: string   // YYYY-MM-DD
+  kind: 'scout' | 'prelight' | 'shoot' | 'wrap' | 'other'
+}
+
 export interface Tier2Extraction {
   title: string
   client: string
@@ -35,6 +41,7 @@ export interface Tier2Extraction {
   contacts: Tier2Contact[]
   crewNames: string[]
   concerns: Tier2Concern[]
+  events: Tier2Event[]
   summary: string[]
 }
 
@@ -118,6 +125,7 @@ export async function parseIntakeInputs(inputs: IntakeInput[]): Promise<Tier2Ext
     contacts:        Array.isArray(e.contacts) ? e.contacts : [],
     crewNames:       Array.isArray(e.crewNames) ? e.crewNames : [],
     concerns:        Array.isArray(e.concerns) ? e.concerns : [],
+    events:          Array.isArray(e.events) ? e.events : [],
     summary:         Array.isArray(e.summary) ? e.summary : [],
   }
 }

@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { X, ChevronLeft } from 'lucide-react'
 import clsx from 'clsx'
 import { useApp } from '../context/AppContext.jsx'
-import { mockParseInputs, mergeTier2Results, generateQuestions, buildProductionFromDraft } from '../features/intake/intakeUtils.js'
+import {
+  mockParseInputs, mergeTier2Results, generateQuestions, buildProductionFromDraft,
+  resolveField, seedIntakeMilestones, seedStarterTaskDrafts,
+} from '../features/intake/intakeUtils.js'
 import { parseIntakeInputs } from '../lib/parseIntake.ts'
 import { InputStage }     from '../features/intake/InputStage.jsx'
 import { ParsingStage }   from '../features/intake/ParsingStage.jsx'
@@ -36,13 +39,16 @@ export function IntakePage() {
     contacts:     [],
     concerns:     [],
     detectedCrew: [],            // [{ userId, matchedAs, confidence, source, sourceName }]
+    events:       [],            // dated events from the AI parse (scouts, prelights, shoots)
     parsingSummary: [],
     answers:      {},
     edits:        {},
     contactEdits: {},   // { [contactId]: { name, role, included } }
-    concernEdits: {},   // { [concernId]: { included } }
+    concernEdits: {},   // { [concernId]: { included, title } }
     crewEdits:    {},   // { [userId]: { included } }
-    taskEdits:    {},   // { [taskTitle]: { included } } — starter tasks are opt-out
+    taskEdits:    {},   // legacy opt-out toggles (kept for old drafts)
+    milestones:   null, // Review-owned editable list; seeded on entering review
+    starterTasks: null, // Review-owned editable list; seeded on entering review
   })
 
   // Computed questions (recalculated after parsing). The ref mirrors state so
@@ -70,8 +76,12 @@ export function IntakePage() {
   //            failure (not deployed, offline, timeout) silently keeps Tier 1.
   const handleInputsReady = useCallback((inputs) => {
     const tier1 = mockParseInputs(inputs)
-    // Reset answers/edits when re-submitting inputs so questions regenerate cleanly
-    setDraft(d => ({ ...d, inputs, ...tier1, answers: {}, edits: {}, crewEdits: {} }))
+    // Reset answers/edits (and the Review-owned lists, so they reseed from
+    // the fresh parse) when re-submitting inputs
+    setDraft(d => ({
+      ...d, inputs, ...tier1, events: [],
+      answers: {}, edits: {}, crewEdits: {}, milestones: null, starterTasks: null,
+    }))
     setQuestionsBoth(generateQuestions(tier1.extracted, {}))
     setStage('parsing')
 
@@ -93,12 +103,29 @@ export function IntakePage() {
       })
   }, [setQuestionsBoth])
 
+  // Entering Review seeds the editable milestone + starter-task lists from
+  // whatever the parse and answers produced (once — going back and returning
+  // keeps the user's edits).
+  const enterReview = useCallback(() => {
+    setDraft(d => {
+      if (Array.isArray(d.milestones) && Array.isArray(d.starterTasks)) return d
+      const rt = f => resolveField(f, d.extracted, d.answers, d.edits).value
+      return {
+        ...d,
+        milestones:   d.milestones   ?? seedIntakeMilestones(d.events, rt('productionType'), rt('startDate'), rt('endDate')),
+        starterTasks: d.starterTasks ?? seedStarterTaskDrafts(rt('productionType')),
+      }
+    })
+    setStage('review')
+  }, [])
+
   // ── Stage: Parsing complete ────────────────────────────────────────────────
   // Parsing already happened in handleInputsReady — just advance the stage.
   // Reads questions via ref so this callback never changes identity.
   const handleParsingComplete = useCallback(() => {
-    setStage(questionsRef.current.length > 0 ? 'questions' : 'review')
-  }, [])
+    if (questionsRef.current.length > 0) setStage('questions')
+    else enterReview()
+  }, [enterReview])
 
   // ── Stage: Q&A ────────────────────────────────────────────────────────────
   const handleAnswer = useCallback((field, value) => {
@@ -106,8 +133,8 @@ export function IntakePage() {
   }, [])
 
   const handleQuestionsComplete = useCallback(() => {
-    setStage('review')
-  }, [])
+    enterReview()
+  }, [enterReview])
 
   // ── Stage: Review edits ────────────────────────────────────────────────────
   const handleEdit = useCallback((field, value) => {
@@ -152,6 +179,23 @@ export function IntakePage() {
         [taskTitle]: { ...(d.taskEdits[taskTitle] || {}), included },
       },
     }))
+  }, [])
+
+  // ── Review-owned editable lists (Danny items 3, 4, 7, 9) ───────────────────
+  const handleMilestonesChange = useCallback((milestones) => {
+    setDraft(d => ({ ...d, milestones }))
+  }, [])
+
+  const handleStarterTasksChange = useCallback((starterTasks) => {
+    setDraft(d => ({ ...d, starterTasks }))
+  }, [])
+
+  const handleConcernsChange = useCallback((concerns) => {
+    setDraft(d => ({ ...d, concerns }))
+  }, [])
+
+  const handleAddContacts = useCallback((newContacts) => {
+    setDraft(d => ({ ...d, contacts: [...d.contacts, ...newContacts] }))
   }, [])
 
   // ── Stage: Finalize → create production ───────────────────────────────────
@@ -318,9 +362,13 @@ export function IntakePage() {
             draft={draft}
             onEdit={handleEdit}
             onEditContact={handleEditContact}
+            onAddContacts={handleAddContacts}
             onToggleConcern={handleToggleConcern}
+            onConcernsChange={handleConcernsChange}
             onToggleCrew={handleToggleCrew}
             onToggleTask={handleToggleTask}
+            onMilestonesChange={handleMilestonesChange}
+            onStarterTasksChange={handleStarterTasksChange}
             onFinalize={handleFinalize}
           />
         )}

@@ -234,7 +234,13 @@ redeploy from the repo root:
 
 ```
 supabase functions deploy transcribe --project-ref ectyohuqgpnwivpjpuga
+supabase functions deploy parse-intake --project-ref ectyohuqgpnwivpjpuga
 ```
+
+(parse-intake needs a redeploy too: it now extracts dated EVENTS — tech
+scouts, prelights, shoot days — which fill the form dates when a screenshot
+has no explicit shoot dates, and seed the editable milestone list in review.
+Until redeployed, the parser works as before, just without events.)
 
 (The CLI on this machine is already logged in. The OpenAI key secret should
 still be set project-side — if the mic errors after redeploy, re-run

@@ -444,11 +444,24 @@ export function mockParseInputs(inputs) {
 
   return {
     extracted,
-    contacts,
+    // Orbital staff aren't "key players" — they're crew (Danny item 9).
+    // Staff show up in detectedCrew; keep the contacts list external-only.
+    contacts:     contacts.filter(c => !isOrbitalStaffContact(c)),
     concerns:     allConcerns.slice(0, 5),
     detectedCrew: [...crewByUserId.values()],
     parsingSummary,
   }
+}
+
+// True when a parsed contact is actually one of our own people (matched by
+// email against the roster, or by name against the crew index). Key players
+// are production knowledge — external directors, producers, DPs, points of
+// contact — not Orbital staff, who belong in crew assignment instead.
+export function isOrbitalStaffContact(contact) {
+  const email = (contact.email || '').toLowerCase()
+  if (email && USERS.some(u => u.email && u.email.toLowerCase() === email)) return true
+  if (contact.name && detectCrewMentions(contact.name).length > 0) return true
+  return false
 }
 
 // ─── Tier 2 merge ─────────────────────────────────────────────────────────────
@@ -476,6 +489,39 @@ export function mergeTier2Results(tier1, tier2) {
   setField('locationName',   tier2.locationAddress)
   if (DATE_RE_ISO.test(tier2.startDate)) setField('startDate', tier2.startDate)
   if (DATE_RE_ISO.test(tier2.endDate))   setField('endDate',   tier2.endDate)
+
+  // ── Dated events (tech scouts, prelights, shoot days, wraps) ──
+  // The parser reports every dated event it sees. They drive the milestone
+  // seed on Review, and when no explicit production dates were found, the
+  // event window fills startDate/endDate so the form doesn't come back
+  // empty just because the screenshot was a scout invite (Danny item 1).
+  const events = (tier2.events || [])
+    .filter(e => e?.date && DATE_RE_ISO.test(e.date))
+    .map(e => ({
+      id:    crypto.randomUUID(),
+      label: e.label || 'Event',
+      date:  e.date,
+      kind:  e.kind || 'other',
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  if (events.length > 0) {
+    if (!extracted.startDate?.value) {
+      extracted.startDate = {
+        value: events[0].date, confidence: 'medium',
+        source: AI_SOURCE, sourceName: `${AI_SOURCE_NAME} (from "${events[0].label}")`,
+      }
+    }
+    if (!extracted.endDate?.value && events.length > 1) {
+      const last = events[events.length - 1]
+      if (last.date > (extracted.startDate?.value || '')) {
+        extracted.endDate = {
+          value: last.date, confidence: 'medium',
+          source: AI_SOURCE, sourceName: `${AI_SOURCE_NAME} (from "${last.label}")`,
+        }
+      }
+    }
+  }
 
   // ── Contacts — merge by email (preferred) then by name ──
   const contacts = [...tier1.contacts]
@@ -549,9 +595,10 @@ export function mergeTier2Results(tier1, tier2) {
 
   return {
     extracted,
-    contacts,
+    contacts: contacts.filter(c => !isOrbitalStaffContact(c)),
     concerns,
     detectedCrew: [...crewById.values()],
+    events,
     parsingSummary,
   }
 }
@@ -707,6 +754,53 @@ export function generateRoadmapMilestones(productionType, startDate, endDate, cr
   }))
 }
 
+// ─── Review-stage seeds (Danny items 3, 4, 7) ─────────────────────────────────
+// Everything the wizard proposes is editable before creation. These build the
+// INITIAL lists the Review step then owns — the user can rename, re-date,
+// delete, and add before anything is persisted.
+
+const EVENT_MILESTONE_TYPE = {
+  scout:    MILESTONE_TYPE.TECHNICAL,
+  prelight: MILESTONE_TYPE.PRELIGHT,
+  shoot:    MILESTONE_TYPE.SHOOT_DAY,
+  wrap:     MILESTONE_TYPE.WRAP,
+  other:    MILESTONE_TYPE.PRE_PRODUCTION,
+}
+
+/**
+ * Milestones seeded from what the parse actually saw. Parsed dated events
+ * (tech scout, prelight, shoot days…) come first — they're real. Only when
+ * the parse found no events do we fall back to the type-template skeleton.
+ */
+export function seedIntakeMilestones(events, productionType, startDate, endDate) {
+  if (events && events.length > 0) {
+    return events.map(e => createMilestone({
+      title:  e.label,
+      type:   EVENT_MILESTONE_TYPE[e.kind] || MILESTONE_TYPE.PRE_PRODUCTION,
+      date:   `${e.date}T09:00`,
+      status: MILESTONE_STATUS.UPCOMING,
+    }))
+  }
+  return generateRoadmapMilestones(productionType, startDate, endDate, '')
+}
+
+/**
+ * Starter-task drafts for the Review step. The old type-template titles are
+ * offered as UNCHECKED suggestions (Danny item 4: they read as fake data) —
+ * nothing is created unless explicitly ticked, and every row is editable.
+ * The real fix is Danny's standard checklist per production type; these
+ * templates hold the slot until he defines it.
+ */
+export function seedStarterTaskDrafts(productionType) {
+  const defs = TASK_DEFS[productionType] || FALLBACK_TASKS
+  return defs.map(def => ({
+    id:       crypto.randomUUID(),
+    title:    def.title,
+    priority: def.priority,
+    included: false,
+  }))
+}
+
 // ─── Seeding engine ───────────────────────────────────────────────────────────
 // Converts a completed draft into a production + tasks + milestones.
 // Returns { production, tasks, milestones } — caller is responsible for persisting.
@@ -745,28 +839,28 @@ export function buildProductionFromDraft(draft, currentUser) {
       tag:     'client',
     }))
 
-  // Bible — documents from uploaded images. Carry the actual image data and
-  // real MIME type through so the bible's preview/open + AI-scan work (they
-  // were stored with url:'' and a fake 'image' type before — unopenable).
+  // Bible — documents from uploaded images AND docs (creative decks,
+  // schedules — Danny item 9b). Carry the actual data and real MIME type
+  // through so the bible's preview/open + AI-scan work.
   const documents = (inputs || [])
-    .filter(i => i.type === 'image')
+    .filter(i => i.type === 'image' || i.type === 'file')
     .map(i => ({
       id:           crypto.randomUUID(),
       name:         i.fileName || 'Uploaded document',
       dateReceived: new Date().toISOString().split('T')[0],
-      fileType:     i.fileType || 'image/png',
+      fileType:     i.fileType || (i.type === 'image' ? 'image/png' : 'application/octet-stream'),
       fileName:     i.fileName || null,
       url:          i.preview || '',
       notes:        'Uploaded during intake',
     }))
 
-  // Bible — concerns (only those opted-in, max 3)
+  // Bible — concerns (only those opted-in; the Review step owns the list —
+  // titles may be edited, rows added or deleted, so no arbitrary cap).
   const bibleConcerns = (concerns || [])
     .filter(c => draft.concernEdits?.[c.id]?.included === true)
-    .slice(0, 3)
     .map(c => ({
       id:             crypto.randomUUID(),
-      title:          c.title,
+      title:          draft.concernEdits?.[c.id]?.title || c.title,
       description:    c.description || '',
       severity:       'Medium',
       status:         'Open',
@@ -805,10 +899,27 @@ export function buildProductionFromDraft(draft, currentUser) {
     },
   })
 
-  // Starter tasks are opt-out on the Review step — respect the toggles.
-  const tasks = generateStarterTasks(productionType, productionId, createdBy)
-    .filter(t => draft.taskEdits?.[t.title]?.included !== false)
-  const milestones = generateRoadmapMilestones(productionType, startDate, endDate, createdBy)
+  // Starter tasks — the Review step owns the list since Danny item 4:
+  // opt-IN suggestions, every row renameable/removable/addable. Fall back
+  // to the legacy opt-out toggles only for drafts without the new list.
+  const tasks = Array.isArray(draft.starterTasks)
+    ? draft.starterTasks
+        .filter(t => t.included && t.title.trim())
+        .map(t => createTask({
+          productionId,
+          title:      t.title.trim(),
+          priority:   t.priority || TASK_PRIORITY.MEDIUM,
+          assignedBy: createdBy,
+          status:     TASK_STATUS.NOT_STARTED,
+        }))
+    : generateStarterTasks(productionType, productionId, createdBy)
+        .filter(t => draft.taskEdits?.[t.title]?.included !== false)
+
+  // Milestones — Review-owned when present (parsed events + user edits);
+  // legacy generator otherwise.
+  const milestones = Array.isArray(draft.milestones)
+    ? draft.milestones.filter(m => m.title?.trim() && m.date)
+    : generateRoadmapMilestones(productionType, startDate, endDate, createdBy)
 
   return { production, tasks, milestones }
 }

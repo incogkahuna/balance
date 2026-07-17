@@ -1,14 +1,17 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   Film, User, Calendar, MapPin, Tag, Users, Route, Monitor,
   AlertTriangle, FileText, CheckCircle, Edit3, Check,
-  X, ChevronDown, ChevronUp, Sparkles, Image,
+  X, ChevronDown, ChevronUp, Sparkles, Image, Plus, Trash2, ScanLine, Loader,
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import clsx from 'clsx'
-import { LOCATION_TYPE } from '../../data/models.js'
+import {
+  LOCATION_TYPE, TASK_PRIORITY, MILESTONE_TYPE, MILESTONE_STATUS, createMilestone,
+} from '../../data/models.js'
 import { useApp } from '../../context/AppContext.jsx'
-import { resolveField, generateRoadmapMilestones, generateStarterTasks } from './intakeUtils.js'
+import { resolveField, isOrbitalStaffContact } from './intakeUtils.js'
+import { parseIntakeInputs } from '../../lib/parseIntake.ts'
 import { MILESTONE_TYPE_CONFIG } from '../productions/roadmap/roadmapUtils.js'
 
 // ─── Confidence badge ─────────────────────────────────────────────────────────
@@ -155,6 +158,194 @@ function tryFormatDate(val) {
   try { return format(parseISO(val), 'dd MMM yyyy') } catch { return val }
 }
 
+// ─── Add key player — manual entry or from a screenshot (item 9) ─────────────
+const KEY_PLAYER_ROLES = ['Director', 'Producer', 'DP', 'Client Contact', 'Agency Contact', 'Production Manager', 'Other']
+
+function AddKeyPlayer({ onAddContacts }) {
+  const [mode, setMode] = useState(null)   // null | 'manual'
+  const [form, setForm] = useState({ name: '', role: '', email: '', phone: '' })
+  const [scanning, setScanning] = useState(false)
+  const [scanError, setScanError] = useState(null)
+  const fileRef = useRef(null)
+
+  const submit = () => {
+    if (!form.name.trim()) return
+    onAddContacts([{
+      id: crypto.randomUUID(),
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      company: '',
+      roleGuess: form.role,
+      confidence: 'high',
+      source: 'manual',
+      sourceName: 'Added in review',
+    }])
+    setForm({ name: '', role: '', email: '', phone: '' })
+    setMode(null)
+  }
+
+  // Screenshot → contacts, reusing the intake parser (reads email sigs,
+  // call sheets, business cards). Filters out Orbital staff like the main
+  // parse does.
+  const handleScanFile = (file) => {
+    if (!file || !file.type.startsWith('image/')) return
+    setScanError(null)
+    setScanning(true)
+    const reader = new FileReader()
+    reader.onload = async () => {
+      try {
+        const res = await parseIntakeInputs([
+          { id: 'key-player-shot', type: 'image', preview: reader.result, fileName: file.name },
+        ])
+        const found = (res.contacts || [])
+          .filter(c => c.name || c.email)
+          .map(c => ({
+            id: crypto.randomUUID(),
+            name: c.name || (c.email ? c.email.split('@')[0] : ''),
+            email: (c.email || '').toLowerCase(),
+            phone: c.phone || '',
+            company: c.company || '',
+            roleGuess: c.role || '',
+            confidence: 'high',
+            source: 'screenshot',
+            sourceName: file.name,
+          }))
+          .filter(c => !isOrbitalStaffContact(c))
+        if (found.length === 0) setScanError('No people found in that image.')
+        else onAddContacts(found)
+      } catch (err) {
+        setScanError(err?.message || 'Could not read that image.')
+      } finally {
+        setScanning(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  if (mode === 'manual') {
+    return (
+      <div className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-3 space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            className="bg-white/5 border border-orbital-border/40 rounded-lg px-3 py-2 text-sm text-orbital-text focus:outline-none focus:border-blue-400/60"
+            placeholder="Name *"
+            value={form.name}
+            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            autoFocus
+          />
+          <select
+            className="bg-white/5 border border-orbital-border/40 rounded-lg px-3 py-2 text-sm text-orbital-text focus:outline-none"
+            value={form.role}
+            onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+          >
+            <option value="">Role…</option>
+            {KEY_PLAYER_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <input
+            className="bg-white/5 border border-orbital-border/40 rounded-lg px-3 py-2 text-sm text-orbital-text focus:outline-none focus:border-blue-400/60"
+            placeholder="Email"
+            value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+          />
+          <input
+            className="bg-white/5 border border-orbital-border/40 rounded-lg px-3 py-2 text-sm text-orbital-text focus:outline-none focus:border-blue-400/60"
+            placeholder="Phone"
+            value={form.phone}
+            onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+          />
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={submit}
+            disabled={!form.name.trim()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/20 text-blue-400 text-xs font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-40"
+          >
+            <Check size={12} /> Add person
+          </button>
+          <button
+            onClick={() => setMode(null)}
+            className="px-3 py-1.5 text-xs text-orbital-subtle hover:text-orbital-text"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        onClick={() => setMode('manual')}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition-colors"
+      >
+        <Plus size={12} /> Add person
+      </button>
+      <button
+        onClick={() => fileRef.current?.click()}
+        disabled={scanning}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 text-orbital-subtle text-xs font-medium hover:bg-white/10 hover:text-orbital-text transition-colors disabled:opacity-50"
+        title="Upload a call sheet, email signature, or business card — the AI pulls the people out"
+      >
+        {scanning ? <Loader size={12} className="animate-spin" /> : <ScanLine size={12} />}
+        {scanning ? 'Reading…' : 'From screenshot'}
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => { handleScanFile(e.target.files?.[0]); e.target.value = '' }}
+      />
+      {scanError && <span className="text-xs text-red-400">{scanError}</span>}
+    </div>
+  )
+}
+
+// ─── Source viewer — every source item in the create window opens (item 8) ───
+function SourceViewer({ input, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(2,4,10,0.85)' }}
+      onClick={onClose}
+    >
+      <div
+        className="max-w-3xl w-full max-h-[85vh] overflow-y-auto rounded-xl border border-orbital-border bg-orbital-surface p-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-orbital-text truncate">{input.fileName || 'Source'}</p>
+          <div className="flex items-center gap-2">
+            {(input.type === 'image' || input.type === 'file') && input.preview && (
+              <a
+                href={input.preview}
+                download={input.fileName || 'source'}
+                className="text-xs text-blue-400 hover:text-blue-300"
+              >
+                Download
+              </a>
+            )}
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-orbital-subtle hover:text-orbital-text" aria-label="Close">
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+        {input.type === 'image' && input.preview ? (
+          <img src={input.preview} alt={input.fileName || ''} className="max-w-full mx-auto" />
+        ) : input.type === 'file' ? (
+          <p className="text-sm text-orbital-subtle text-center py-8">
+            {input.fileName} — use Download above to open this document.
+          </p>
+        ) : (
+          <pre className="text-sm text-orbital-text whitespace-pre-wrap font-sans">{input.content}</pre>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Collapsible section ──────────────────────────────────────────────────────
 function Section({ icon: Icon, title, badge, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -183,7 +374,7 @@ function Section({ icon: Icon, title, badge, children, defaultOpen = true }) {
 }
 
 // ─── Contact row ──────────────────────────────────────────────────────────────
-const CONTACT_ROLES = ['Client Contact', 'Key Stakeholder', 'Technical Lead', 'Director', 'Producer', 'Other']
+const CONTACT_ROLES = ['Director', 'Producer', 'DP', 'Client Contact', 'Agency Contact', 'Technical Lead', 'Other']
 
 function ContactRow({ contact, edits, onUpdate, onToggle }) {
   const [editingRole, setEditingRole] = useState(false)
@@ -201,7 +392,12 @@ function ContactRow({ contact, edits, onUpdate, onToggle }) {
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-orbital-text truncate">{edits?.name || contact.name || '—'}</p>
+        <input
+          className="w-full bg-transparent text-sm font-medium text-orbital-text focus:outline-none focus:bg-white/5 rounded px-1 -mx-1 py-0.5"
+          value={edits?.name ?? contact.name ?? ''}
+          onChange={e => onUpdate({ name: e.target.value })}
+          placeholder="Name"
+        />
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {contact.email && <span className="text-xs text-orbital-subtle truncate max-w-[160px]">{contact.email}</span>}
           {contact.phone && <span className="text-xs text-orbital-subtle">{contact.phone}</span>}
@@ -249,24 +445,43 @@ function ContactRow({ contact, edits, onUpdate, onToggle }) {
   )
 }
 
-// ─── Milestone preview row ────────────────────────────────────────────────────
-function MilestonePreviewRow({ milestone }) {
+// ─── Editable milestone row (Danny items 3, 7 — parsed content is editable) ──
+function MilestoneEditRow({ milestone, onChange, onDelete }) {
   const cfg = MILESTONE_TYPE_CONFIG[milestone.type] || MILESTONE_TYPE_CONFIG['Pre-Production']
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5">
-      <div className={`w-2.5 h-2.5 rounded-sm rotate-45 flex-shrink-0 ${cfg.dot}`} />
-      <span className="text-sm text-orbital-text flex-1 truncate">{milestone.title}</span>
-      <span className="text-xs text-orbital-subtle flex-shrink-0">
-        {tryFormatDate(milestone.date?.split('T')[0])}
-      </span>
+    <div className="flex items-center gap-2.5 px-3 py-2 group">
+      <div className={`w-2.5 h-2.5 rounded-sm rotate-45 flex-shrink-0 ${cfg.dot}`} title={milestone.type} />
+      <input
+        className="flex-1 min-w-0 bg-transparent text-sm text-orbital-text focus:outline-none focus:bg-white/5 rounded px-1.5 py-0.5"
+        value={milestone.title}
+        onChange={e => onChange({ title: e.target.value })}
+        placeholder="Milestone title"
+      />
+      <input
+        type="date"
+        className="bg-white/5 border border-orbital-border/40 rounded px-2 py-1 text-xs text-orbital-text focus:outline-none flex-shrink-0"
+        value={(milestone.date || '').split('T')[0]}
+        onChange={e => onChange({ date: e.target.value ? `${e.target.value}T09:00` : '' })}
+      />
+      <button
+        onClick={onDelete}
+        className="p-1 rounded text-orbital-subtle hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 transition-all flex-shrink-0"
+        title="Remove milestone"
+      >
+        <Trash2 size={12} />
+      </button>
     </div>
   )
 }
 
 // ─── ReviewStage ──────────────────────────────────────────────────────────────
-export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onToggleCrew, onToggleTask, onFinalize }) {
-  const { extracted, answers, edits, contacts = [], concerns = [], inputs = [], contactEdits = {}, concernEdits = {}, detectedCrew = [], crewEdits = {}, taskEdits = {} } = draft
+export function ReviewStage({
+  draft, onEdit, onEditContact, onAddContacts, onToggleConcern, onConcernsChange,
+  onToggleCrew, onToggleTask, onMilestonesChange, onStarterTasksChange, onFinalize,
+}) {
+  const { extracted, answers, edits, contacts = [], concerns = [], inputs = [], contactEdits = {}, concernEdits = {}, detectedCrew = [], crewEdits = {}, milestones = [], starterTasks = [] } = draft
   const { ledWalls = [], users = [] } = useApp()
+  const [viewingSource, setViewingSource] = useState(null)
 
   const resolve = field => resolveField(field, extracted, answers, edits)
   const r = {
@@ -298,12 +513,43 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
     }
   }
 
-  // Preview milestones + tasks
-  const previewMilestones = generateRoadmapMilestones(
-    r.productionType.value, r.startDate.value, r.endDate.value, ''
-  )
-  const previewTasks = generateStarterTasks(r.productionType.value || '', 'preview', '')
-  const includedTaskCount = previewTasks.filter(t => taskEdits[t.title]?.included !== false).length
+  // Review-owned editable lists (seeded on entering this stage)
+  const safeMilestones = Array.isArray(milestones) ? milestones : []
+  const safeTasks = Array.isArray(starterTasks) ? starterTasks : []
+  const includedTaskCount = safeTasks.filter(t => t.included).length
+
+  const updateMilestone = (id, patch) =>
+    onMilestonesChange(safeMilestones.map(m => m.id === id ? { ...m, ...patch } : m))
+  const deleteMilestoneRow = (id) =>
+    onMilestonesChange(safeMilestones.filter(m => m.id !== id))
+  const addMilestoneRow = () =>
+    onMilestonesChange([...safeMilestones, createMilestone({
+      title: '', type: MILESTONE_TYPE.PRE_PRODUCTION,
+      date: r.startDate.value ? `${r.startDate.value}T09:00` : '',
+      status: MILESTONE_STATUS.UPCOMING,
+    })])
+
+  const updateTaskRow = (id, patch) =>
+    onStarterTasksChange(safeTasks.map(t => t.id === id ? { ...t, ...patch } : t))
+  const deleteTaskRow = (id) =>
+    onStarterTasksChange(safeTasks.filter(t => t.id !== id))
+  const addTaskRow = () =>
+    onStarterTasksChange([...safeTasks, {
+      id: crypto.randomUUID(), title: '', priority: TASK_PRIORITY.MEDIUM, included: true,
+    }])
+
+  const updateConcernRow = (id, patch) =>
+    onConcernsChange(concerns.map(c => c.id === id ? { ...c, ...patch } : c))
+  const deleteConcernRow = (id) =>
+    onConcernsChange(concerns.filter(c => c.id !== id))
+  const addConcernRow = () => {
+    const c = {
+      id: crypto.randomUUID(), title: '', description: '', category: 'general',
+      confidence: 'high', include: false, source: 'manual', sourceName: 'Added in review',
+    }
+    onConcernsChange([...concerns, c])
+    onToggleConcern(c.id, true)
+  }
 
   // Missing required fields
   const missingFields = ['title', 'client'].filter(f => !resolve(f).value)
@@ -390,28 +636,34 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
         )}
       </Section>
 
-      {/* Key players */}
+      {/* Key players — PRODUCTION knowledge: the director, producer, DP,
+          points of contact on the client side. Orbital staff are filtered
+          out at parse time (they belong in Detected Crew below). Add people
+          manually or from a screenshot (call sheet, email sig). */}
       <Section
         icon={Users}
         title="Key Players"
         badge={contacts.length || null}
-        defaultOpen={contacts.length > 0}
+        defaultOpen
       >
-        {contacts.length === 0 ? (
+        <p className="text-xs text-orbital-subtle px-1 mb-1">
+          Who matters on the production side — director, producer, DP, client points of contact. These seed the Production Bible.
+        </p>
+        {contacts.length === 0 && (
           <p className="text-sm text-orbital-subtle italic px-1">
-            No contacts found in your inputs — add them after creation.
+            No external contacts found in your inputs yet — add them below.
           </p>
-        ) : (
-          contacts.map(c => (
-            <ContactRow
-              key={c.id}
-              contact={c}
-              edits={contactEdits[c.id]}
-              onUpdate={updates => onEditContact(c.id, updates)}
-              onToggle={included => onEditContact(c.id, { included })}
-            />
-          ))
         )}
+        {contacts.map(c => (
+          <ContactRow
+            key={c.id}
+            contact={c}
+            edits={contactEdits[c.id]}
+            onUpdate={updates => onEditContact(c.id, updates)}
+            onToggle={included => onEditContact(c.id, { included })}
+          />
+        ))}
+        <AddKeyPlayer onAddContacts={onAddContacts} />
       </Section>
 
       {/* Detected crew — Orbital team members named in the inputs. Each
@@ -466,28 +718,43 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
         </Section>
       )}
 
-      {/* Roadmap preview */}
+      {/* Roadmap milestones — seeded from parsed events (tech scouts,
+          prelights, shoot days) when the AI found any, otherwise from the
+          type template. Every row is editable before creation. */}
       <Section
         icon={Route}
         title="Roadmap Milestones"
-        badge={previewMilestones.length || null}
-        defaultOpen={false}
+        badge={safeMilestones.length || null}
+        defaultOpen={safeMilestones.length > 0}
       >
-        {previewMilestones.length === 0 ? (
+        {safeMilestones.length === 0 ? (
           <p className="text-sm text-orbital-subtle italic px-1">
-            Set a start date above to generate a milestone roadmap.
+            Nothing dated was found — add milestones below or set a start date above.
           </p>
         ) : (
           <div className="divide-y divide-orbital-border/30 rounded-lg border border-orbital-border/30 overflow-hidden">
-            {previewMilestones.map((m, i) => <MilestonePreviewRow key={i} milestone={m} />)}
+            {safeMilestones.map(m => (
+              <MilestoneEditRow
+                key={m.id}
+                milestone={m}
+                onChange={patch => updateMilestone(m.id, patch)}
+                onDelete={() => deleteMilestoneRow(m.id)}
+              />
+            ))}
           </div>
         )}
+        <button
+          onClick={addMilestoneRow}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition-colors"
+        >
+          <Plus size={12} /> Add milestone
+        </button>
         <p className="text-xs text-orbital-subtle px-1">
-          These will be added to the Roadmap tab after creation.
+          These land on the Roadmap tab after creation — rename, re-date, or remove anything.
         </p>
       </Section>
 
-      {/* Starter tasks — opt-in per task, all included by default */}
+      {/* Starter tasks — opt-IN suggestions, every row editable (item 4) */}
       <Section
         icon={CheckCircle}
         title="Starter Tasks"
@@ -495,39 +762,63 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
         defaultOpen={false}
       >
         <p className="text-xs text-orbital-subtle px-1 mb-2">
-          Suggested for this production type — untick any you don't want created.
+          Suggestions only — nothing is created unless ticked. Rename any row, or add your own.
         </p>
         <div className="space-y-1.5">
-          {previewTasks.map((t) => {
-            const included = taskEdits[t.title]?.included !== false
-            return (
+          {safeTasks.map((t) => (
+            <div
+              key={t.id}
+              className={clsx(
+                'flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all group',
+                t.included ? 'bg-white/[0.02]' : 'bg-white/[0.01] opacity-60'
+              )}
+            >
               <button
-                key={t.title}
-                onClick={() => onToggleTask?.(t.title, !included)}
+                onClick={() => updateTaskRow(t.id, { included: !t.included })}
                 className={clsx(
-                  'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all',
-                  included ? 'bg-white/[0.02] hover:bg-white/[0.05]' : 'bg-white/[0.01] opacity-50 hover:opacity-75'
-                )}
-              >
-                <div className={clsx(
                   'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors',
-                  included ? 'bg-blue-500/20 border-blue-500/50' : 'border-orbital-border/50'
-                )}>
-                  {included && <Check size={11} className="text-blue-400" />}
-                </div>
-                <span className={clsx('text-sm', included ? 'text-orbital-text' : 'text-orbital-subtle line-through')}>
-                  {t.title}
-                </span>
-                <span className={clsx(
-                  'ml-auto text-[10px] font-medium uppercase tracking-wider flex-shrink-0',
-                  t.priority === 'High' ? 'text-amber-400' : t.priority === 'Critical' ? 'text-red-400' : 'text-orbital-subtle/60'
-                )}>
-                  {t.priority}
-                </span>
+                  t.included ? 'bg-blue-500/20 border-blue-500/50' : 'border-orbital-border/50 hover:border-orbital-chrome'
+                )}
+                title={t.included ? 'Will be created — click to skip' : 'Click to include'}
+              >
+                {t.included && <Check size={11} className="text-blue-400" />}
               </button>
-            )
-          })}
+              <input
+                className="flex-1 min-w-0 bg-transparent text-sm text-orbital-text focus:outline-none focus:bg-white/5 rounded px-1.5 py-0.5"
+                value={t.title}
+                onChange={e => updateTaskRow(t.id, { title: e.target.value })}
+                placeholder="Task title"
+              />
+              <button
+                onClick={() => {
+                  const order = [TASK_PRIORITY.LOW, TASK_PRIORITY.MEDIUM, TASK_PRIORITY.HIGH, TASK_PRIORITY.CRITICAL]
+                  const next = order[(order.indexOf(t.priority) + 1) % order.length]
+                  updateTaskRow(t.id, { priority: next })
+                }}
+                className={clsx(
+                  'text-[10px] font-medium uppercase tracking-wider flex-shrink-0 px-1.5 py-0.5 rounded hover:bg-white/5 transition-colors',
+                  t.priority === 'High' ? 'text-amber-400' : t.priority === 'Critical' ? 'text-red-400' : 'text-orbital-subtle/60'
+                )}
+                title="Click to cycle priority"
+              >
+                {t.priority}
+              </button>
+              <button
+                onClick={() => deleteTaskRow(t.id)}
+                className="p-1 rounded text-orbital-subtle hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 transition-all flex-shrink-0"
+                title="Remove suggestion"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
         </div>
+        <button
+          onClick={addTaskRow}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition-colors"
+        >
+          <Plus size={12} /> Add task
+        </button>
         <p className="text-xs text-orbital-subtle px-1">
           {includedTaskCount === 0
             ? 'No starter tasks will be created.'
@@ -535,50 +826,72 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
         </p>
       </Section>
 
-      {/* Detected concerns */}
-      {concerns.length > 0 && (
-        <Section
-          icon={AlertTriangle}
-          title="Potential Concerns"
-          badge={concerns.filter(c => concernEdits[c.id]?.included === true).length || null}
-          defaultOpen={false}
+      {/* Potential concerns — parsed suggestions, all editable (item 7) */}
+      <Section
+        icon={AlertTriangle}
+        title="Potential Concerns"
+        badge={concerns.filter(c => concernEdits[c.id]?.included === true).length || null}
+        defaultOpen={concerns.length > 0}
+      >
+        <p className="text-xs text-orbital-subtle px-1 mb-2">
+          Toggle on any concerns to seed the Production Bible — edit the wording, remove ones that are wrong, or add your own.
+        </p>
+        {concerns.map(c => {
+          const included = concernEdits[c.id]?.included === true
+          const title = concernEdits[c.id]?.title ?? c.title
+          return (
+            <div key={c.id} className={clsx(
+              'flex items-start gap-3 px-3.5 py-3 rounded-xl border transition-all group',
+              included ? 'border-amber-500/25 bg-amber-500/5' : 'border-orbital-border/30 bg-white/[0.01]'
+            )}>
+              <AlertTriangle size={13} className={included ? 'text-amber-400 mt-1.5 flex-shrink-0' : 'text-orbital-subtle mt-1.5 flex-shrink-0'} />
+              <input
+                className="flex-1 min-w-0 bg-transparent text-sm text-orbital-text leading-snug focus:outline-none focus:bg-white/5 rounded px-1.5 py-1"
+                value={title}
+                onChange={e => updateConcernRow(c.id, { title: e.target.value })}
+                placeholder="Describe the concern"
+              />
+              <button
+                onClick={() => onToggleConcern(c.id, !included)}
+                className={clsx(
+                  'flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-all mt-0.5',
+                  included ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-white/5 text-orbital-subtle border border-orbital-border/40 hover:bg-white/10'
+                )}
+              >
+                {included ? 'Included' : 'Include'}
+              </button>
+              <button
+                onClick={() => deleteConcernRow(c.id)}
+                className="p-1 mt-0.5 rounded text-orbital-subtle hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 transition-all flex-shrink-0"
+                title="Remove concern"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          )
+        })}
+        <button
+          onClick={addConcernRow}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 text-xs font-medium hover:bg-blue-500/20 transition-colors"
         >
-          <p className="text-xs text-orbital-subtle px-1 mb-2">
-            Toggle on any concerns you want seeded into the Production Bible.
-          </p>
-          {concerns.map(c => {
-            const included = concernEdits[c.id]?.included === true
-            return (
-              <div key={c.id} className={clsx(
-                'flex items-start gap-3 px-3.5 py-3 rounded-xl border transition-all',
-                included ? 'border-amber-500/25 bg-amber-500/5' : 'border-orbital-border/30 bg-white/[0.01]'
-              )}>
-                <AlertTriangle size={13} className={included ? 'text-amber-400 mt-0.5 flex-shrink-0' : 'text-orbital-subtle mt-0.5 flex-shrink-0'} />
-                <p className="text-sm text-orbital-text flex-1 leading-snug">{c.title}</p>
-                <button
-                  onClick={() => onToggleConcern(c.id, !included)}
-                  className={clsx(
-                    'flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-all',
-                    included ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-white/5 text-orbital-subtle border border-orbital-border/40 hover:bg-white/10'
-                  )}
-                >
-                  {included ? 'Included' : 'Include'}
-                </button>
-              </div>
-            )
-          })}
-        </Section>
-      )}
+          <Plus size={12} /> Add concern
+        </button>
+      </Section>
 
-      {/* Source materials */}
+      {/* Source materials — every item opens (item 8) */}
       <Section
         icon={FileText}
         title="Source Materials"
         badge={inputs.length}
         defaultOpen={false}
       >
+        <p className="text-xs text-orbital-subtle px-1 mb-1">Click any item to open it full size.</p>
         {inputs.map(input => (
-          <div key={input.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.02] border border-orbital-border/30">
+          <button
+            key={input.id}
+            onClick={() => setViewingSource(input)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.02] border border-orbital-border/30 text-left hover:border-orbital-chrome transition-colors"
+          >
             {input.type === 'image' ? (
               <>
                 {input.preview
@@ -590,6 +903,14 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
                 <span className="text-sm text-orbital-text flex-1 truncate">{input.fileName}</span>
                 <span className="text-xs text-orbital-subtle/60">Screenshot</span>
               </>
+            ) : input.type === 'file' ? (
+              <>
+                <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
+                  <FileText size={13} className="text-orbital-subtle" />
+                </div>
+                <span className="text-sm text-orbital-text flex-1 truncate">{input.fileName}</span>
+                <span className="text-xs text-orbital-subtle/60">Document</span>
+              </>
             ) : (
               <>
                 <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -599,9 +920,14 @@ export function ReviewStage({ draft, onEdit, onEditContact, onToggleConcern, onT
                 <span className="text-xs text-orbital-subtle/60">{input.content?.length} chars</span>
               </>
             )}
-          </div>
+          </button>
         ))}
       </Section>
+
+      {/* Source viewer */}
+      {viewingSource && (
+        <SourceViewer input={viewingSource} onClose={() => setViewingSource(null)} />
+      )}
 
       {/* Create button */}
       <div className="pt-2 pb-4">

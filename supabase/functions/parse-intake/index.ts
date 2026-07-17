@@ -64,7 +64,8 @@ const EXTRACTION_SCHEMA = {
   additionalProperties: false,
   required: [
     'title', 'client', 'productionType', 'locationType', 'locationAddress',
-    'startDate', 'endDate', 'contacts', 'crewNames', 'concerns', 'summary',
+    'startDate', 'endDate', 'contacts', 'crewNames', 'concerns', 'events',
+    'summary',
   ],
   properties: {
     title:           { type: 'string', description: 'Production/project name, or "" if not stated' },
@@ -105,6 +106,20 @@ const EXTRACTION_SCHEMA = {
         properties: {
           title:    { type: 'string', description: 'Short statement of the concern, under 90 chars' },
           category: { type: 'string', enum: ['tight-timeline', 'back-to-back', 'missing-resource', 'conflict', 'weather', 'unresolved', 'general'] },
+        },
+      },
+    },
+    events: {
+      type: 'array',
+      description: 'EVERY dated event found in the inputs: tech scouts, prelights, shoot days, wrap/derig days, load-ins, client meetings. A tech-scout invite screenshot with a date IS an event — report it even when no shoot dates exist. Dates as YYYY-MM-DD resolved against the provided current date. Max 12.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['label', 'date', 'kind'],
+        properties: {
+          label: { type: 'string', description: 'Short name for the event, e.g. "Tech Scout", "Prelight Day", "Shoot Day 1"' },
+          date:  { type: 'string', description: 'YYYY-MM-DD' },
+          kind:  { type: 'string', enum: ['scout', 'prelight', 'shoot', 'wrap', 'other'] },
         },
       },
     },
@@ -205,8 +220,11 @@ serve(async (req) => {
       `Today's date is ${today}. Extract the production brief details from ` +
       `everything above (including the screenshots — read them carefully: call ` +
       `sheets, email threads, chat conversations, briefs). Resolve relative ` +
-      `dates against today's date. Only report what is actually present or ` +
-      `clearly implied — never invent details. Use "" for anything unknown.`,
+      `dates against today's date. Report EVERY dated event you can see ` +
+      `(tech scouts, prelights, shoot days, wraps, load-ins) in the events ` +
+      `array — a scout invite with a date still counts even if no shoot ` +
+      `dates exist yet. Only report what is actually present or clearly ` +
+      `implied — never invent details. Use "" for anything unknown.`,
   })
 
   // ── Call Claude ────────────────────────────────────────────────────────────

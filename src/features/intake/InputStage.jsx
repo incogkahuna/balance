@@ -55,26 +55,50 @@ export function InputStage({ onNext }) {
     setVoiceText('')
   }
 
-  // Add image files. The toast is the immediate "it worked" signal — the
-  // attachment list lives below the fold, which read as "nothing happened".
+  // Add files — screenshots get AI-read during analysis; documents (creative
+  // decks, schedules, PDFs — Danny item 9b) ride along into the Production
+  // Bible's documents so they're openable after creation.
+  const DOC_TYPES = [
+    'application/pdf', 'text/plain', 'text/csv',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  ]
+  const MAX_DOC_BYTES = 8 * 1024 * 1024
+
   const addFiles = useCallback((files) => {
     Array.from(files).forEach(file => {
-      if (!file.type.startsWith('image/')) return
+      const isImage = file.type.startsWith('image/')
+      const isDoc   = DOC_TYPES.includes(file.type)
+      if (!isImage && !isDoc) {
+        toast.error(`"${file.name}" isn't a supported type — images and PDFs/office docs only.`)
+        return
+      }
+      if (isDoc && file.size > MAX_DOC_BYTES) {
+        toast.error(`"${file.name}" is over 8MB — link it in the Bible after creation instead.`)
+        return
+      }
       const reader = new FileReader()
       reader.onload = e => {
         setInputs(prev => [...prev, {
           id:       crypto.randomUUID(),
-          type:     'image',
+          type:     isImage ? 'image' : 'file',
           content:  null,
           fileName: file.name,
           fileType: file.type,
           preview:  e.target.result,
           addedAt:  new Date().toISOString(),
         }])
-        toast.success(`Screenshot "${file.name}" attached — it'll be read during analysis.`)
+        toast.success(isImage
+          ? `Screenshot "${file.name}" attached — it'll be read during analysis.`
+          : `Document "${file.name}" attached — it'll land in the Production Bible.`)
       }
       reader.readAsDataURL(file)
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast])
 
   const removeInput = id => setInputs(prev => prev.filter(i => i.id !== id))
@@ -160,10 +184,10 @@ export function InputStage({ onNext }) {
           </div>
           <div>
             <p className="text-sm font-medium text-orbital-text">
-              {dragging ? 'Drop to add' : 'Drop screenshots here'}
+              {dragging ? 'Drop to add' : 'Drop screenshots or documents here'}
             </p>
             <p className="text-xs text-orbital-subtle mt-1">
-              Emails, texts, schedules, briefs — anything you have
+              Emails, texts, schedules, briefs, creative decks (PDF) — anything you have
             </p>
           </div>
           <span className="text-xs text-blue-400 font-medium">
@@ -179,7 +203,7 @@ export function InputStage({ onNext }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.ppt,.pptx"
           multiple
           className="hidden"
           onChange={e => { addFiles(e.target.files); e.target.value = '' }}
@@ -282,6 +306,14 @@ export function InputStage({ onNext }) {
                   }
                   <span className="text-sm text-orbital-text truncate flex-1">{input.fileName}</span>
                   <span className="text-xs text-orbital-subtle/60 flex-shrink-0">Screenshot</span>
+                </>
+              ) : input.type === 'file' ? (
+                <>
+                  <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center flex-shrink-0">
+                    <FileText size={14} className="text-orbital-subtle" />
+                  </div>
+                  <span className="text-sm text-orbital-text truncate flex-1">{input.fileName}</span>
+                  <span className="text-xs text-orbital-subtle/60 flex-shrink-0">Document</span>
                 </>
               ) : (
                 <>

@@ -1,5 +1,5 @@
 import { format, parseISO, isFuture, isPast, isToday } from 'date-fns'
-import { AlertTriangle, Calendar, ChevronRight, Clock } from 'lucide-react'
+import { AlertTriangle, Calendar, ChevronRight, Clock, Map, Users, User, Package, Film, MapPin } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { MILESTONE_STATUS, CONCERN_STATUS, CONCERN_IMPACT } from '../../../data/models.js'
 import {
@@ -8,6 +8,72 @@ import {
 } from './roadmapUtils.js'
 import { MilestoneCard } from './MilestoneCard.jsx'
 import clsx from 'clsx'
+
+// The key bullets of the project — who / when / what / package basics.
+function ProjectSummaryCard({ production }) {
+  const { resolveAssignee, getContractor } = useApp()
+
+  const orbitalTeam = (production.assignedMembers || [])
+    .map(m => resolveAssignee(m.userId))
+    .filter(Boolean)
+  const stageManager = production.stageManagerId ? getContractor?.(production.stageManagerId) : null
+  const keyPlayers = production.bible?.keyPlayers || []
+  const pkgNotes  = production.instructionPackage?.notes || ''
+  const pkgFiles  = production.instructionPackage?.files?.length || 0
+  const addonCount = production.addons?.length || 0
+
+  const dates = production.startDate
+    ? `${format(parseISO(production.startDate), 'MMM d, yyyy')}${
+        production.endDate && production.endDate !== production.startDate
+          ? ` → ${format(parseISO(production.endDate), 'MMM d, yyyy')}` : ''}`
+    : 'Dates TBD'
+
+  const rows = [
+    { icon: Calendar, label: 'When', value: dates },
+    {
+      icon: Film, label: 'What',
+      value: [production.productionType, production.locationType].filter(Boolean).join(' · ') || 'Type TBD',
+    },
+    production.locationAddress && { icon: MapPin, label: 'Where', value: production.locationAddress },
+    {
+      icon: Users, label: 'Orbital team',
+      value: orbitalTeam.length
+        ? orbitalTeam.map(u => u.name).join(', ') + (stageManager ? ` · SM: ${stageManager.name}` : '')
+        : (stageManager ? `SM: ${stageManager.name}` : 'No one assigned yet'),
+    },
+    {
+      icon: User, label: 'Key players',
+      value: keyPlayers.length
+        ? keyPlayers.map(p => p.role ? `${p.name} (${p.role})` : p.name).join(', ')
+        : 'None captured yet — add them in the Bible',
+    },
+    {
+      icon: Package, label: 'Package',
+      value: [
+        pkgNotes ? (pkgNotes.length > 120 ? `${pkgNotes.slice(0, 120)}…` : pkgNotes) : null,
+        pkgFiles ? `${pkgFiles} file${pkgFiles === 1 ? '' : 's'}` : null,
+        addonCount ? `${addonCount} add-on${addonCount === 1 ? '' : 's'}` : null,
+      ].filter(Boolean).join(' · ') || 'No package details yet',
+    },
+  ].filter(Boolean)
+
+  return (
+    <div className="rounded-lg border border-orbital-border overflow-hidden">
+      <div className="px-4 py-2.5 bg-orbital-muted border-b border-orbital-border">
+        <p className="hud-label text-[10px]">Project Summary</p>
+      </div>
+      <div className="divide-y divide-orbital-border/50">
+        {rows.map(({ icon: Icon, label, value }) => (
+          <div key={label} className="flex items-start gap-3 px-4 py-2.5">
+            <Icon size={13} className="text-orbital-subtle flex-shrink-0 mt-0.5" />
+            <span className="text-xs text-orbital-subtle w-20 flex-shrink-0 mt-0.5">{label}</span>
+            <span className="text-sm text-orbital-text flex-1 min-w-0">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export function RoadmapSummary({
   roadmap, production, canEdit,
@@ -63,29 +129,31 @@ export function RoadmapSummary({
 
   const isEmpty = milestones.length === 0 && concerns.length === 0
 
-  if (isEmpty) {
-    return (
-      <div className="text-center py-16">
-        <div className="w-16 h-16 rounded-2xl bg-orbital-muted flex items-center justify-center mx-auto mb-4">
-          <span className="text-3xl">🗺️</span>
-        </div>
-        <h3 className="font-semibold text-orbital-text mb-2">Start building your production roadmap</h3>
-        <p className="text-sm text-orbital-subtle max-w-xs mx-auto mb-5">
-          Add milestones to map out your production timeline and log logistical concerns as they emerge.
-        </p>
-        {canEdit && (
-          <div className="flex gap-3 justify-center">
+  return (
+    <div className="space-y-6">
+
+      {/* ── Project summary — the key bullets (Danny item 11): who's on it
+          from Orbital, who the key players are, when, what type, and the
+          basics of their package. Renders even with an empty roadmap so
+          the Summary tab is never just a redirect to Timeline. ── */}
+      <ProjectSummaryCard production={production} />
+
+      {isEmpty && (
+        <div className="text-center py-10 rounded-lg border border-orbital-border">
+          <div className="w-14 h-14 rounded-2xl bg-orbital-muted flex items-center justify-center mx-auto mb-4">
+            <Map size={22} className="text-orbital-subtle" />
+          </div>
+          <h3 className="font-semibold text-orbital-text mb-2">No roadmap yet</h3>
+          <p className="text-sm text-orbital-subtle max-w-xs mx-auto mb-5">
+            Add milestones to map out the timeline and log logistical concerns as they emerge.
+          </p>
+          {canEdit && (
             <button onClick={() => onSetSubTab('Timeline')} className="btn-primary">
               <Calendar size={15} /> Add First Milestone
             </button>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-6">
+          )}
+        </div>
+      )}
 
       {/* At Risk alert — only renders when there's something actually wrong.
           Lists overdue milestones, at-risk-status milestones, and open
