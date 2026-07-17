@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { LogOut, Sun, Moon, Check } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import { useBackground, BACKGROUND_PRESETS } from '../../context/BackgroundContext.jsx'
+import { useBackground, BACKGROUND_PRESETS, BG_SPEED, BG_INTENSITY } from '../../context/BackgroundContext.jsx'
 import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
 import clsx from 'clsx'
 
@@ -17,7 +17,7 @@ const ROLE_LABEL = { admin: 'Admin', supervisor: 'Supervisor', crew: 'Crew' }
 export function AccountMenu() {
   const { currentUser, logout } = useApp()
   const { theme, toggleTheme } = useTheme()
-  const { background, setBackground } = useBackground()
+  const { background, setBackground, speed, setSpeed, intensity, setIntensity } = useBackground()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const panelRef = useRef(null)
@@ -147,6 +147,23 @@ export function AccountMenu() {
             </p>
           </div>
 
+          {/* Motion tuning — only meaningful when a backdrop is showing */}
+          {background !== 'none' && (
+            <div className="p-4 border-b border-orbital-border">
+              <FxSlider
+                label="Speed" valueLabel={`${speed.toFixed(1)}×`}
+                min={BG_SPEED.min} max={BG_SPEED.max} step={BG_SPEED.step}
+                value={speed} onChange={setSpeed}
+              />
+              <div className="h-3" />
+              <FxSlider
+                label="Intensity" valueLabel={`${Math.round(intensity * 100)}%`}
+                min={BG_INTENSITY.min} max={BG_INTENSITY.max} step={BG_INTENSITY.step}
+                value={intensity} onChange={setIntensity}
+              />
+            </div>
+          )}
+
           {/* Session */}
           <div className="p-2">
             <button
@@ -172,6 +189,25 @@ export function AccountMenu() {
   )
 }
 
+// Labelled range control for the backdrop's speed / intensity.
+function FxSlider({ label, valueLabel, min, max, step, value, onChange }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="hud-label text-[10px]">{label}</p>
+        <span className="text-[10px] font-telemetry text-orbital-subtle">{valueLabel}</span>
+      </div>
+      <input
+        type="range"
+        className="fx-slider"
+        min={min} max={max} step={step} value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        aria-label={label}
+      />
+    </div>
+  )
+}
+
 // Miniature representation of each backdrop preset — pure CSS, no images.
 function PresetThumb({ id }) {
   if (id === 'orbit') {
@@ -193,6 +229,15 @@ function PresetThumb({ id }) {
     return (
       <span className="absolute inset-0 grid grid-cols-3 place-items-center p-1">
         {[0.9, 0.4, 0.3, 0.4, 0.9, 0.4, 0.3, 0.4, 0.9].map((op, i) => (
+          <OrbitalMark key={i} size={7} gradient={false} style={{ color: 'var(--accent-bright)', opacity: op }} />
+        ))}
+      </span>
+    )
+  }
+  if (id === 'flip') {
+    return (
+      <span className="absolute inset-0 grid grid-cols-3 place-items-center p-1">
+        {[0.3, 0.95, 0.3, 0.3, 0.3, 0.9, 0.85, 0.3, 0.3].map((op, i) => (
           <OrbitalMark key={i} size={7} gradient={false} style={{ color: 'var(--accent-bright)', opacity: op }} />
         ))}
       </span>

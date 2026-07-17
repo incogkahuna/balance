@@ -486,8 +486,8 @@
 .bgfx-ring--dashed { border-style: dashed; border-color: var(--fx-line-2); }
 @keyframes bgfx-rotate     { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
 @keyframes bgfx-rotate-rev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
-.bgfx-spin-slow    { animation: bgfx-rotate 160s linear infinite; }
-.bgfx-spin-slower  { animation: bgfx-rotate-rev 240s linear infinite; }
+.bgfx-spin-slow    { animation: bgfx-rotate     calc(160s / var(--fx-speed, 1)) linear infinite; }
+.bgfx-spin-slower  { animation: bgfx-rotate-rev calc(240s / var(--fx-speed, 1)) linear infinite; }
 /* satellite dot riding a ring */
 .bgfx-sat {
   position: absolute;
@@ -531,12 +531,12 @@
     radial-gradient(1.1px 1.1px at 520px 330px, var(--fx-star) 50%, transparent 100%),
     radial-gradient(1.8px 1.8px at 480px 40px,  var(--fx-star-hot) 50%, transparent 100%);
   background-size: 600px 420px;
-  animation: bgfx-drift 300s linear infinite;
+  animation: bgfx-drift calc(300s / var(--fx-speed, 1)) linear infinite;
 }
 .bgfx-stars--far {
   opacity: 0.65;
   background-size: 900px 640px;
-  animation-duration: 520s;
+  animation-duration: calc(520s / var(--fx-speed, 1));
 }
 /* sparse foreground layer — starfield preset only, adds depth */
 .bgfx-stars--near {
@@ -546,7 +546,7 @@
     radial-gradient(2.8px 2.8px at 450px 700px, var(--fx-star-hot) 50%, transparent 100%),
     radial-gradient(2.2px 2.2px at 900px 200px, var(--fx-star) 50%, transparent 100%);
   background-size: 1100px 860px;
-  animation-duration: 180s;
+  animation-duration: calc(180s / var(--fx-speed, 1));
 }
 
 /* ── Preset: GRID — receding stage floor, slow sweep ───────────────────────── */
@@ -569,7 +569,7 @@
   from { background-position: 0 0, 0 0; }
   to   { background-position: 0 56px, 0 0; }
 }
-.bgfx-grid { animation: bgfx-grid-move 4.5s linear infinite; }
+.bgfx-grid { animation: bgfx-grid-move calc(4.5s / var(--fx-speed, 1)) linear infinite; }
 .bgfx-horizon {
   position: absolute;
   left: 0;
@@ -597,13 +597,13 @@
   width: 55vw; height: 55vw;
   left: -12vw; top: -18vw;
   background: radial-gradient(circle at 40% 40%, var(--fx-glow-a), transparent 65%);
-  animation: bgfx-float-a 46s ease-in-out infinite;
+  animation: bgfx-float-a calc(46s / var(--fx-speed, 1)) ease-in-out infinite;
 }
 .bgfx-blob--b {
   width: 60vw; height: 60vw;
   right: -18vw; bottom: -22vw;
   background: radial-gradient(circle at 60% 60%, var(--fx-glow-b), transparent 65%);
-  animation: bgfx-float-b 58s ease-in-out infinite;
+  animation: bgfx-float-b calc(58s / var(--fx-speed, 1)) ease-in-out infinite;
 }
 
 /* Giant emblem watermark, low-left (orbit preset) — mostly on-screen so it
@@ -655,13 +655,65 @@
 .bgfx-wave-mark {
   width: clamp(26px, 3.6vmax, 46px);
   opacity: var(--fx-wave-dim);
-  animation: bgfx-wave-flip 9.5s ease-in-out infinite;
+  /* --d is the per-cell base delay (set inline); both cycle + roll scale
+     together by --fx-speed so the wave stays coherent at any speed */
+  animation: bgfx-wave-flip calc(15s / var(--fx-speed, 1)) ease-in-out infinite;
+  animation-delay: calc(var(--d, 0s) / var(--fx-speed, 1));
   will-change: transform, opacity;
 }
 @keyframes bgfx-wave-flip {
   0%        { transform: rotateY(0deg) scale(1);      opacity: var(--fx-wave-dim); }
   8%        { transform: rotateY(180deg) scale(1.14); opacity: var(--fx-wave-hot); }
   16%, 100% { transform: rotateY(360deg) scale(1);    opacity: var(--fx-wave-dim); }
+}
+
+/* ── Preset: LOGO FLIP — same field, but marks flip independently at random.
+   Per-cell --d (delay) and --dur (cycle) are set inline from decorrelated
+   hashes; the short active window means only a handful flip at any moment. */
+.bgfx-flip-mark {
+  width: clamp(26px, 3.6vmax, 46px);
+  opacity: var(--fx-wave-dim);
+  animation-name: bgfx-flip;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-duration: calc(var(--dur, 7s) / var(--fx-speed, 1));
+  animation-delay: calc(var(--d, 0s) / var(--fx-speed, 1));
+  will-change: transform, opacity;
+}
+@keyframes bgfx-flip {
+  0%       { transform: rotateY(0deg) scale(1);      opacity: var(--fx-wave-dim); }
+  4%       { transform: rotateY(180deg) scale(1.18); opacity: var(--fx-wave-hot); }
+  8%, 100% { transform: rotateY(360deg) scale(1);    opacity: var(--fx-wave-dim); }
+}
+
+/* Backdrop speed/intensity sliders (account menu) — brand-tinted native range */
+.fx-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 9999px;
+  background: var(--orbital-border);
+  accent-color: var(--accent-bright);
+  cursor: pointer;
+}
+.fx-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  background: var(--accent-bright);
+  box-shadow: 0 0 8px 1px var(--fx-glow-a);
+  cursor: pointer;
+}
+.fx-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--accent-bright);
+  cursor: pointer;
 }
 
 /* Staggered entrance — login + hero moments. Pair with animation-delay. */

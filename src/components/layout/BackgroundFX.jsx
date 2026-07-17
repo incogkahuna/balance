@@ -12,11 +12,18 @@ export function BackgroundFX({ preset: forced }) {
   const preset = forced || ctx?.background || 'orbit'
   if (preset === 'none') return null
 
+  // Speed scales every animation duration via --fx-speed; intensity dims the
+  // whole layer via container opacity. Defaults keep the login page (rendered
+  // without the provider) at the tuned look.
+  const speed = ctx?.speed ?? 1
+  const intensity = ctx?.intensity ?? 1
+
   return (
-    <div className="bgfx" aria-hidden="true">
+    <div className="bgfx" aria-hidden="true" style={{ opacity: intensity, '--fx-speed': speed }}>
       {preset === 'orbit'     && <OrbitLayer />}
       {preset === 'emblem'    && <EmblemLayer />}
       {preset === 'wave'      && <LogoWaveLayer />}
+      {preset === 'flip'      && <LogoFlipLayer />}
       {preset === 'starfield' && <StarfieldLayer />}
       {preset === 'grid'      && <GridLayer />}
       {preset === 'aurora'    && <AuroraLayer />}
@@ -81,26 +88,51 @@ function EmblemLayer() {
   )
 }
 
-// ── Logo Wave — a field of small marks; a flip wave rolls through diagonally.
-//    Delay = (col + row) stagger plus a deterministic per-cell jitter so the
-//    front reads organic, not mechanical.
+// The mark field is shared by both logo presets — 9×6 grid of small marks.
 const WAVE_COLS = 9
 const WAVE_ROWS = 6
+
+// ── Logo Wave — a flip wave rolls through diagonally. Delay = (col + row)
+//    stagger plus a deterministic per-cell jitter so the front reads organic,
+//    not mechanical. Base delays are emitted as --d and scaled by --fx-speed
+//    in CSS, so the speed slider never re-renders this tree.
 function LogoWaveLayer() {
   const cells = []
   for (let row = 0; row < WAVE_ROWS; row++) {
     for (let col = 0; col < WAVE_COLS; col++) {
       const i = row * WAVE_COLS + col
       const jitter = ((i * 7919) % 97) / 97
-      const delay = (col + row) * 0.32 + jitter * 0.45
+      const delay = (col + row) * 0.55 + jitter * 0.6
       cells.push(
         <div key={i} className="bgfx-wave-cell">
-          <div className="bgfx-wave-mark" style={{ animationDelay: `${delay}s` }}>
+          <div className="bgfx-wave-mark" style={{ '--d': `${delay.toFixed(2)}s` }}>
             <OrbitalMark size={30} gradient={false} style={{ width: '100%', height: 'auto' }} />
           </div>
         </div>
       )
     }
+  }
+  return <div className="bgfx-wave">{cells}</div>
+}
+
+// ── Logo Flip — same field, but each mark flips on its own clock. Two
+//    decorrelated hashes give an uncoupled delay + cycle length per cell, so
+//    only one or another is ever mid-flip — no travelling front.
+function LogoFlipLayer() {
+  const cells = []
+  const total = WAVE_COLS * WAVE_ROWS
+  for (let i = 0; i < total; i++) {
+    const hDelay = ((i * 7919) % 101) / 101
+    const hDur = ((i * 104729) % 89) / 89
+    const delay = (hDelay * 8).toFixed(2)      // spread across an ~8s window
+    const dur = (5.5 + hDur * 4).toFixed(2)    // 5.5–9.5s independent cycles
+    cells.push(
+      <div key={i} className="bgfx-wave-cell">
+        <div className="bgfx-flip-mark" style={{ '--d': `${delay}s`, '--dur': `${dur}s` }}>
+          <OrbitalMark size={30} gradient={false} style={{ width: '100%', height: 'auto' }} />
+        </div>
+      </div>
+    )
   }
   return <div className="bgfx-wave">{cells}</div>
 }
