@@ -15,6 +15,7 @@ import { TaskForm } from './TaskForm.jsx'
 import { ConfirmDialog } from '../ui/ConfirmDialog.jsx'
 import { StoredImage } from '../files/StoredImage.tsx'
 import { uploadFile, signedUrl, BUCKETS, paths } from '../../lib/storage.ts'
+import { DictationMic } from '../voice/DictationMic.tsx'
 import clsx from 'clsx'
 
 // `showProduction`: surfaces a clickable production-name link above the title.
@@ -381,6 +382,9 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                 </div>
                 {blockPrompt && (
                   <div className="space-y-2">
+                    <div className="flex justify-end">
+                      <DictationMic onText={t => setBlockReason(r => r ? `${r} ${t}` : t)} />
+                    </div>
                     <textarea
                       className="input min-h-[56px] resize-none text-sm"
                       placeholder="What's blocking this task? (required)"
@@ -411,7 +415,10 @@ export function TaskCard({ task, productionId, showProduction = false }) {
             {/* ── Completion action ──────────────────────────────────────── */}
             {canAct && !isVerified && !isComplete && (
               <div className="space-y-3 pt-2 border-t border-orbital-border">
-                <p className="section-title">Mark Complete</p>
+                <div className="flex items-center justify-between">
+                  <p className="section-title">Mark Complete</p>
+                  <DictationMic onText={t => setCompletionNote(n => n ? `${n} ${t}` : t)} />
+                </div>
 
                 {/* Completion note textarea */}
                 <textarea
@@ -580,7 +587,7 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                 <div className="flex items-end gap-2">
                   <div className="flex-1 relative">
                     <textarea
-                      className="input min-h-[40px] max-h-24 resize-none text-sm pr-10 py-2.5"
+                      className="input min-h-[40px] max-h-24 resize-none text-sm pr-[4.5rem] py-2.5"
                       placeholder="Add a comment..."
                       value={commentText}
                       onChange={e => setCommentText(e.target.value)}
@@ -592,7 +599,11 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                       }}
                       rows={1}
                     />
-                    {/* Camera button inside the textarea */}
+                    {/* Mic + camera inside the textarea */}
+                    <DictationMic
+                      className="absolute right-10 bottom-2"
+                      onText={t => setCommentText(c => c ? `${c} ${t}` : t)}
+                    />
                     <button
                       type="button"
                       onClick={() => commentPhotoRef.current?.click()}

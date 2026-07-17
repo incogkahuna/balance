@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
 import { TASK_PRIORITY, TASK_STATUS, USERS, createTask } from '../../data/models.js'
+import { DictationMic } from '../voice/DictationMic.tsx'
 
 export function TaskForm({ productionId, initial, onClose }) {
   const { currentUser, addTask, updateTask, deleteTask } = useApp()
@@ -86,7 +87,10 @@ export function TaskForm({ productionId, initial, onClose }) {
       </div>
 
       <div>
-        <label className="label">Description</label>
+        <div className="flex items-center justify-between">
+          <label className="label">Description</label>
+          <DictationMic onText={t => set('description', form.description ? `${form.description}\n${t}` : t)} />
+        </div>
         <textarea
           className="input min-h-[80px] resize-y"
           value={form.description}
@@ -141,7 +145,10 @@ export function TaskForm({ productionId, initial, onClose }) {
       </div>
 
       <div>
-        <label className="label">Expectations Note</label>
+        <div className="flex items-center justify-between">
+          <label className="label">Expectations Note</label>
+          <DictationMic onText={t => set('expectationsNote', form.expectationsNote ? `${form.expectationsNote}\n${t}` : t)} />
+        </div>
         <textarea
           className="input min-h-[80px] resize-y"
           value={form.expectationsNote}

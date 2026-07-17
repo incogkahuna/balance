@@ -10,6 +10,7 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
 import {
   ROLES, FEEDBACK_KIND, FEEDBACK_STATUS, createFeedbackItem,
 } from '../data/models.js'
+import { DictationMic } from '../components/voice/DictationMic.tsx'
 import clsx from 'clsx'
 
 // ─── Visual config ──────────────────────────────────────────────────────────
@@ -384,7 +385,10 @@ function SubmitFeedbackModal({ onSubmit, onClose }) {
 
         {/* Description */}
         <div>
-          <label className="label">Details (optional)</label>
+          <div className="flex items-center justify-between">
+            <label className="label">Details (optional)</label>
+            <DictationMic onText={t => setDescription(d => d ? `${d}\n${t}` : t)} />
+          </div>
           <textarea
             className="input min-h-[100px] resize-y"
             value={description}

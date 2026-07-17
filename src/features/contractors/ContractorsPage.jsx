@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Search, X } from 'lucide-react'
+import { Plus, Search, X, ScanLine } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES, AVAILABILITY_STATUS, CONTRACTOR_FLAG } from '../../data/models.js'
 import { Modal } from '../../components/ui/Modal.jsx'
 import { ContractorCard } from './ContractorCard.jsx'
 import { ContractorForm } from './ContractorForm.jsx'
+import { ContractorFromScreenshot } from './ContractorFromScreenshot.jsx'
 import { ContractorProfile } from './ContractorProfile.jsx'
 import clsx from 'clsx'
 
@@ -23,6 +24,10 @@ export function ContractorsPage() {
   const [params, setParams] = useSearchParams()
   const [selected, setSelected] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showScan, setShowScan] = useState(false)
+  // Prefill handed from the screenshot extractor into the add form (no id →
+  // ContractorForm stays in create mode and eager-creates as usual).
+  const [prefill, setPrefill] = useState(null)
 
   // Role gate — Crew should never reach this page (nav is hidden for them)
   if (currentUser?.role === ROLES.CREW) {
@@ -76,9 +81,18 @@ export function ContractorsPage() {
             </p>
           </div>
           {isAdmin && (
-            <button onClick={() => setShowAdd(true)} className="btn-primary flex-shrink-0">
-              <Plus size={15} /> Add Contractor
-            </button>
+            <div className="flex gap-2 flex-shrink-0">
+              <button
+                onClick={() => setShowScan(true)}
+                className="btn-secondary"
+                title="Prefill from a call sheet, email signature, or business card"
+              >
+                <ScanLine size={15} /> From Screenshot
+              </button>
+              <button onClick={() => { setPrefill(null); setShowAdd(true) }} className="btn-primary">
+                <Plus size={15} /> Add Contractor
+              </button>
+            </div>
           )}
         </div>
 
@@ -187,10 +201,24 @@ export function ContractorsPage() {
         )}
       </Modal>
 
-      {/* Add contractor — auto-saves on every change; "Done" just closes */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Contractor" size="lg">
+      {/* Add contractor — auto-saves on every change; "Done" just closes.
+          keyed by prefill so a screenshot-prefilled open remounts fresh. */}
+      <Modal open={showAdd} onClose={() => { setShowAdd(false); setPrefill(null) }} title="Add Contractor" size="lg">
         <ContractorForm
-          onClose={() => setShowAdd(false)}
+          key={prefill ? 'prefilled' : 'blank'}
+          initial={prefill || undefined}
+          onClose={() => { setShowAdd(false); setPrefill(null) }}
+        />
+      </Modal>
+
+      {/* Add from screenshot (M3 / #11) — extract contacts, pick one, prefill */}
+      <Modal open={showScan} onClose={() => setShowScan(false)} title="Add from Screenshot" size="md">
+        <ContractorFromScreenshot
+          onUse={(contact) => {
+            setPrefill(contact)
+            setShowScan(false)
+            setShowAdd(true)
+          }}
         />
       </Modal>
     </div>

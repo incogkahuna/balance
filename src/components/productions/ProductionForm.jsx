@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { Plus, X, Monitor } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
+import { DictationMic } from '../voice/DictationMic.tsx'
 import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
 import {
   PRODUCTION_STATUS, LOCATION_TYPE, ROLES,
@@ -438,7 +439,10 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
       </div>
 
       <div>
-        <label className="label">Package Notes</label>
+        <div className="flex items-center justify-between">
+          <label className="label">Package Notes</label>
+          <DictationMic onText={t => set('instructionNotes', form.instructionNotes ? `${form.instructionNotes}\n${t}` : t)} />
+        </div>
         <textarea
           className="input min-h-[80px] resize-y"
           value={form.instructionNotes}

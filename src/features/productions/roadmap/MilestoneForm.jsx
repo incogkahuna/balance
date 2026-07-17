@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { X, Users as UsersIcon } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { useAutoSave } from '../../../hooks/useAutoSave.js'
+import { DictationMic } from '../../../components/voice/DictationMic.tsx'
 import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
   MILESTONE_TYPE, MILESTONE_STATUS, MILESTONE_PRIORITY,
@@ -325,7 +326,10 @@ export function MilestoneForm({ production, initial, onClose }) {
           </div>
 
           <div>
-            <label className="label">Description</label>
+            <div className="flex items-center justify-between">
+              <label className="label">Description</label>
+              <DictationMic onText={t => set('description', form.description ? `${form.description}\n${t}` : t)} />
+            </div>
             <textarea
               className="input min-h-[80px] resize-y"
               value={form.description}

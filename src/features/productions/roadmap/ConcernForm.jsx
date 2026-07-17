@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { useAutoSave } from '../../../hooks/useAutoSave.js'
+import { DictationMic } from '../../../components/voice/DictationMic.tsx'
 import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
   CONCERN_CATEGORY, CONCERN_IMPACT, CONCERN_STATUS, createLogisticalConcern, USERS,
@@ -142,7 +143,10 @@ export function ConcernForm({ production, initial, onClose }) {
           </div>
 
           <div>
-            <label className="label">Description</label>
+            <div className="flex items-center justify-between">
+              <label className="label">Description</label>
+              <DictationMic onText={t => set('description', form.description ? `${form.description}\n${t}` : t)} />
+            </div>
             <textarea
               className="input min-h-[80px] resize-y"
               value={form.description}
@@ -152,7 +156,10 @@ export function ConcernForm({ production, initial, onClose }) {
           </div>
 
           <div>
-            <label className="label">Action Required</label>
+            <div className="flex items-center justify-between">
+              <label className="label">Action Required</label>
+              <DictationMic onText={t => set('actionRequired', form.actionRequired ? `${form.actionRequired}\n${t}` : t)} />
+            </div>
             <textarea
               className="input min-h-[60px] resize-y"
               value={form.actionRequired}

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, createLedWall, LED_WALL_STATUS } from '../data/models.js'
+import { DictationMic } from '../components/voice/DictationMic.tsx'
 import { Modal } from '../components/ui/Modal.jsx'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
 
@@ -388,7 +389,10 @@ function WallFormModal({ wall, onClose }) {
           />
         </div>
         <div>
-          <label className="label">Spec / Description</label>
+          <div className="flex items-center justify-between">
+            <label className="label">Spec / Description</label>
+            <DictationMic onText={t => set('description', form.description ? `${form.description}\n${t}` : t)} />
+          </div>
           <textarea
             className="input min-h-[60px] resize-y"
             value={form.description}
@@ -403,7 +407,10 @@ function WallFormModal({ wall, onClose }) {
           </select>
         </div>
         <div>
-          <label className="label">Notes</label>
+          <div className="flex items-center justify-between">
+            <label className="label">Notes</label>
+            <DictationMic onText={t => set('notes', form.notes ? `${form.notes}\n${t}` : t)} />
+          </div>
           <textarea
             className="input min-h-[60px] resize-y"
             value={form.notes}

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import { Camera } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
+import { DictationMic } from '../../components/voice/DictationMic.tsx'
 import { SaveStatusPill } from '../../components/ui/SaveStatusPill.jsx'
 import {
   ROLES, AVAILABILITY_STATUS, EXPERIENCE_LEVEL, CONTRACTOR_FLAG,
@@ -307,7 +308,10 @@ export function ContractorForm({ initial, onClose }) {
 
       {/* Notes */}
       <div>
-        <label className="label">Notes</label>
+        <div className="flex items-center justify-between">
+          <label className="label">Notes</label>
+          <DictationMic onText={t => set('notes', form.notes ? `${form.notes}\n${t}` : t)} />
+        </div>
         <textarea
           className="input min-h-[72px] resize-y"
           value={form.notes}

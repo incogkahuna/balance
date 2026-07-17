@@ -2,6 +2,25 @@ import { useState } from 'react'
 import { Star } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { createFeedback } from '../../data/models.js'
+import { DictationMic } from '../voice/DictationMic.tsx'
+
+// Debrief field — label + dictation mic + textarea, same shape four times.
+function Field({ label, value, onChange, placeholder, minH = 'min-h-[80px]' }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <label className="label">{label}</label>
+        <DictationMic onText={t => onChange(value ? `${value}\n${t}` : t)} />
+      </div>
+      <textarea
+        className={`input ${minH} resize-y`}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  )
+}
 
 export function FeedbackForm({ productionId, initial, onSubmit, onCancel }) {
   const { currentUser } = useApp()
@@ -33,45 +52,35 @@ export function FeedbackForm({ productionId, initial, onSubmit, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <div>
-        <label className="label">What were the expectations going in?</label>
-        <textarea
-          className="input min-h-[80px] resize-y"
-          value={form.expectations}
-          onChange={e => set('expectations', e.target.value)}
-          placeholder="What was the plan, what did you tell the team to expect..."
-        />
-      </div>
+      <Field
+        label="What were the expectations going in?"
+        value={form.expectations}
+        onChange={v => set('expectations', v)}
+        placeholder="What was the plan, what did you tell the team to expect..."
+      />
 
-      <div>
-        <label className="label">What actually happened?</label>
-        <textarea
-          className="input min-h-[80px] resize-y"
-          value={form.whatHappened}
-          onChange={e => set('whatHappened', e.target.value)}
-          placeholder="How did the production actually go..."
-        />
-      </div>
+      <Field
+        label="What actually happened?"
+        value={form.whatHappened}
+        onChange={v => set('whatHappened', v)}
+        placeholder="How did the production actually go..."
+      />
 
-      <div>
-        <label className="label">Issues encountered</label>
-        <textarea
-          className="input min-h-[60px] resize-y"
-          value={form.issues}
-          onChange={e => set('issues', e.target.value)}
-          placeholder="Problems, delays, client issues, technical failures..."
-        />
-      </div>
+      <Field
+        label="Issues encountered"
+        value={form.issues}
+        onChange={v => set('issues', v)}
+        placeholder="Problems, delays, client issues, technical failures..."
+        minH="min-h-[60px]"
+      />
 
-      <div>
-        <label className="label">Extra charges incurred</label>
-        <textarea
-          className="input min-h-[60px] resize-y"
-          value={form.extraCharges}
-          onChange={e => set('extraCharges', e.target.value)}
-          placeholder="Overtime, additional equipment, damage costs..."
-        />
-      </div>
+      <Field
+        label="Extra charges incurred"
+        value={form.extraCharges}
+        onChange={v => set('extraCharges', v)}
+        placeholder="Overtime, additional equipment, damage costs..."
+        minH="min-h-[60px]"
+      />
 
       <div>
         <label className="label">Overall rating</label>
