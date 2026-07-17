@@ -4,6 +4,7 @@ import { MobileNav } from './MobileNav.jsx'
 import { TopBar } from './TopBar.jsx'
 import { Breadcrumbs } from './Breadcrumbs.jsx'
 import { BackgroundFX } from './BackgroundFX.jsx'
+import { FeedbackWidget } from './FeedbackWidget.jsx'
 import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAuth } from '../../context/AuthContext.tsx'
@@ -79,6 +80,9 @@ export function AppShell() {
       </div>
 
       <MobileNav />
+
+      {/* Global feedback control (M5 / #3) — every page, no navigation. */}
+      <FeedbackWidget />
     </div>
   )
 }

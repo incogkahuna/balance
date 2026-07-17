@@ -520,8 +520,15 @@ export function createWallAssignment(overrides = {}) {
 // Production record); this is studio-app-level feedback about the tool.
 
 export const FEEDBACK_KIND = {
-  BUG:  'bug',
+  NOTE: 'note',
   IDEA: 'idea',
+  BUG:  'bug',
+}
+
+export const FEEDBACK_KIND_LABEL = {
+  [FEEDBACK_KIND.NOTE]: 'Note',
+  [FEEDBACK_KIND.IDEA]: 'Feature',
+  [FEEDBACK_KIND.BUG]:  'Bug',
 }
 
 export const FEEDBACK_STATUS = {

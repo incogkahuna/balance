@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
-  Bug, Lightbulb, Plus, X, Send, Filter, MessageSquare, Trash2,
+  Bug, Lightbulb, StickyNote, Plus, X, Send, Filter, MessageSquare, Trash2,
   CheckCircle2, Circle, AlertCircle, Ban,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
@@ -17,6 +17,7 @@ import clsx from 'clsx'
 const KIND_META = {
   [FEEDBACK_KIND.BUG]:  { label: 'Bug',  icon: Bug,       color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: 'rgba(239,68,68,0.35)'  },
   [FEEDBACK_KIND.IDEA]: { label: 'Idea', icon: Lightbulb, color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.35)' },
+  [FEEDBACK_KIND.NOTE]: { label: 'Note', icon: StickyNote, color: '#5eead4', bg: 'rgba(94,234,212,0.12)', border: 'rgba(94,234,212,0.35)' },
 }
 
 const STATUS_META = {
@@ -27,7 +28,12 @@ const STATUS_META = {
   [FEEDBACK_STATUS.WONT_FIX]:     { color: '#71717a', bg: 'rgba(113,113,122,0.12)', border: 'rgba(113,113,122,0.4)', icon: Ban           },
 }
 
-const KIND_FILTERS   = [{ id: 'all', label: 'All' }, { id: FEEDBACK_KIND.BUG, label: 'Bugs' }, { id: FEEDBACK_KIND.IDEA, label: 'Ideas' }]
+const KIND_FILTERS   = [
+  { id: 'all', label: 'All' },
+  { id: FEEDBACK_KIND.BUG, label: 'Bugs' },
+  { id: FEEDBACK_KIND.IDEA, label: 'Ideas' },
+  { id: FEEDBACK_KIND.NOTE, label: 'Notes' },
+]
 const STATUS_FILTERS = ['all', ...Object.values(FEEDBACK_STATUS)]
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -56,10 +62,11 @@ export function FeedbackPage() {
     const all      = feedbackItems.length
     const bugs     = feedbackItems.filter(f => f.kind === FEEDBACK_KIND.BUG).length
     const ideas    = feedbackItems.filter(f => f.kind === FEEDBACK_KIND.IDEA).length
+    const notes    = feedbackItems.filter(f => f.kind === FEEDBACK_KIND.NOTE).length
     const byStatus = Object.fromEntries(
       Object.values(FEEDBACK_STATUS).map(s => [s, feedbackItems.filter(f => f.status === s).length])
     )
-    return { all, bugs, ideas, byStatus }
+    return { all, bugs, ideas, notes, byStatus }
   }, [feedbackItems])
 
   return (
@@ -90,7 +97,10 @@ export function FeedbackPage() {
             <div className="flex gap-1">
               {KIND_FILTERS.map(k => {
                 const active = kindFilter === k.id
-                const count  = k.id === 'all' ? counts.all : k.id === FEEDBACK_KIND.BUG ? counts.bugs : counts.ideas
+                const count  =
+                  k.id === 'all' ? counts.all :
+                  k.id === FEEDBACK_KIND.BUG ? counts.bugs :
+                  k.id === FEEDBACK_KIND.NOTE ? counts.notes : counts.ideas
                 return (
                   <button
                     key={k.id}
@@ -341,7 +351,7 @@ function SubmitFeedbackModal({ onSubmit, onClose }) {
         <div>
           <label className="label">Type</label>
           <div className="flex gap-2">
-            {[FEEDBACK_KIND.BUG, FEEDBACK_KIND.IDEA].map(k => {
+            {[FEEDBACK_KIND.BUG, FEEDBACK_KIND.IDEA, FEEDBACK_KIND.NOTE].map(k => {
               const m = KIND_META[k]
               const Icon = m.icon
               const active = kind === k

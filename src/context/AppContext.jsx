@@ -28,6 +28,13 @@ import {
 } from '../lib/data/contractors.ts'
 import { listProfiles as listProfilesApi } from '../lib/data/profiles.ts'
 import { recordActivity } from '../lib/data/activity.ts'
+import {
+  listFeedbackItems as listFeedbackItemsApi,
+  createFeedbackItemApi,
+  updateFeedbackItemApi,
+  deleteFeedbackItemApi,
+  subscribeToFeedbackItems,
+} from '../lib/data/feedbackItems.ts'
 
 const AppContext = createContext(null)
 
@@ -84,20 +91,86 @@ export function AppProvider({ children }) {
   // effect after the tasks hydration block.
   const TODOS_KEY = 'balance_todos_v1'
 
-  // ─── Feedback items (Bugs & Ideas) ──────────────────────────────────────────
-  // Same localStorage-backed pattern as LED walls; port to Supabase when
-  // the data model proves stable.
+  // ─── Feedback items (Bugs & Ideas) — Supabase since M5 ──────────────────────
+  // Hydrates from the feedback_items table; until the M5 migration is run
+  // (or in dev-bypass mode with no session) it degrades to the old per-
+  // browser localStorage list so nothing breaks. On first successful remote
+  // hydration, any local items are imported and the key retired to _backup.
   const FEEDBACK_KEY = 'balance_feedback_v1'
-  const [feedbackItems, setFeedbackItemsState] = useState(() => {
-    if (typeof window === 'undefined') return []
+  const readLocalFeedback = () => {
     try {
       const raw = window.localStorage.getItem(FEEDBACK_KEY)
-      if (!raw) return []
-      const parsed = JSON.parse(raw)
+      const parsed = raw ? JSON.parse(raw) : []
       return Array.isArray(parsed) ? parsed : []
     } catch { return [] }
-  })
+  }
+  const [feedbackItems, setFeedbackItemsState] = useState(() =>
+    typeof window === 'undefined' ? [] : readLocalFeedback())
+  const feedbackModeRef = useRef('local') // 'local' | 'remote'
+
   useEffect(() => {
+    if (!profile) return
+    let cancelled = false
+
+    listFeedbackItemsApi()
+      .then(async (rows) => {
+        if (cancelled) return
+        feedbackModeRef.current = 'remote'
+        setFeedbackItemsState(rows)
+        // One-time import of any pre-M5 local reports.
+        const local = readLocalFeedback()
+        if (local.length > 0) {
+          for (const item of local) {
+            if (!item?.title) continue
+            try {
+              const created = await createFeedbackItemApi({
+                id: item.id,
+                kind: item.kind || 'note',
+                title: item.title,
+                description: item.description || '',
+                status: item.status || 'New',
+                submittedBy: profile.id,
+                submittedByName: item.submittedByName || '',
+                resolutionNote: item.resolutionNote || '',
+              })
+              setFeedbackItemsState(prev => prev.some(f => f.id === created.id) ? prev : [created, ...prev])
+            } catch (err) {
+              if (err?.code !== '23505') {
+                console.warn('[AppContext] feedback import halted:', err?.message || err)
+                return
+              }
+            }
+          }
+          try {
+            window.localStorage.setItem(`${FEEDBACK_KEY}_backup`, JSON.stringify(local))
+            window.localStorage.removeItem(FEEDBACK_KEY)
+          } catch { /* noop */ }
+        }
+      })
+      .catch(() => {
+        // Table missing (pre-migration) — stay in localStorage mode.
+        if (!cancelled) feedbackModeRef.current = 'local'
+      })
+
+    const unsub = subscribeToFeedbackItems((event) => {
+      setFeedbackItemsState((prev) => {
+        if (event.type === 'INSERT') {
+          if (prev.some(f => f.id === event.row.id)) return prev
+          return [event.row, ...prev]
+        }
+        if (event.type === 'UPDATE') return prev.map(f => f.id === event.row.id ? event.row : f)
+        if (event.type === 'DELETE') return prev.filter(f => f.id !== event.id)
+        return prev
+      })
+    })
+
+    return () => { cancelled = true; unsub() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile])
+
+  // Local-mode persistence (pre-migration / dev-bypass only).
+  useEffect(() => {
+    if (feedbackModeRef.current !== 'local') return
     try {
       window.localStorage.setItem(FEEDBACK_KEY, JSON.stringify(feedbackItems))
     } catch { /* noop */ }
@@ -1045,28 +1118,50 @@ export function AppProvider({ children }) {
     }))
   }, [currentUser])
 
-  // ─── Feedback CRUD ──────────────────────────────────────────────────────────
+  // ─── Feedback CRUD — optimistic local, remote persist when the table's live ─
   const addFeedbackItem = useCallback((item) => {
-    setFeedbackItemsState(prev => [
-      {
-        ...item,
-        submittedBy: item.submittedBy || currentUser?.id || '',
-        submittedByName: item.submittedByName || currentUser?.name || 'Anonymous',
-        submittedAt: item.submittedAt || new Date().toISOString(),
-      },
-      ...prev,
-    ])
-  }, [currentUser])
+    const full = {
+      ...item,
+      submittedBy: profileRef.current?.id || item.submittedBy || currentUser?.id || '',
+      submittedByName: item.submittedByName || currentUser?.name || 'Anonymous',
+      submittedAt: item.submittedAt || new Date().toISOString(),
+    }
+    setFeedbackItemsState(prev => [full, ...prev])
+    if (feedbackModeRef.current !== 'remote') return
+    createFeedbackItemApi(full)
+      .then(() => {
+        logActivity('created', 'feedback', { id: full.id, label: full.title, meta: { kind: full.kind } })
+      })
+      .catch((err) => {
+        console.error('[AppContext] createFeedbackItem failed:', err)
+        toast.error(`Couldn't send feedback — ${err?.message || 'unknown error'}`)
+        setFeedbackItemsState(prev => prev.filter(f => f.id !== full.id))
+      })
+  }, [currentUser, toast, logActivity])
 
   const updateFeedbackItem = useCallback((id, patch) => {
-    setFeedbackItemsState(prev => prev.map(f =>
-      f.id === id ? { ...f, ...patch, updatedAt: new Date().toISOString() } : f
-    ))
-  }, [])
+    let prevItem = null
+    setFeedbackItemsState(prev => prev.map(f => {
+      if (f.id !== id) return f
+      prevItem = f
+      return { ...f, ...patch, updatedAt: new Date().toISOString() }
+    }))
+    if (feedbackModeRef.current !== 'remote') return
+    updateFeedbackItemApi(id, patch).catch((err) => {
+      console.error('[AppContext] updateFeedbackItem failed:', err)
+      toast.error(`Couldn't save feedback changes — ${err?.message || 'unknown error'}`)
+      if (prevItem) setFeedbackItemsState(prev => prev.map(f => f.id === id ? prevItem : f))
+    })
+  }, [toast])
 
   const deleteFeedbackItem = useCallback((id) => {
     setFeedbackItemsState(prev => prev.filter(f => f.id !== id))
-  }, [])
+    if (feedbackModeRef.current !== 'remote') return
+    deleteFeedbackItemApi(id).catch((err) => {
+      console.error('[AppContext] deleteFeedbackItem failed:', err)
+      toast.error(`Couldn't delete feedback — ${err?.message || 'unknown error'}. Refresh to restore.`)
+    })
+  }, [toast])
 
   const value = {
     // Auth
