@@ -24,10 +24,15 @@ export interface AssignedContractor {
   assignedBy?: string
 }
 
+// production = client shoot; tour = travelling show; internal = studio project.
+// Tours/internal skip production-only fields (type, location, LED wall).
+export type ProjectKind = 'production' | 'tour' | 'internal'
+
 export interface Production {
   id: string
   name: string
   client: string
+  kind: ProjectKind
   locationType: LocationType
   locationAddress: string
   productionType: ProductionType
@@ -43,6 +48,8 @@ export interface Production {
   assignedContractors: AssignedContractor[]
   tasks: string[]
   addons: Array<Record<string, unknown>>
+  // Quick notes captured during the production; compiled into the debrief.
+  debriefNotes: Array<Record<string, unknown>>
   feedback: Record<string, unknown> | null
   instructionPackage: {
     files: Array<Record<string, unknown>>
@@ -84,6 +91,7 @@ interface ProductionRow {
   id: string
   name: string
   client: string
+  kind: ProjectKind | null
   location_type: LocationType
   location_address: string
   production_type: ProductionType
@@ -96,6 +104,7 @@ interface ProductionRow {
   assigned_contractors: AssignedContractor[]
   task_ids: string[]
   addons: Array<Record<string, unknown>>
+  debrief_notes: Array<Record<string, unknown>> | null
   feedback: Record<string, unknown> | null
   instruction_package: Production['instructionPackage']
   bible: Production['bible']
@@ -112,6 +121,8 @@ function rowToProduction(r: ProductionRow): Production {
     id:                  r.id,
     name:                r.name,
     client:              r.client,
+    // Pre-M4 rows/caches lack kind — they're all real productions.
+    kind:                r.kind ?? 'production',
     locationType:        r.location_type,
     locationAddress:     r.location_address,
     productionType:      r.production_type,
@@ -124,6 +135,7 @@ function rowToProduction(r: ProductionRow): Production {
     assignedContractors: r.assigned_contractors ?? [],
     tasks:               r.task_ids ?? [],
     addons:              r.addons ?? [],
+    debriefNotes:        r.debrief_notes ?? [],
     feedback:            r.feedback ?? null,
     instructionPackage:  r.instruction_package ?? { files: [], voiceMemos: [], notes: '' },
     bible:               r.bible ?? { keyPlayers: [], documents: [], concerns: [], frictionAndFlow: [] },
@@ -157,6 +169,7 @@ function productionToRow(p: NewProduction): Partial<ProductionRow> {
   if (p.id                  !== undefined) row.id                   = p.id
   if (p.name                !== undefined) row.name                 = p.name
   if (p.client              !== undefined) row.client               = p.client
+  if (p.kind                !== undefined) row.kind                 = p.kind
   if (p.locationType        !== undefined) row.location_type        = p.locationType
   if (p.locationAddress     !== undefined) row.location_address     = p.locationAddress
   if (p.productionType      !== undefined) row.production_type      = p.productionType
@@ -169,6 +182,7 @@ function productionToRow(p: NewProduction): Partial<ProductionRow> {
   if (p.assignedContractors !== undefined) row.assigned_contractors = p.assignedContractors
   if (p.tasks               !== undefined) row.task_ids             = p.tasks
   if (p.addons              !== undefined) row.addons               = p.addons
+  if (p.debriefNotes        !== undefined) row.debrief_notes        = p.debriefNotes
   if (p.feedback            !== undefined) row.feedback             = p.feedback
   if (p.instructionPackage  !== undefined) row.instruction_package  = p.instructionPackage
   if (p.bible               !== undefined) row.bible                = p.bible

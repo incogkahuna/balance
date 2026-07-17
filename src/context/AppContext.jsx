@@ -740,6 +740,19 @@ export function AppProvider({ children }) {
     mutateProduction(productionId, () => ({ feedback }))
   }, [mutateProduction])
 
+  // ─── Debrief quick notes (M4 / #6) — captured during production ────────────
+  const addDebriefNote = useCallback((productionId, note) => {
+    mutateProduction(productionId, (p) => ({
+      debriefNotes: [...(p.debriefNotes || []), note],
+    }))
+  }, [mutateProduction])
+
+  const deleteDebriefNote = useCallback((productionId, noteId) => {
+    mutateProduction(productionId, (p) => ({
+      debriefNotes: (p.debriefNotes || []).filter(n => n.id !== noteId),
+    }))
+  }, [mutateProduction])
+
   // ─── Contractors CRUD ─────────────────────────────────────────────────────
   const addContractor = useCallback((contractor) => {
     setContractorsState(prev => [contractor, ...prev])
@@ -1092,6 +1105,10 @@ export function AppProvider({ children }) {
 
     // Feedback
     submitFeedback,
+
+    // Debrief quick notes
+    addDebriefNote,
+    deleteDebriefNote,
 
     // Production Bible
     updateBible,

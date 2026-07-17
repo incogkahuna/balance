@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format, parseISO, differenceInCalendarDays } from 'date-fns'
-import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw } from 'lucide-react'
+import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, Clapperboard, Bus, Wrench } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
-import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS, TASK_STATUS, PROJECT_KIND, PROJECT_KIND_LABEL } from '../data/models.js'
 import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { computeRoadmapHealth, HEALTH_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
@@ -47,6 +47,9 @@ export function ProductionsPage() {
   const navigate = useNavigate()
   const [search, setSearch]     = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  // Kind for the quick-create modal (tour/internal skip production-only fields)
+  const [createKind, setCreateKind] = useState(PROJECT_KIND.PRODUCTION)
+  const [chooserOpen, setChooserOpen] = useState(false)
   const [quickViewProd, setQuickViewProd] = useState(null)
 
   // Card click router — mobile gets a popup, desktop navigates as before.
@@ -150,15 +153,15 @@ export function ProductionsPage() {
           </div>
           {canCreate && (
             <div className="flex items-center gap-2">
-              <button onClick={() => navigate('/productions/new')} className="btn-primary">
+              <button onClick={() => setChooserOpen(true)} className="btn-primary">
                 <Plus size={14} />
-                <span className="hidden sm:inline">New Production</span>
+                <span className="hidden sm:inline">Create New Project</span>
                 <span className="sm:hidden">New</span>
               </button>
               <button
-                onClick={() => setShowCreate(true)}
+                onClick={() => { setCreateKind(PROJECT_KIND.PRODUCTION); setShowCreate(true) }}
                 className="btn-secondary text-xs"
-                title="Quick add (minimal form)"
+                title="Quick add (minimal production form)"
               >
                 Quick Add
               </button>
@@ -270,8 +273,55 @@ export function ProductionsPage() {
         )}
       </div>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Production" size="lg">
-        <ProductionForm onSubmit={handleCreate} onCancel={() => setShowCreate(false)} />
+      {/* Kind chooser (M4 / #5) — Production gets the full intake wizard;
+          tours + internal projects get the quick form minus production-only
+          fields. */}
+      <Modal open={chooserOpen} onClose={() => setChooserOpen(false)} title="Create New Project" size="md">
+        <div className="space-y-2">
+          {[
+            {
+              kind: PROJECT_KIND.PRODUCTION, icon: Clapperboard,
+              blurb: 'Client shoot — full intake wizard with screenshots, AI parse, and starter tasks.',
+              action: () => { setChooserOpen(false); navigate('/productions/new') },
+            },
+            {
+              kind: PROJECT_KIND.TOUR, icon: Bus,
+              blurb: 'Studio visit or showcase — quick form, no production-only fields.',
+              action: () => { setChooserOpen(false); setCreateKind(PROJECT_KIND.TOUR); setShowCreate(true) },
+            },
+            {
+              kind: PROJECT_KIND.INTERNAL, icon: Wrench,
+              blurb: 'Internal studio project — calibration, R&D, maintenance windows.',
+              action: () => { setChooserOpen(false); setCreateKind(PROJECT_KIND.INTERNAL); setShowCreate(true) },
+            },
+          ].map(({ kind, icon: Icon, blurb, action }) => (
+            <button
+              key={kind}
+              onClick={action}
+              className="w-full card-elevated p-4 flex items-start gap-3 text-left hover:border-orbital-chrome transition-colors"
+            >
+              <Icon size={18} className="text-blue-400 flex-shrink-0 mt-0.5" />
+              <span>
+                <span className="block text-sm font-semibold text-orbital-text">{PROJECT_KIND_LABEL[kind]}</span>
+                <span className="block text-xs text-orbital-subtle mt-0.5">{blurb}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      <Modal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title={`New ${PROJECT_KIND_LABEL[createKind]}`}
+        size="lg"
+      >
+        <ProductionForm
+          key={createKind}
+          kind={createKind}
+          onSubmit={handleCreate}
+          onCancel={() => setShowCreate(false)}
+        />
       </Modal>
 
       <ProductionQuickView
@@ -493,6 +543,20 @@ function ProductionCard({
           </div>
           <div className="flex-shrink-0 flex flex-col items-end gap-1.5 mt-0.5">
             <StatusBadge status={prod.status} />
+            {/* Kind chip — tours + internal projects read differently at a
+                glance; plain productions stay unbadged (the default). */}
+            {prod.kind && prod.kind !== PROJECT_KIND.PRODUCTION && (
+              <span
+                className="text-[10px] font-medium px-1.5 py-0.5 font-telemetry tracking-wider uppercase"
+                style={{
+                  color: prod.kind === PROJECT_KIND.TOUR ? '#5eead4' : '#93c5fd',
+                  background: prod.kind === PROJECT_KIND.TOUR ? 'rgba(94,234,212,0.1)' : 'rgba(147,197,253,0.1)',
+                  border: `1px solid ${prod.kind === PROJECT_KIND.TOUR ? 'rgba(94,234,212,0.35)' : 'rgba(147,197,253,0.35)'}`,
+                }}
+              >
+                {PROJECT_KIND_LABEL[prod.kind]}
+              </span>
+            )}
             {/* Draft chip — production not yet visible to crew. Admin/sup
                 are the only ones who can see this card at all when it's
                 a draft (RLS-enforced), so the chip is a reminder rather

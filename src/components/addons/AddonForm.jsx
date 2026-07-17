@@ -3,7 +3,8 @@ import { AlertTriangle, Camera, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
-import { createAddon } from '../../data/models.js'
+import { createAddon, ADDON_PRESETS } from '../../data/models.js'
+import { DictationMic } from '../voice/DictationMic.tsx'
 import { StoredImage } from '../files/StoredImage.tsx'
 import { uploadFile, BUCKETS, paths } from '../../lib/storage.ts'
 
@@ -44,16 +45,40 @@ export function AddonForm({ productionId, initial, onClose }) {
     equipment: initial?.equipment || '',
     quantity: initial?.quantity || 1,
     duration: initial?.duration || '',
+    dayRate: initial?.dayRate || '',
+    days: initial?.days || '',
     cost: initial?.cost || '',
     damaged: initial?.damaged || false,
     notes: initial?.notes || '',
     damagePhotos: initial?.damagePhotos || [],
   })
+  // Free-entry mode when editing an addon whose equipment isn't a preset.
+  const [customEquipment, setCustomEquipment] = useState(
+    () => Boolean(initial?.equipment) && !ADDON_PRESETS.includes(initial.equipment)
+  )
 
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState(null)
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
+
+  // Cost = day rate × days × quantity (#6). Recomputed whenever one of the
+  // inputs changes; the total stays editable for one-off overrides.
+  const setCosting = (key, val) => {
+    setForm(f => {
+      const next = { ...f, [key]: val }
+      const rate = parseFloat(next.dayRate)
+      const days = parseFloat(next.days)
+      const qty  = parseFloat(next.quantity) || 1
+      if (Number.isFinite(rate) && Number.isFinite(days)) {
+        next.cost = (rate * days * qty).toFixed(2)
+      }
+      if (key === 'days' && val !== '') {
+        next.duration = `${val} day${parseFloat(val) === 1 ? '' : 's'}`
+      }
+      return next
+    })
+  }
 
   // ── Auto-save ─────────────────────────────────────────────────────────────
   const enabled = !!workingIdRef.current
@@ -112,16 +137,67 @@ export function AddonForm({ productionId, initial, onClose }) {
 
       <div>
         <label className="label">Equipment / Item *</label>
-        <input
-          className="input"
-          value={form.equipment}
-          onChange={e => set('equipment', e.target.value)}
-          placeholder="e.g. Scissor lift, Forklift, 4x LED panels..."
-          autoFocus
-        />
+        {customEquipment ? (
+          <div className="flex gap-2">
+            <input
+              className="input flex-1"
+              value={form.equipment}
+              onChange={e => set('equipment', e.target.value)}
+              placeholder="e.g. Scissor lift, Forklift, 4x LED panels..."
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => { setCustomEquipment(false); set('equipment', '') }}
+              className="text-[11px] text-orbital-subtle hover:text-orbital-text flex-shrink-0"
+            >
+              presets
+            </button>
+          </div>
+        ) : (
+          <select
+            className="select"
+            value={ADDON_PRESETS.includes(form.equipment) ? form.equipment : ''}
+            onChange={e => {
+              if (e.target.value === '__custom__') { setCustomEquipment(true); set('equipment', '') }
+              else set('equipment', e.target.value)
+            }}
+          >
+            <option value="" disabled>Select an add-on…</option>
+            {ADDON_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
+            <option value="__custom__">Custom…</option>
+          </select>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      {/* Cost = rate × days × quantity (#6). Total stays editable. */}
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="label">Day Rate</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-orbital-subtle text-sm">$</span>
+            <input
+              type="number"
+              min={0}
+              className="input pl-7"
+              value={form.dayRate}
+              onChange={e => setCosting('dayRate', e.target.value)}
+              placeholder="0"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="label">Days Used</label>
+          <input
+            type="number"
+            min={0}
+            step={0.5}
+            className="input"
+            value={form.days}
+            onChange={e => setCosting('days', e.target.value)}
+            placeholder="0"
+          />
+        </div>
         <div>
           <label className="label">Quantity</label>
           <input
@@ -129,22 +205,13 @@ export function AddonForm({ productionId, initial, onClose }) {
             min={1}
             className="input"
             value={form.quantity}
-            onChange={e => set('quantity', parseInt(e.target.value) || 1)}
-          />
-        </div>
-        <div>
-          <label className="label">Duration</label>
-          <input
-            className="input"
-            value={form.duration}
-            onChange={e => set('duration', e.target.value)}
-            placeholder="e.g. 2 days, 4 hours"
+            onChange={e => setCosting('quantity', parseInt(e.target.value) || 1)}
           />
         </div>
       </div>
 
       <div>
-        <label className="label">Cost (if known)</label>
+        <label className="label">Total Cost</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-orbital-subtle text-sm">$</span>
           <input
@@ -154,10 +221,18 @@ export function AddonForm({ productionId, initial, onClose }) {
             placeholder="0.00"
           />
         </div>
+        {form.dayRate && form.days && (
+          <p className="text-[11px] text-orbital-dim mt-1">
+            ${form.dayRate}/day × {form.days} day{parseFloat(form.days) === 1 ? '' : 's'} × {form.quantity} — edit the total to override.
+          </p>
+        )}
       </div>
 
       <div>
-        <label className="label">Notes</label>
+        <div className="flex items-center justify-between">
+          <label className="label">Notes</label>
+          <DictationMic onText={t => set('notes', form.notes ? `${form.notes}\n${t}` : t)} />
+        </div>
         <textarea
           className="input min-h-[60px] resize-y"
           value={form.notes}

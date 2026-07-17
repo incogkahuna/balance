@@ -20,6 +20,22 @@ export const PRODUCTION_TYPE = {
   MOBILE_CAR_PROCESS: 'Mobile CAR process CLI',
 }
 
+// ─── Project kinds (M4 / #5) ─────────────────────────────────────────────────
+// One record shape, three creation paths. Tours and internal projects skip
+// production-only fields (type / location / LED wall). Prelights and wraps
+// are milestone TYPES on a parent production, not kinds (decided in M0).
+export const PROJECT_KIND = {
+  PRODUCTION: 'production',
+  TOUR:       'tour',
+  INTERNAL:   'internal',
+}
+
+export const PROJECT_KIND_LABEL = {
+  [PROJECT_KIND.PRODUCTION]: 'Production',
+  [PROJECT_KIND.TOUR]:       'Tour',
+  [PROJECT_KIND.INTERNAL]:   'Internal',
+}
+
 // Ordered list for UI dropdowns. "Custom" is handled as a free-form entry
 // option in the form — not stored here.
 export const PRODUCTION_TYPE_PRESETS = Object.values(PRODUCTION_TYPE)
@@ -217,6 +233,7 @@ export function createProduction(overrides = {}) {
     id: crypto.randomUUID(),
     name: '',
     client: '',
+    kind: PROJECT_KIND.PRODUCTION,
     locationType: LOCATION_TYPE.IN_HOUSE,
     locationAddress: '',
     productionType: PRODUCTION_TYPE.TVC_AOTO,
@@ -237,6 +254,7 @@ export function createProduction(overrides = {}) {
     assignedContractors: [],   // [{ contractorId, role, assignedAt, assignedBy }]
     tasks: [],                 // task IDs
     addons: [],            // addon records
+    debriefNotes: [],      // quick notes captured during production (M4 / #6)
     feedback: null,        // feedback record
     instructionPackage: {
       files: [],           // [{ id, name, type, url, uploadedBy, uploadedAt }]
@@ -350,6 +368,19 @@ export function createTask(overrides = {}) {
   }
 }
 
+// Selectable add-on items (M4 / #6). Names only — day rates vary per client
+// deal, so the form asks for the rate and computes cost = rate × days × qty.
+export const ADDON_PRESETS = [
+  'Camera Tracking',
+  'Additional LED Panels',
+  'Extra Brain Bar Operator',
+  'Motion Capture',
+  'DMX Lighting Integration',
+  'Playback Server',
+  'Green Screen Package',
+  'Additional Crew Day',
+]
+
 export function createAddon(overrides = {}) {
   return {
     id: crypto.randomUUID(),
@@ -357,12 +388,26 @@ export function createAddon(overrides = {}) {
     equipment: '',
     quantity: 1,
     duration: '',
-    cost: '',
+    dayRate: '',   // per-day rate; cost auto-computes from rate × days × qty
+    days: '',      // days used
+    cost: '',      // total — auto-computed, editable override
     damaged: false,
     damagePhotos: [],
     notes: '',
     loggedBy: '',
     loggedAt: new Date().toISOString(),
+    ...overrides,
+  }
+}
+
+// One quick debrief note captured during a production (M4 / #6).
+export function createDebriefNote(overrides = {}) {
+  return {
+    id: crypto.randomUUID(),
+    text: '',
+    authorId: '',
+    authorName: '',
+    at: new Date().toISOString(),
     ...overrides,
   }
 }

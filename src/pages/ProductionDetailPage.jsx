@@ -8,7 +8,8 @@ import {
   ChevronDown, Check,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, PRODUCTION_STATUS, TASK_STATUS, USERS } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS, TASK_STATUS, USERS, createDebriefNote } from '../data/models.js'
+import { DictationMic } from '../components/voice/DictationMic.tsx'
 import { computeRoadmapHealth, ROADMAP_HEALTH } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
 import { Avatar } from '../components/ui/Avatar.jsx'
@@ -725,74 +726,218 @@ function AddonCard({ addon, canDelete, onDelete }) {
 }
 
 // ─── Tab: Debrief ─────────────────────────────────────────────────────────────
+// Reworked in M4 (#6): quick one-tap notes accumulate DURING the production,
+// then the end-of-production debrief document compiles those notes, the
+// structured debrief answers, and the costed add-ons into one formatted,
+// copyable document.
 function DebriefTab({ production, canDebrief, onEdit }) {
+  const { currentUser, addDebriefNote, deleteDebriefNote, resolveUserName } = useApp()
   const fb = production.feedback
+  const notes = production.debriefNotes || []
+  const [noteText, setNoteText] = useState('')
+  const [showDoc, setShowDoc] = useState(false)
 
-  if (!fb) {
-    return (
-      <div className="card p-10 text-center">
-        <p className="text-orbital-subtle mb-2 text-sm">No debrief submitted yet.</p>
-        {canDebrief && (
-          <>
-            <p className="text-xs text-orbital-subtle mb-5">
-              Submit a debrief to capture institutional knowledge for this production.
-            </p>
-            <button onClick={onEdit} className="btn-primary">
-              <FileText size={15} /> Submit Debrief
-            </button>
-          </>
-        )}
-      </div>
-    )
+  const submitNote = () => {
+    const text = noteText.trim()
+    if (!text) return
+    addDebriefNote(production.id, createDebriefNote({
+      text,
+      authorId: currentUser?.profileId || currentUser?.id || '',
+      authorName: currentUser?.name || '',
+    }))
+    setNoteText('')
   }
 
-  const submittedByUser = USERS.find(u => u.id === fb.submittedBy)
+  const submittedByUser = fb ? USERS.find(u => u.id === fb.submittedBy) : null
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="font-semibold text-orbital-text">Production Debrief</h2>
-          {fb.rating && (
-            <div className="flex items-center gap-1">
-              {[1,2,3,4,5].map(n => (
-                <Star
-                  key={n}
-                  size={16}
-                  className={n <= fb.rating ? 'text-amber-400 fill-amber-400' : 'text-orbital-border'}
-                />
-              ))}
-            </div>
-          )}
+      {/* ── Quick notes — capture as it happens ─────────────────────────── */}
+      <div className="card p-4">
+        <div className="flex items-center justify-between mb-1">
+          <p className="section-title">Quick Notes</p>
+          <span className="text-[10px] text-orbital-dim font-telemetry tracking-wider">
+            {notes.length} CAPTURED
+          </span>
         </div>
-        {canDebrief && (
-          <button onClick={onEdit} className="btn-ghost">
-            <Edit size={14} /> Edit
+        <p className="text-xs text-orbital-subtle mb-3">
+          Jot things down while they&apos;re fresh — they compile into the debrief document at wrap.
+        </p>
+        <div className="flex gap-2 items-center">
+          <input
+            className="input flex-1"
+            placeholder="e.g. Client asked for extra playback op day 2 — bill it"
+            value={noteText}
+            onChange={e => setNoteText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') submitNote() }}
+          />
+          <DictationMic onText={t => setNoteText(n => n ? `${n} ${t}` : t)} />
+          <button onClick={submitNote} disabled={!noteText.trim()} className="btn-primary disabled:opacity-40">
+            Add
           </button>
+        </div>
+        {notes.length > 0 && (
+          <div className="mt-3 space-y-1.5 max-h-56 overflow-y-auto pr-1">
+            {[...notes].reverse().map(n => (
+              <div key={n.id} className="flex items-baseline gap-2 text-sm border-b border-orbital-border pb-1.5 last:border-0">
+                <span className="text-orbital-text flex-1 min-w-0">{n.text}</span>
+                <span className="text-[11px] text-orbital-dim whitespace-nowrap">
+                  {n.authorName || resolveUserName(n.authorId) || ''}
+                  {n.at && ` · ${format(parseISO(n.at), 'MMM d')}`}
+                </span>
+                {canDebrief && (
+                  <button
+                    onClick={() => deleteDebriefNote(production.id, n.id)}
+                    className="text-orbital-dim hover:text-red-400 transition-colors text-xs flex-shrink-0"
+                    title="Delete note"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
-      {fb.submittedBy && (
-        <div className="flex items-center gap-2 text-xs text-orbital-subtle">
-          {submittedByUser && <Avatar userId={fb.submittedBy} size="xs" />}
-          <span>
-            Submitted by {submittedByUser?.name || fb.submittedBy}
-            {fb.submittedAt && ` on ${format(parseISO(fb.submittedAt), 'MMMM d, yyyy')}`}
-          </span>
+      {/* ── Structured debrief ──────────────────────────────────────────── */}
+      {!fb ? (
+        <div className="card p-10 text-center">
+          <p className="text-orbital-subtle mb-2 text-sm">No debrief submitted yet.</p>
+          {canDebrief && (
+            <>
+              <p className="text-xs text-orbital-subtle mb-5">
+                Submit a debrief to capture institutional knowledge for this production.
+              </p>
+              <button onClick={onEdit} className="btn-primary">
+                <FileText size={15} /> Submit Debrief
+              </button>
+            </>
+          )}
         </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h2 className="font-semibold text-orbital-text">Production Debrief</h2>
+              {fb.rating && (
+                <div className="flex items-center gap-1">
+                  {[1,2,3,4,5].map(n => (
+                    <Star
+                      key={n}
+                      size={16}
+                      className={n <= fb.rating ? 'text-amber-400 fill-amber-400' : 'text-orbital-border'}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            {canDebrief && (
+              <div className="flex gap-2">
+                <button onClick={() => setShowDoc(true)} className="btn-secondary text-xs">
+                  <FileText size={13} /> Generate Document
+                </button>
+                <button onClick={onEdit} className="btn-ghost">
+                  <Edit size={14} /> Edit
+                </button>
+              </div>
+            )}
+          </div>
+
+          {fb.submittedBy && (
+            <div className="flex items-center gap-2 text-xs text-orbital-subtle">
+              {submittedByUser && <Avatar userId={fb.submittedBy} size="xs" />}
+              <span>
+                Submitted by {submittedByUser?.name || resolveUserName(fb.submittedBy) || fb.submittedBy}
+                {fb.submittedAt && ` on ${format(parseISO(fb.submittedAt), 'MMMM d, yyyy')}`}
+              </span>
+            </div>
+          )}
+
+          {[
+            { label: 'Expectations going in', value: fb.expectations },
+            { label: 'What actually happened', value: fb.whatHappened },
+            { label: 'Issues encountered', value: fb.issues },
+            { label: 'Extra charges incurred', value: fb.extraCharges },
+          ].filter(item => item.value).map(({ label, value }) => (
+            <div key={label} className="card p-4">
+              <p className="section-title mb-2">{label}</p>
+              <p className="text-sm text-orbital-subtle">{value}</p>
+            </div>
+          ))}
+        </>
       )}
 
-      {[
-        { label: 'Expectations going in', value: fb.expectations },
-        { label: 'What actually happened', value: fb.whatHappened },
-        { label: 'Issues encountered', value: fb.issues },
-        { label: 'Extra charges incurred', value: fb.extraCharges },
-      ].filter(item => item.value).map(({ label, value }) => (
-        <div key={label} className="card p-4">
-          <p className="section-title mb-2">{label}</p>
-          <p className="text-sm text-orbital-subtle">{value}</p>
-        </div>
-      ))}
+      <Modal open={showDoc} onClose={() => setShowDoc(false)} title="Debrief Document" size="lg">
+        <DebriefDocument production={production} onClose={() => setShowDoc(false)} />
+      </Modal>
+    </div>
+  )
+}
+
+// Compile the accumulated notes + structured debrief + costed add-ons into a
+// formatted document. Plain text/markdown so it pastes cleanly into email,
+// Slack, or a doc — no export pipeline needed for v1.
+function DebriefDocument({ production, onClose }) {
+  const [copied, setCopied] = useState(false)
+  const fb = production.feedback || {}
+  const notes = production.debriefNotes || []
+  const addons = production.addons || []
+
+  const money = (v) => {
+    const n = parseFloat(v)
+    return Number.isFinite(n) ? `$${n.toFixed(2)}` : (v ? `$${v}` : '—')
+  }
+  const addonTotal = addons.reduce((sum, a) => sum + (parseFloat(a.cost) || 0), 0)
+
+  const lines = [
+    `PRODUCTION DEBRIEF — ${production.name}`,
+    production.client ? `Client: ${production.client}` : null,
+    production.startDate ? `Dates: ${production.startDate}${production.endDate ? ` → ${production.endDate}` : ''}` : null,
+    fb.rating ? `Rating: ${fb.rating}/5` : null,
+    '',
+    fb.expectations ? `EXPECTATIONS GOING IN\n${fb.expectations}\n` : null,
+    fb.whatHappened ? `WHAT ACTUALLY HAPPENED\n${fb.whatHappened}\n` : null,
+    fb.issues ? `ISSUES ENCOUNTERED\n${fb.issues}\n` : null,
+    fb.extraCharges ? `EXTRA CHARGES\n${fb.extraCharges}\n` : null,
+    addons.length > 0 ? [
+      'ADD-ONS (COSTED)',
+      ...addons.map(a => {
+        const qty = a.quantity && a.quantity !== 1 ? ` ×${a.quantity}` : ''
+        const rate = a.dayRate && a.days ? ` — ${money(a.dayRate)}/day × ${a.days}d` : ''
+        return `- ${a.equipment}${qty}${rate}: ${money(a.cost)}${a.damaged ? '  [DAMAGED]' : ''}`
+      }),
+      `Total: ${money(addonTotal)}`,
+      '',
+    ].join('\n') : null,
+    notes.length > 0 ? [
+      'NOTES FROM THE FLOOR',
+      ...notes.map(n => `- ${n.text}${n.authorName ? ` (${n.authorName}${n.at ? `, ${format(parseISO(n.at), 'MMM d')}` : ''})` : ''}`),
+      '',
+    ].join('\n') : null,
+  ].filter(l => l !== null)
+
+  const doc = lines.join('\n')
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(doc)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard denied — user can select manually */ }
+  }
+
+  return (
+    <div className="space-y-3">
+      <pre className="card p-4 text-xs text-orbital-text whitespace-pre-wrap max-h-96 overflow-y-auto font-mono">
+        {doc}
+      </pre>
+      <div className="flex gap-3">
+        <button onClick={copy} className="btn-primary flex-1">
+          {copied ? 'Copied' : 'Copy to clipboard'}
+        </button>
+        <button onClick={onClose} className="btn-secondary">Close</button>
+      </div>
     </div>
   )
 }

@@ -7,7 +7,7 @@ import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
 import {
   PRODUCTION_STATUS, LOCATION_TYPE, ROLES,
   PRODUCTION_ROLE_PRESETS, normalizeAssignedMember,
-  createProduction, USERS
+  createProduction, USERS, PROJECT_KIND, PROJECT_KIND_LABEL,
 } from '../../data/models.js'
 
 // Sentinel for the per-phase role dropdown "Other…" option.
@@ -16,9 +16,13 @@ const CUSTOM_ROLE = '__custom_role__'
 // Sentinel for the Wall picker "Other / None" option (no wall from gear).
 const NO_WALL = '__no_wall__'
 
-export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }) {
+export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, kind: kindProp }) {
   const { currentUser, ledWalls = [], syncProductionWallAssignment } = useApp()
   const isEdit = Boolean(initial?.id)
+  // Project kind (M4 / #5): tours + internal projects share the record shape
+  // but skip production-only fields (LED wall / type / location).
+  const kind = initial?.kind || kindProp || PROJECT_KIND.PRODUCTION
+  const isProductionKind = kind === PROJECT_KIND.PRODUCTION
   // Auto-save only when we have an existing record (something to update) AND
   // the parent has opted in. Create mode keeps the explicit submit button so
   // users don't end up with half-typed productions persisted as drafts.
@@ -148,6 +152,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
   const cleanRanges = form.dateRanges.filter(r => r.start || r.end)
   const buildProd = () => createProduction({
     ...(initial || {}),
+    kind,
     name: form.name,
     client: form.client,
     locationType: form.locationType,
@@ -219,12 +224,16 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
       )}
 
       <div>
-        <label className="label">Production Name *</label>
+        <label className="label">{PROJECT_KIND_LABEL[kind]} Name *</label>
         <input
           className="input"
           value={form.name}
           onChange={e => set('name', e.target.value)}
-          placeholder="e.g. Nike Airmax Campaign"
+          placeholder={
+            kind === PROJECT_KIND.TOUR     ? 'e.g. Studio Tour — Netflix Execs' :
+            kind === PROJECT_KIND.INTERNAL ? 'e.g. Volume Calibration Week'     :
+            'e.g. Nike Airmax Campaign'
+          }
           required
         />
       </div>
@@ -240,6 +249,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
       </div>
 
       <div className="grid grid-cols-2 gap-4">
+        {isProductionKind && (
         <div>
           <label className="label inline-flex items-center gap-1.5">
             <Monitor size={11} className="text-orbital-subtle" />
@@ -280,7 +290,8 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
             </p>
           )}
         </div>
-        <div>
+        )}
+        <div className={isProductionKind ? '' : 'col-span-2'}>
           <label className="label">Status</label>
           <select className="select" value={form.status} onChange={e => set('status', e.target.value)}>
             {Object.values(PRODUCTION_STATUS).map(s => (
@@ -290,6 +301,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
         </div>
       </div>
 
+      {isProductionKind && (
       <div>
         <label className="label">Location</label>
         <select className="select mb-2" value={form.locationType} onChange={e => set('locationType', e.target.value)}>
@@ -306,6 +318,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false }
           />
         )}
       </div>
+      )}
 
       {/* Date ranges — one row by default; add more for projects that span
           weeks but only run on certain days. The overall envelope (min start,
