@@ -33,9 +33,11 @@ export interface TaskStatusEntry {
   note: string | null
 }
 
+export type TaskVisibility = 'team' | 'personal'
+
 export interface Task {
   id: string
-  productionId: string
+  productionId: string | null   // null = freestanding to-do (M2)
   title: string
   description: string
   assigneeId: string | null
@@ -47,6 +49,8 @@ export interface Task {
   expectationsNote: string
   completionNote: string
   dueDate: string | null
+  visibility: TaskVisibility
+  completedAt: string | null    // trigger-stamped on entering Complete/Verified
   completionPhotos: Array<Record<string, unknown>>
   comments: TaskComment[]
   instructionPackage: Record<string, unknown> | null
@@ -60,7 +64,7 @@ export type NewTask = Partial<Omit<Task, 'createdAt' | 'updatedAt' | 'comments' 
 // ─── Row mappers ───────────────────────────────────────────────────────────
 interface TaskRow {
   id: string
-  production_id: string
+  production_id: string | null
   title: string
   description: string
   assignee_id: string | null
@@ -71,6 +75,8 @@ interface TaskRow {
   expectations_note: string
   completion_note: string
   due_date: string | null
+  visibility: TaskVisibility | null
+  completed_at: string | null
   completion_photos: Array<Record<string, unknown>>
   instruction_package: Record<string, unknown> | null
   created_by: string | null
@@ -122,6 +128,8 @@ function rowToTask(
     expectationsNote:    r.expectations_note ?? '',
     completionNote:      r.completion_note ?? '',
     dueDate:             r.due_date,
+    visibility:          r.visibility ?? 'team',
+    completedAt:         r.completed_at ?? null,
     completionPhotos:    r.completion_photos ?? [],
     comments,
     instructionPackage:  r.instruction_package,
@@ -157,7 +165,10 @@ function rowToStatusEntry(r: StatusHistoryRow): TaskStatusEntry {
 function taskToRow(t: NewTask): Partial<TaskRow> {
   const row: Partial<TaskRow> = {}
   if (t.id                  !== undefined) row.id                  = t.id
-  if (t.productionId        !== undefined) row.production_id       = t.productionId
+  // '' → null: a freestanding to-do has no production (M2)
+  if (t.productionId        !== undefined) row.production_id       = t.productionId || null
+  if (t.visibility          !== undefined) row.visibility          = t.visibility
+  // completed_at is trigger-owned server-side — never sent from the client
   if (t.title               !== undefined) row.title               = t.title
   if (t.description         !== undefined) row.description         = t.description
   if (t.assigneeId          !== undefined) row.assignee_id         = t.assigneeId
@@ -227,8 +238,9 @@ export async function listTasks(): Promise<Task[]> {
 }
 
 export async function createTask(t: NewTask): Promise<Task> {
-  if (!t.title || !t.productionId) {
-    throw new Error('Task title and productionId are required')
+  // productionId is optional since M2 — null means a freestanding to-do.
+  if (!t.title) {
+    throw new Error('Task title is required')
   }
   const { data, error } = await supabase
     .from('tasks')

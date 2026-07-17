@@ -307,6 +307,13 @@ export function createLogisticalConcern(overrides = {}) {
   }
 }
 
+// Freestanding tasks (productionId null/'' — the merged To-Dos, M2) carry a
+// visibility: team = whole roster sees it, personal = creator + assignee only.
+export const TASK_VISIBILITY = {
+  TEAM:     'team',
+  PERSONAL: 'personal',
+}
+
 export function createTask(overrides = {}) {
   return {
     id: crypto.randomUUID(),
@@ -316,6 +323,8 @@ export function createTask(overrides = {}) {
     assigneeId: '',
     assignedBy: '',
     dueDate: '',
+    visibility: TASK_VISIBILITY.TEAM,
+    completedAt: null,
     priority: TASK_PRIORITY.MEDIUM,
     // ── Status workflow ───────────────────────────────────────────────────────
     status: TASK_STATUS.NOT_STARTED,
@@ -374,12 +383,10 @@ export function createFeedback(overrides = {}) {
   }
 }
 
-// ─── To-Dos ──────────────────────────────────────────────────────────────────
-// Daily-scoped work items, distinct from production-bound Tasks. Anyone can
-// create one. Default visibility is "shared" (whole salary roster can see it);
-// flip to "direct" for a private item visible only to creator + assignee.
-// Lifecycle is intentionally simple — Open / Done / Cancelled — so they stay
-// lightweight. If something needs the 6-state task workflow, it's a Task.
+// ─── To-Dos (LEGACY — merged into tasks in M2) ──────────────────────────────
+// Kept only so the one-time localStorage → Supabase import in AppContext can
+// read old records. New to-dos are tasks with productionId null. Delete this
+// section once every browser has imported.
 
 export const TODO_STATUS = {
   OPEN:      'open',

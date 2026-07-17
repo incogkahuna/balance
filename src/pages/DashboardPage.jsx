@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
 import { Film, CheckSquare, AlertTriangle, Clock, ChevronRight } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, PRODUCTION_STATUS, TASK_STATUS, TODO_STATUS, TODO_VISIBILITY, USERS } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
 import { StatusBadge, TaskStatusBadge, PriorityBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
 import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { Avatar } from '../components/ui/Avatar.jsx'
@@ -47,20 +47,20 @@ function SectionHeader({ label, action }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export function DashboardPage() {
-  const { currentUser, productions, tasks, todos, updateToDo, productionsLoading, tasksLoading } = useApp()
+  const { currentUser, productions, tasks, updateTask, resolveUserName, productionsLoading, tasksLoading } = useApp()
   const navigate = useNavigate()
   const stillLoading = productionsLoading || tasksLoading
 
-  // To-Dos visible to me + due today or overdue (only OPEN ones) — surfaced
-  // on the dashboard so daily ops stay top-of-mind. Mirror of the page-level
-  // visibility filter: shared OR (creator/assignee of a direct one).
-  const myTodaysTodos = (todos || [])
-    .filter(t => t.status === TODO_STATUS.OPEN)
-    .filter(t => {
-      if (t.visibility === TODO_VISIBILITY.SHARED) return true
-      return t.createdBy === currentUser?.id || t.assigneeId === currentUser?.id
-    })
-    .filter(t => t.assigneeId === currentUser?.id)
+  // Anything the current user can be addressed as (legacy id + profile UUID).
+  const isMe = (id) => id && (id === currentUser?.id || id === currentUser?.profileId)
+
+  // To-Dos are freestanding tasks since M2 (productionId null). Surface only
+  // OPEN ones assigned to me with a due date that's today or overdue, so the
+  // dashboard answers "what's on my plate right now".
+  const myTodaysTodos = tasks
+    .filter(t => !t.productionId)
+    .filter(t => t.status !== TASK_STATUS.COMPLETE && t.status !== TASK_STATUS.VERIFIED)
+    .filter(t => isMe(t.assigneeId))
     .filter(t => {
       if (!t.dueDate) return false
       const d = parseISO(t.dueDate)
@@ -70,7 +70,8 @@ export function DashboardPage() {
 
   const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
-  const myTasks        = tasks.filter(t => t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED)
+  // Production-bound tasks only — freestanding to-dos have their own section.
+  const myTasks        = tasks.filter(t => t.productionId && t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED)
   // Sort by urgency: overdue first, then today/tomorrow, then by due date asc, undated last.
   // Surfaces the next thing to do at the top of the crew's mobile dashboard.
   const myPendingTasks = myTasks
@@ -272,7 +273,7 @@ export function DashboardPage() {
               <div className="card divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
                 {myTodaysTodos.slice(0, 5).map(todo => {
                   const isOverdue = todo.dueDate && isPast(parseISO(todo.dueDate)) && !isToday(parseISO(todo.dueDate))
-                  const creator   = USERS.find(u => u.id === todo.createdBy)
+                  const creatorName = !isMe(todo.createdBy) ? resolveUserName(todo.createdBy) : null
                   return (
                     <div
                       key={todo.id}
@@ -280,8 +281,8 @@ export function DashboardPage() {
                       style={{ borderLeft: `2px solid ${isOverdue ? '#ef4444' : '#a78bfa'}` }}
                     >
                       <button
-                        onClick={() => updateToDo(todo.id, {
-                          status: TODO_STATUS.DONE,
+                        onClick={() => updateTask(todo.id, {
+                          status: TASK_STATUS.COMPLETE,
                           completedAt: new Date().toISOString(),
                         })}
                         className="text-orbital-subtle hover:text-green-400 transition-colors flex-shrink-0"
@@ -295,8 +296,8 @@ export function DashboardPage() {
                           {isOverdue
                             ? <span className="text-red-400 font-mono">overdue · {format(parseISO(todo.dueDate), 'MMM d')}</span>
                             : <span className="font-mono">today</span>}
-                          {creator && todo.createdBy !== currentUser?.id && (
-                            <span className="text-orbital-dim">· from {creator.name}</span>
+                          {creatorName && (
+                            <span className="text-orbital-dim">· from {creatorName}</span>
                           )}
                         </div>
                       </div>

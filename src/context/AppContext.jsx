@@ -78,23 +78,11 @@ export function AppProvider({ children }) {
     } catch { /* quota / private mode — ignore */ }
   }, [ledWalls])
 
-  // ─── To-Dos ─────────────────────────────────────────────────────────────────
-  // localStorage-backed for v1 like LED walls + feedback. Port to Supabase
-  // once the shape proves out (esp. visibility filtering which will need
-  // proper RLS).
+  // ─── To-Dos (merged into tasks in M2) ───────────────────────────────────────
+  // To-dos are now tasks with productionId null. The only thing left here is
+  // the one-time import of any pre-merge localStorage records — see the
+  // effect after the tasks hydration block.
   const TODOS_KEY = 'balance_todos_v1'
-  const [todos, setTodosState] = useState(() => {
-    if (typeof window === 'undefined') return []
-    try {
-      const raw = window.localStorage.getItem(TODOS_KEY)
-      if (!raw) return []
-      const parsed = JSON.parse(raw)
-      return Array.isArray(parsed) ? parsed : []
-    } catch { return [] }
-  })
-  useEffect(() => {
-    try { window.localStorage.setItem(TODOS_KEY, JSON.stringify(todos)) } catch { /* noop */ }
-  }, [todos])
 
   // ─── Feedback items (Bugs & Ideas) ──────────────────────────────────────────
   // Same localStorage-backed pattern as LED walls; port to Supabase when
@@ -254,6 +242,61 @@ export function AppProvider({ children }) {
       unsubComments()
     }
   }, [profile])
+
+  // ─── One-time To-Dos import (M2) ────────────────────────────────────────────
+  // Pre-merge to-dos lived in localStorage per browser. Once per session,
+  // after tasks hydrate, push them into the tasks table as freestanding
+  // tasks. Halts (and retries next session) if the M2 migration hasn't run
+  // yet; the original list is kept as a _backup key after success.
+  const todosImportRanRef = useRef(false)
+  useEffect(() => {
+    if (!profile || tasksLoading || todosImportRanRef.current) return
+    todosImportRanRef.current = true
+    let raw = null
+    try { raw = window.localStorage.getItem(TODOS_KEY) } catch { return }
+    if (!raw) return
+    let old = []
+    try { old = JSON.parse(raw) } catch { return }
+    if (!Array.isArray(old) || old.length === 0) {
+      try { window.localStorage.removeItem(TODOS_KEY) } catch { /* noop */ }
+      return
+    }
+    ;(async () => {
+      let imported = 0
+      for (const t of old) {
+        if (!t?.title || t.status === 'cancelled') continue
+        try {
+          const created = await createTaskApi({
+            id: t.id,
+            productionId: null,
+            title: t.title,
+            description: t.description || '',
+            assigneeId: t.assigneeId || null,
+            dueDate: t.dueDate || null,
+            visibility: t.visibility === 'direct' ? 'personal' : 'team',
+            status: t.status === 'done' ? 'Complete' : 'Not Started',
+            createdBy: profile.id,
+          })
+          imported++
+          setTasksState(prev => prev.some(x => x.id === created.id)
+            ? prev
+            : [{ ...created, comments: [], statusHistory: [] }, ...prev])
+        } catch (err) {
+          // 23505 = row already imported by a prior partial run — that's fine
+          if (err?.code === '23505') { imported++; continue }
+          console.warn('[AppContext] to-do import halted (will retry next session):', err?.message || err)
+          return
+        }
+      }
+      try {
+        window.localStorage.setItem(`${TODOS_KEY}_backup`, raw)
+        window.localStorage.removeItem(TODOS_KEY)
+      } catch { /* noop */ }
+      if (imported > 0) {
+        toast.success(`Moved ${imported} to-do${imported === 1 ? '' : 's'} into the shared task system`)
+      }
+    })()
+  }, [profile, tasksLoading, toast])
 
   // ─── Hydrate contractors from Supabase + subscribe to realtime ─────────────
   useEffect(() => {
@@ -989,28 +1032,6 @@ export function AppProvider({ children }) {
     }))
   }, [currentUser])
 
-  // ─── To-Dos CRUD ────────────────────────────────────────────────────────────
-  const addToDo = useCallback((todo) => {
-    setTodosState(prev => [
-      {
-        ...todo,
-        createdBy: todo.createdBy || currentUser?.id || '',
-        createdAt: todo.createdAt || new Date().toISOString(),
-      },
-      ...prev,
-    ])
-  }, [currentUser])
-
-  const updateToDo = useCallback((id, patch) => {
-    setTodosState(prev => prev.map(t =>
-      t.id === id ? { ...t, ...patch, updatedAt: new Date().toISOString() } : t
-    ))
-  }, [])
-
-  const deleteToDo = useCallback((id) => {
-    setTodosState(prev => prev.filter(t => t.id !== id))
-  }, [])
-
   // ─── Feedback CRUD ──────────────────────────────────────────────────────────
   const addFeedbackItem = useCallback((item) => {
     setFeedbackItemsState(prev => [
@@ -1120,12 +1141,6 @@ export function AppProvider({ children }) {
     addFeedbackItem,
     updateFeedbackItem,
     deleteFeedbackItem,
-
-    // To-Dos (daily-scoped, distinct from production tasks)
-    todos,
-    addToDo,
-    updateToDo,
-    deleteToDo,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

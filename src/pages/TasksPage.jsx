@@ -95,8 +95,12 @@ export function TasksPage() {
 
   // The base list everyone-on-this-account can see. Crew see only their own
   // tasks regardless of any later filter; admin/sup see everything.
+  // Freestanding to-dos (productionId null since M2) live on the To-Dos page.
   const baseList = useMemo(
-    () => isCrew ? tasks.filter(t => t.assigneeId === currentUser?.id) : tasks,
+    () => {
+      const productionTasks = tasks.filter(t => t.productionId)
+      return isCrew ? productionTasks.filter(t => t.assigneeId === currentUser?.id) : productionTasks
+    },
     [tasks, isCrew, currentUser]
   )
 

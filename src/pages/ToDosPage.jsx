@@ -1,58 +1,64 @@
 import { useState, useMemo } from 'react'
-import { format, parseISO, isToday, isTomorrow, isPast, addDays } from 'date-fns'
+import { format, parseISO, isToday, isTomorrow, isPast } from 'date-fns'
 import {
-  Check, Circle, Plus, Send, X, Trash2, Users as UsersIcon, Lock,
-  Calendar as CalIcon, AlertTriangle, CheckCircle2, Edit3,
+  Circle, Plus, Trash2, Users as UsersIcon, Lock, CheckCircle2,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import {
-  USERS, TODO_STATUS, TODO_VISIBILITY, createToDo,
+  USERS, TASK_STATUS, TASK_VISIBILITY, createTask,
 } from '../data/models.js'
+import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
 import clsx from 'clsx'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ToDosPage — daily-scoped work items, separate from production-bound Tasks.
-// Anyone can create. Shared by default (whole salary roster sees them); flip
-// to Direct to make a private item only the creator + assignee can see.
+// ToDosPage — the quick view over freestanding tasks (M2 merge: a to-do IS a
+// task with no production). Same store as the Tasks page, same Supabase
+// persistence and realtime, but tuned for rapid daily entry. Team by default;
+// flip to Personal for an item only you + the assignee can see.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ToDosPage() {
-  const { currentUser, todos, addToDo, updateToDo, deleteToDo } = useApp()
+  const { currentUser, tasks, addTask, updateTask, deleteTask, profiles, resolveUserName } = useApp()
 
-  // ── Filter chip (Mine / Created by me / Shared / All) ──
+  // Anything the current user can be addressed as (legacy id + profile UUID).
+  const isMe = (id) => Boolean(id) && (id === currentUser?.id || id === currentUser?.profileId)
+
+  // ── Filter chip (Mine / Created by me / Team / All) ──
   const [scopeFilter, setScopeFilter] = useState('mine')
 
-  // ── Visibility-aware base list ──
-  // Anyone with a profile sees SHARED todos. DIRECT todos are visible only to
-  // the creator + assignee. This mirrors what Supabase RLS would do once
-  // todos move off localStorage.
+  // Freestanding tasks only — production tasks live on the Tasks page.
+  // Personal items are creator+assignee only; RLS enforces this server-side,
+  // the filter here just mirrors it for dev/impersonation modes.
   const visible = useMemo(() => {
     if (!currentUser) return []
-    return todos.filter(t => {
-      if (t.visibility === TODO_VISIBILITY.SHARED) return true
-      return t.createdBy === currentUser.id || t.assigneeId === currentUser.id
+    return tasks.filter(t => {
+      if (t.productionId) return false
+      if (t.visibility === TASK_VISIBILITY.PERSONAL) {
+        return isMe(t.createdBy) || isMe(t.assigneeId)
+      }
+      return true
     })
-  }, [todos, currentUser])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, currentUser])
 
   // Scope filter on top of visibility
   const scoped = useMemo(() => {
     switch (scopeFilter) {
-      case 'mine':       return visible.filter(t => t.assigneeId === currentUser?.id)
-      case 'created':    return visible.filter(t => t.createdBy   === currentUser?.id)
-      case 'shared':     return visible.filter(t => t.visibility  === TODO_VISIBILITY.SHARED)
+      case 'mine':    return visible.filter(t => isMe(t.assigneeId))
+      case 'created': return visible.filter(t => isMe(t.createdBy))
+      case 'team':    return visible.filter(t => t.visibility !== TASK_VISIBILITY.PERSONAL)
       case 'all':
-      default:           return visible
+      default:        return visible
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, scopeFilter, currentUser])
 
   // ── Bucketise into Overdue / Today / Tomorrow / Later / No date / Done ──
   const buckets = useMemo(() => {
     const out = { overdue: [], today: [], tomorrow: [], later: [], nodate: [], done: [] }
     for (const t of scoped) {
-      if (t.status === TODO_STATUS.DONE || t.status === TODO_STATUS.CANCELLED) {
-        out.done.push(t); continue
-      }
+      if (isTaskDone(t)) { out.done.push(t); continue }
       if (!t.dueDate) { out.nodate.push(t); continue }
       const d = parseISO(t.dueDate)
       if (isPast(d) && !isToday(d))   out.overdue.push(t)
@@ -73,12 +79,11 @@ export function ToDosPage() {
   // ── Stats strip (computed from VISIBLE — not scoped, so the numbers stay
   // stable as the user tweaks chips). ──
   const stats = useMemo(() => {
-    const mine     = visible.filter(t => t.assigneeId === currentUser?.id && t.status === TODO_STATUS.OPEN)
+    const mine     = visible.filter(t => isMe(t.assigneeId) && !isTaskDone(t))
     const overdue  = mine.filter(t => t.dueDate && isPast(parseISO(t.dueDate)) && !isToday(parseISO(t.dueDate)))
     const today    = mine.filter(t => t.dueDate && isToday(parseISO(t.dueDate)))
     const doneToday = visible.filter(t => {
-      if (t.status !== TODO_STATUS.DONE) return false
-      if (!t.completedAt) return false
+      if (!isTaskDone(t) || !t.completedAt) return false
       try { return isToday(parseISO(t.completedAt)) } catch { return false }
     })
     return {
@@ -87,22 +92,25 @@ export function ToDosPage() {
       today:     today.length,
       doneToday: doneToday.length,
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, currentUser])
 
-  // ── Inline quick-add bar ──
+  // ── Inline quick-add bar — creates a freestanding task ──
   const handleQuickAdd = (payload) => {
-    addToDo(createToDo({
+    addTask(createTask({
       ...payload,
-      createdBy: currentUser?.id || '',
+      productionId: '',
+      createdBy: currentUser?.profileId || currentUser?.id || '',
     }))
   }
 
   // ── Done toggle ──
-  const toggleDone = (todo) => {
-    if (todo.status === TODO_STATUS.DONE) {
-      updateToDo(todo.id, { status: TODO_STATUS.OPEN, completedAt: '' })
+  const toggleDone = (task) => {
+    if (isTaskDone(task)) {
+      updateTask(task.id, { status: TASK_STATUS.NOT_STARTED, completedAt: null })
     } else {
-      updateToDo(todo.id, { status: TODO_STATUS.DONE, completedAt: new Date().toISOString() })
+      // completedAt shown optimistically; the DB trigger stamps the real one
+      updateTask(task.id, { status: TASK_STATUS.COMPLETE, completedAt: new Date().toISOString() })
     }
   }
 
@@ -116,7 +124,7 @@ export function ToDosPage() {
             To-Dos
           </h1>
           <p className="text-sm text-orbital-subtle mt-0.5">
-            Daily work that isn&apos;t tied to a production. Shared with the team by default — flip to <em>Direct</em> for a private item only you and one teammate see.
+            Daily work that isn&apos;t tied to a production — same task system, quicker entry. Team-visible by default; flip to <em>Personal</em> for an item only you and the assignee see.
           </p>
         </div>
 
@@ -132,14 +140,14 @@ export function ToDosPage() {
         </div>
 
         {/* Quick-add */}
-        <QuickAdd onAdd={handleQuickAdd} currentUser={currentUser} />
+        <QuickAdd onAdd={handleQuickAdd} currentUser={currentUser} profiles={profiles} />
 
         {/* Scope chips */}
         <div className="flex gap-1 mt-4 mb-4 flex-wrap">
           {[
             { id: 'mine',    label: 'Mine' },
             { id: 'created', label: 'Created by me' },
-            { id: 'shared',  label: 'Shared' },
+            { id: 'team',    label: 'Team' },
             { id: 'all',     label: 'All' },
           ].map(s => {
             const active = scopeFilter === s.id
@@ -170,22 +178,22 @@ export function ToDosPage() {
         ) : (
           <div className="space-y-5">
             {buckets.overdue.length > 0 && (
-              <Bucket label="Overdue" accent="#ef4444" todos={buckets.overdue} onToggle={toggleDone} onUpdate={updateToDo} onDelete={deleteToDo} currentUser={currentUser} />
+              <Bucket label="Overdue" accent="#ef4444" todos={buckets.overdue} onToggle={toggleDone} onUpdate={updateTask} onDelete={deleteTask} currentUser={currentUser} isMe={isMe} resolveUserName={resolveUserName} />
             )}
             {buckets.today.length > 0 && (
-              <Bucket label="Today" accent="#60a5fa" todos={buckets.today} onToggle={toggleDone} onUpdate={updateToDo} onDelete={deleteToDo} currentUser={currentUser} />
+              <Bucket label="Today" accent="#60a5fa" todos={buckets.today} onToggle={toggleDone} onUpdate={updateTask} onDelete={deleteTask} currentUser={currentUser} isMe={isMe} resolveUserName={resolveUserName} />
             )}
             {buckets.tomorrow.length > 0 && (
-              <Bucket label="Tomorrow" accent="#a78bfa" todos={buckets.tomorrow} onToggle={toggleDone} onUpdate={updateToDo} onDelete={deleteToDo} currentUser={currentUser} />
+              <Bucket label="Tomorrow" accent="#a78bfa" todos={buckets.tomorrow} onToggle={toggleDone} onUpdate={updateTask} onDelete={deleteTask} currentUser={currentUser} isMe={isMe} resolveUserName={resolveUserName} />
             )}
             {buckets.later.length > 0 && (
-              <Bucket label="Later" accent="var(--orbital-subtle)" todos={buckets.later} onToggle={toggleDone} onUpdate={updateToDo} onDelete={deleteToDo} currentUser={currentUser} />
+              <Bucket label="Later" accent="var(--orbital-subtle)" todos={buckets.later} onToggle={toggleDone} onUpdate={updateTask} onDelete={deleteTask} currentUser={currentUser} isMe={isMe} resolveUserName={resolveUserName} />
             )}
             {buckets.nodate.length > 0 && (
-              <Bucket label="No date" accent="var(--orbital-dim)" todos={buckets.nodate} onToggle={toggleDone} onUpdate={updateToDo} onDelete={deleteToDo} currentUser={currentUser} />
+              <Bucket label="No date" accent="var(--orbital-dim)" todos={buckets.nodate} onToggle={toggleDone} onUpdate={updateTask} onDelete={deleteTask} currentUser={currentUser} isMe={isMe} resolveUserName={resolveUserName} />
             )}
             {buckets.done.length > 0 && (
-              <Bucket label="Done" accent="#22c55e" todos={buckets.done} onToggle={toggleDone} onUpdate={updateToDo} onDelete={deleteToDo} currentUser={currentUser} collapsible defaultCollapsed />
+              <Bucket label="Done" accent="#22c55e" todos={buckets.done} onToggle={toggleDone} onUpdate={updateTask} onDelete={deleteTask} currentUser={currentUser} isMe={isMe} resolveUserName={resolveUserName} collapsible defaultCollapsed />
             )}
           </div>
         )}
@@ -212,12 +220,21 @@ function StatCell({ label, value, color }) {
 }
 
 // ── QuickAdd — single-line input with assignee + due-date + visibility ─────
-function QuickAdd({ onAdd, currentUser }) {
+function QuickAdd({ onAdd, currentUser, profiles }) {
   const [title, setTitle]           = useState('')
   const [dueDate, setDueDate]       = useState(() => format(new Date(), 'yyyy-MM-dd'))
   const [assigneeId, setAssigneeId] = useState(currentUser?.id || '')
-  const [visibility, setVisibility] = useState(TODO_VISIBILITY.SHARED)
+  const [visibility, setVisibility] = useState(TASK_VISIBILITY.TEAM)
   const [expanded, setExpanded]     = useState(false)
+
+  // Assignee roster: real profiles when loaded, legacy USERS as fallback
+  // (dev bypass has no profiles). Both id kinds resolve fine downstream.
+  const roster = (profiles && profiles.length > 0)
+    ? profiles.map(p => ({ id: p.id, name: p.name }))
+    : USERS.map(u => ({ id: u.id, name: u.name }))
+  const meId = roster.some(r => r.id === currentUser?.profileId)
+    ? currentUser?.profileId
+    : currentUser?.id
 
   const canAdd = title.trim().length > 0
 
@@ -288,9 +305,9 @@ function QuickAdd({ onAdd, currentUser }) {
             onChange={e => setAssigneeId(e.target.value)}
             className="text-xs px-2 py-1 bg-orbital-surface border border-orbital-border text-orbital-text rounded"
           >
-            {USERS.map(u => (
+            {roster.map(u => (
               <option key={u.id} value={u.id}>
-                {u.id === currentUser?.id ? `${u.name} (me)` : u.name}
+                {u.id === meId ? `${u.name} (me)` : u.name}
               </option>
             ))}
           </select>
@@ -300,27 +317,27 @@ function QuickAdd({ onAdd, currentUser }) {
           <div className="inline-flex">
             <button
               type="button"
-              onClick={() => setVisibility(TODO_VISIBILITY.SHARED)}
+              onClick={() => setVisibility(TASK_VISIBILITY.TEAM)}
               className={clsx(
                 'inline-flex items-center gap-1 px-2 py-1 text-[11px] border-y border-l',
-                visibility === TODO_VISIBILITY.SHARED
+                visibility === TASK_VISIBILITY.TEAM
                   ? 'bg-blue-500/15 text-blue-300 border-blue-500/45'
                   : 'text-orbital-subtle border-orbital-border hover:text-orbital-text'
               )}
             >
-              <UsersIcon size={10} /> Shared
+              <UsersIcon size={10} /> Team
             </button>
             <button
               type="button"
-              onClick={() => setVisibility(TODO_VISIBILITY.DIRECT)}
+              onClick={() => setVisibility(TASK_VISIBILITY.PERSONAL)}
               className={clsx(
                 'inline-flex items-center gap-1 px-2 py-1 text-[11px] border',
-                visibility === TODO_VISIBILITY.DIRECT
+                visibility === TASK_VISIBILITY.PERSONAL
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/45'
                   : 'text-orbital-subtle border-orbital-border hover:text-orbital-text'
               )}
             >
-              <Lock size={10} /> Direct
+              <Lock size={10} /> Personal
             </button>
           </div>
 
@@ -338,7 +355,7 @@ function QuickAdd({ onAdd, currentUser }) {
 }
 
 // ── Bucket ──────────────────────────────────────────────────────────────────
-function Bucket({ label, accent, todos, onToggle, onUpdate, onDelete, currentUser, collapsible = false, defaultCollapsed = false }) {
+function Bucket({ label, accent, todos, onToggle, onUpdate, onDelete, currentUser, isMe, resolveUserName, collapsible = false, defaultCollapsed = false }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed)
   return (
     <div>
@@ -362,6 +379,8 @@ function Bucket({ label, accent, todos, onToggle, onUpdate, onDelete, currentUse
               key={t.id}
               todo={t}
               currentUser={currentUser}
+              isMe={isMe}
+              resolveUserName={resolveUserName}
               onToggle={() => onToggle(t)}
               onUpdate={(patch) => onUpdate(t.id, patch)}
               onDelete={() => onDelete(t.id)}
@@ -374,16 +393,17 @@ function Bucket({ label, accent, todos, onToggle, onUpdate, onDelete, currentUse
 }
 
 // ── ToDoRow ─────────────────────────────────────────────────────────────────
-function ToDoRow({ todo, currentUser, onToggle, onUpdate, onDelete }) {
+function ToDoRow({ todo, currentUser, isMe, resolveUserName, onToggle, onUpdate, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const isDone     = todo.status === TODO_STATUS.DONE
+  const isDone     = isTaskDone(todo)
   const isOverdue  = !isDone && todo.dueDate && isPast(parseISO(todo.dueDate)) && !isToday(parseISO(todo.dueDate))
-  const assignee   = USERS.find(u => u.id === todo.assigneeId)
-  const creator    = USERS.find(u => u.id === todo.createdBy)
-  const isCreator  = todo.createdBy === currentUser?.id
-  const isAssignee = todo.assigneeId === currentUser?.id
-  const canModify  = isCreator || isAssignee   // either side can mark done
-  const canDelete  = isCreator                  // only creator can delete
+  const assigneeName = todo.assigneeId ? resolveUserName(todo.assigneeId) : null
+  const creatorName  = todo.createdBy ? resolveUserName(todo.createdBy) : null
+  const isCreator  = isMe(todo.createdBy)
+  const isAssignee = isMe(todo.assigneeId)
+  const isAdmin    = currentUser?.role === 'admin'
+  const canModify  = isCreator || isAssignee || isAdmin  // either side can mark done
+  const canDelete  = isCreator || isAdmin
 
   const [editingTitle, setEditingTitle] = useState(false)
   const [draftTitle, setDraftTitle] = useState(todo.title)
@@ -445,15 +465,15 @@ function ToDoRow({ todo, currentUser, onToggle, onUpdate, onDelete }) {
           </button>
         )}
         <div className="flex items-center gap-2 text-[11px] text-orbital-subtle mt-0.5 flex-wrap">
-          {assignee && (
+          {assigneeName && (
             <span className="inline-flex items-center gap-1">
               <span
                 className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
-                style={{ backgroundColor: assignee.color }}
+                style={{ backgroundColor: 'var(--accent)' }}
               >
-                {assignee.avatar}
+                {assigneeName.charAt(0).toUpperCase()}
               </span>
-              {assignee.name}
+              {assigneeName}
             </span>
           )}
           {todo.dueDate && (
@@ -464,13 +484,13 @@ function ToDoRow({ todo, currentUser, onToggle, onUpdate, onDelete }) {
               {isOverdue && ' · overdue'}
             </span>
           )}
-          {todo.visibility === TODO_VISIBILITY.DIRECT && (
+          {todo.visibility === TASK_VISIBILITY.PERSONAL && (
             <span className="inline-flex items-center gap-1 text-amber-400">
-              <Lock size={9} /> direct
+              <Lock size={9} /> personal
             </span>
           )}
-          {!isCreator && creator && (
-            <span className="text-orbital-dim">from {creator.name}</span>
+          {!isCreator && creatorName && (
+            <span className="text-orbital-dim">from {creatorName}</span>
           )}
         </div>
       </div>
@@ -486,7 +506,7 @@ function ToDoRow({ todo, currentUser, onToggle, onUpdate, onDelete }) {
         />
       )}
 
-      {/* Delete (creator only) */}
+      {/* Delete (creator or admin) */}
       {canDelete && (
         <button
           onClick={() => setConfirmDelete(true)}
