@@ -11,6 +11,11 @@ export const MILESTONE_TYPE_CONFIG = {
     bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30',
     dot: 'bg-purple-500',
   },
+  [MILESTONE_TYPE.PRELIGHT]: {
+    color: '#eab308',
+    bg: 'bg-yellow-500/15', text: 'text-yellow-400', border: 'border-yellow-500/30',
+    dot: 'bg-yellow-500',
+  },
   [MILESTONE_TYPE.LOGISTICS]: {
     color: '#3b82f6',
     bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30',

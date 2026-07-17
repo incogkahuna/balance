@@ -18,7 +18,6 @@ export const PRODUCTION_STATUS = {
 export const PRODUCTION_TYPE = {
   TVC_AOTO:           'TVC AOTO',
   MOBILE_CAR_PROCESS: 'Mobile CAR process CLI',
-  LITTLE_DIPPER:      'Little Dipper',
 }
 
 // Ordered list for UI dropdowns. "Custom" is handled as a free-form entry
@@ -28,6 +27,14 @@ export const PRODUCTION_TYPE_PRESETS = Object.values(PRODUCTION_TYPE)
 export const LOCATION_TYPE = {
   IN_HOUSE: 'In-House (Orbital Studios)',
   MOBILE: 'Mobile',
+}
+
+// Preset production types imply a location — TVC AOTO is the permanent
+// in-house volume, CAR process is by definition mobile. Used to auto-fill
+// locationType and skip redundant questions. Free-form types map to nothing.
+export const TYPE_LOCATION_MAP = {
+  [PRODUCTION_TYPE.TVC_AOTO]:           LOCATION_TYPE.IN_HOUSE,
+  [PRODUCTION_TYPE.MOBILE_CAR_PROCESS]: LOCATION_TYPE.MOBILE,
 }
 
 export const TASK_PRIORITY = {
@@ -49,6 +56,7 @@ export const TASK_STATUS = {
 // ─── Roadmap ──────────────────────────────────────────────────────────────────
 export const MILESTONE_TYPE = {
   PRE_PRODUCTION: 'Pre-Production',
+  PRELIGHT:       'Prelight',
   LOGISTICS:      'Logistics',
   SHOOT_DAY:      'Shoot Day',
   TECHNICAL:      'Technical',

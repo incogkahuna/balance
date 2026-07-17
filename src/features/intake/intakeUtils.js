@@ -1,7 +1,7 @@
 import * as chrono from 'chrono-node'
 import {
   createProduction, createTask, createMilestone,
-  PRODUCTION_TYPE, PRODUCTION_STATUS, LOCATION_TYPE,
+  PRODUCTION_TYPE, PRODUCTION_STATUS, LOCATION_TYPE, TYPE_LOCATION_MAP,
   TASK_PRIORITY, TASK_STATUS,
   MILESTONE_TYPE, MILESTONE_STATUS,
   USERS,
@@ -590,7 +590,6 @@ const QUESTION_DEFS = [
     options: [
       { label: 'TVC AOTO',                value: PRODUCTION_TYPE.TVC_AOTO           },
       { label: 'Mobile CAR process CLI',  value: PRODUCTION_TYPE.MOBILE_CAR_PROCESS },
-      { label: 'Little Dipper',           value: PRODUCTION_TYPE.LITTLE_DIPPER      },
     ],
   },
   {
@@ -608,6 +607,12 @@ const QUESTION_DEFS = [
 export function generateQuestions(extracted, answers) {
   return QUESTION_DEFS.filter(q => {
     if (answers?.[q.field] !== undefined) return false
+    // Preset production types imply the location (TVC AOTO is the permanent
+    // in-house volume) — never ask a question the type already answers.
+    if (q.field === 'locationType') {
+      const type = answers?.productionType ?? extracted?.productionType?.value
+      if (type && TYPE_LOCATION_MAP[type]) return false
+    }
     const ex = extracted?.[q.field]
     if (!ex?.value) return true
     if (q.required && ex.confidence !== 'high') return true
@@ -651,13 +656,6 @@ const TASK_DEFS = {
     { title: 'Pre-shoot pack and inventory check',              priority: TASK_PRIORITY.MEDIUM },
     { title: 'Arrange derig transport and return schedule',     priority: TASK_PRIORITY.LOW    },
   ],
-  [PRODUCTION_TYPE.LITTLE_DIPPER]: [
-    { title: 'Confirm client brief and shot list',              priority: TASK_PRIORITY.HIGH   },
-    { title: 'Confirm Little Dipper stage configuration',       priority: TASK_PRIORITY.HIGH   },
-    { title: 'Brief crew on Little Dipper workflow',            priority: TASK_PRIORITY.MEDIUM },
-    { title: 'Schedule pre-production walkthrough',             priority: TASK_PRIORITY.MEDIUM },
-    { title: 'Confirm post-production pipeline with client',    priority: TASK_PRIORITY.LOW    },
-  ],
 }
 
 export function generateStarterTasks(productionType, productionId, createdBy) {
@@ -695,12 +693,6 @@ const MILESTONE_DEFS = {
     { title: 'Shoot Day',                type: MILESTONE_TYPE.SHOOT_DAY,      date: fmt(start)              },
     { title: 'Derig & Wrap',             type: MILESTONE_TYPE.WRAP,           date: fmt(addDays(end,    1)) },
   ],
-  [PRODUCTION_TYPE.LITTLE_DIPPER]: (start, end) => [
-    { title: 'Client Brief Confirmed',   type: MILESTONE_TYPE.CLIENT,         date: fmt(subDays(start,  7)) },
-    { title: 'Stage Configuration Set',  type: MILESTONE_TYPE.TECHNICAL,      date: fmt(subDays(start,  3)) },
-    { title: 'Shoot Day',                type: MILESTONE_TYPE.SHOOT_DAY,      date: fmt(start)              },
-    { title: 'Wrap',                     type: MILESTONE_TYPE.WRAP,           date: fmt(addDays(end,    1)) },
-  ],
 }
 
 export function generateRoadmapMilestones(productionType, startDate, endDate, createdBy) {
@@ -722,11 +714,17 @@ export function buildProductionFromDraft(draft, currentUser) {
   const { extracted, answers, edits, contacts, concerns, inputs } = draft
   const resolve = field => resolveField(field, extracted, answers, edits)
 
-  const productionType = resolve('productionType').value || PRODUCTION_TYPE.OTHER
+  // Free-form '' when no type resolved (PRODUCTION_TYPE.OTHER never existed —
+  // the old fallback silently produced `undefined`).
+  const productionType = resolve('productionType').value || ''
   // ledWallId is empty string for "None / Other" (no wall booked).
   // Normalise to null so the production record has a clean nullable FK.
   const ledWallId      = resolve('ledWallId').value || null
-  const locationType   = resolve('locationType').value   || LOCATION_TYPE.IN_HOUSE
+  // Preset types imply the location (TVC AOTO lives in-house, CAR process is
+  // mobile) — an explicit answer/edit still wins.
+  const locationType   = resolve('locationType').value
+    || TYPE_LOCATION_MAP[productionType]
+    || LOCATION_TYPE.IN_HOUSE
   const startDate      = resolve('startDate').value      || ''
   const endDate        = resolve('endDate').value        || ''
   const locationName   = resolve('locationName').value   || ''
@@ -747,15 +745,18 @@ export function buildProductionFromDraft(draft, currentUser) {
       tag:     'client',
     }))
 
-  // Bible — documents from uploaded images
+  // Bible — documents from uploaded images. Carry the actual image data and
+  // real MIME type through so the bible's preview/open + AI-scan work (they
+  // were stored with url:'' and a fake 'image' type before — unopenable).
   const documents = (inputs || [])
     .filter(i => i.type === 'image')
     .map(i => ({
       id:           crypto.randomUUID(),
       name:         i.fileName || 'Uploaded document',
       dateReceived: new Date().toISOString().split('T')[0],
-      fileType:     'image',
-      url:          '',
+      fileType:     i.fileType || 'image/png',
+      fileName:     i.fileName || null,
+      url:          i.preview || '',
       notes:        'Uploaded during intake',
     }))
 

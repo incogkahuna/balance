@@ -333,7 +333,6 @@ function ColorPicker({ currentColor, onSelect, onClose }) {
 const PROD_TYPE_TINT = {
   'TVC AOTO':               { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  text: '#60a5fa' },
   'Mobile CAR process CLI': { bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
-  'Little Dipper':          { bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.35)', text: '#a78bfa' },
   // Legacy values left intact so any un-migrated demo rows still render
   'LED Volume':             { bg: 'rgba(59,130,246,0.12)',  border: 'rgba(59,130,246,0.35)',  text: '#60a5fa' },
   'Mobile Build':           { bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.35)',  text: '#fbbf24' },
