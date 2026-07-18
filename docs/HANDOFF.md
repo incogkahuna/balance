@@ -1,7 +1,8 @@
 # Balance — Session Handoff
 
-*Updated 2026-07-16 (end of a long working session with Danny). Read this
-first, then `docs/IMPROVEMENTS.md` (the working plan), then go.*
+*Updated 2026-07-17 early AM (end of the marathon session: M6 dial-ups,
+modules M1–M7, Danny's 12-item live review, roster dedup). Read this first,
+then `docs/IMPROVEMENTS.md` (the working plan), then go.*
 
 ## What this project is right now
 
@@ -12,6 +13,48 @@ repo `github.com/incogkahuna/balance`, branch `master`). Danny (owner,
 working module-by-module through his 22-item improvement list, triaged in
 **`docs/IMPROVEMENTS.md`** (that file is the plan of record; keep its
 statuses current). `docs/AUDIT-2026-07.md` is the deeper original audit.
+
+## ⭑ START HERE — current state + what's next
+
+**Where things stand (all verified, all pushed & live on Vercel):**
+- Danny's 22-item list is essentially DONE. M0, M1–M7, M6 (three drops),
+  and his 12-item New Production review round are all shipped.
+- **The DB migrations are RUN and verified** — Danny pasted RUN-THIS-SQL.md
+  and the 5-way diagnostic returned all `true` (activity_events, tasks
+  visibility+completed_at, productions.kind, feedback_items). Do NOT ask
+  him to run them again.
+- **Profile "duplicates" are RESOLVED — nothing was deleted.** The profiles
+  table was always clean (3 real people: Danny Horgan, Mark, Wilder Herms,
+  all admin). The dupes Danny saw were the hardcoded legacy USERS roster
+  rendering next to real profiles. Fixed in code: `buildRoster()` in
+  models.js merges them (profiles win; legacy survives only if unmatched
+  by email/full-name/unambiguous-first-name; the two Brians stay separate).
+  Every picker now reads `users` from AppContext. NEVER hand Danny SQL to
+  delete profiles for this — block 0 of RUN-THIS-SQL.md is superseded.
+
+**Immediate next tasks, in order:**
+1. **Deploy the two edge functions** — the ONLY infra thing left.
+   `transcribe` returns 404 (genuinely undeployed — Danny's mic error);
+   `parse-intake` needs a redeploy to pick up the new `events` extraction
+   (scout/prelight/shoot dates → form dates + milestone seeds). CLI on this
+   machine is logged in; the deploy needs Danny's permission approval:
+   `supabase functions deploy transcribe --project-ref ectyohuqgpnwivpjpuga`
+   `supabase functions deploy parse-intake --project-ref ectyohuqgpnwivpjpuga`
+   Danny has been asked twice and hasn't said "deploy" yet — ask once,
+   don't nag.
+2. **Danny re-tests New Production on the live site** with a real screenshot
+   (post-redeploy) — that's the end-to-end proof of the events parsing.
+3. **Get Danny's real starter-task checklist per production type** — the
+   Review step currently offers the old template titles as unchecked,
+   fully-editable suggestions; he called the templates fake data.
+4. **Nitzkin discovery (#18)** — still the only 22-list item blocked: what
+   the quoting app is, which statuses quotes drive.
+5. Then: **#17 constellation/grav-map rework** (own session, big canvas)
+   and M6-remaining polish (page composition, image-upload backdrops, full
+   account page).
+
+**Still on Danny (older items):** demo-wipe SQL (#10), confirm phase6h ran,
+Supabase free→paid upgrade.
 
 ## Session log — what shipped TODAY (2026-07-16), all pushed & live
 
@@ -46,33 +89,22 @@ Earlier this week (also live): Phase 0 bug blitz, phase7a migration (user
 ran it), Tier 2 Claude screenshot parser (`parse-intake` edge function —
 DEPLOYED and working, key set), toast system + optimistic rollback.
 
-## Danny's live review round (2026-07-16 late) — SHIPPED (`52fe02d`, `f695d27`)
+## Danny's live review round (2026-07-16 late) — SHIPPED (`52fe02d`, `f695d27`, `feeea44`)
 
-Danny tested New Production live and filed 12 notes. All addressed except
-what needs him: **profile dedupe SQL** (duplicates of Danny/Wilder from
-multi-email sign-ins — block 0 in RUN-THIS-SQL.md) and **two function
-deploys** (`transcribe` was 404/undeployed — his mic error was real; and
-`parse-intake` needs redeploy for the new events extraction). Shipped:
-calendar icons theme-aware; parser extracts dated events (scout/prelight/
-shoot) → fills dates + seeds milestones; review makes EVERYTHING editable
-(milestones, concerns, starter tasks — now opt-in suggestions pending his
-real standard checklist); Key Players = external people (staff filtered
-out) with manual add + add-from-screenshot; docs (PDF) upload into Bible;
-sources open full-size; real Project Summary on the Summary sub-tab.
-**Open question for Danny: what's the real starter-task checklist per
-production type?**
-
-## ⭑ IMMEDIATE NEXT TASKS
-
-1. **Danny runs `docs/RUN-THIS-SQL.md`** (one paste in the Supabase SQL
-   editor — M1 activity_events, M2 tasks merge, M4 kinds+debrief, M5
-   feedback). The live app degrades gracefully until then: activity isn't
-   counted, to-dos/feedback stay per-browser, kinds don't persist. After he
-   runs it, each browser auto-imports its local to-dos + feedback reports.
-2. **Danny's verdict on the whole drop** — M6 backdrops (he can self-tune
-   speed/intensity in the account menu now) AND the six modules below.
-3. **Nitzkin discovery (#18)** — the only 22-list item still blocked: what
-   the quoting app is, which statuses quotes drive.
+Danny tested New Production live and filed 12 notes. All shipped: calendar
+icons theme-aware; parser extracts dated events (scout/prelight/shoot) →
+fills dates + seeds milestones (needs the parse-intake redeploy to
+activate); review makes EVERYTHING editable (milestones, concerns, starter
+tasks — now opt-in suggestions pending his real standard checklist); Key
+Players = external people (staff filtered out) with manual add +
+add-from-screenshot; docs (PDF) upload into Bible; sources open full-size;
+real Project Summary on the Summary sub-tab. His "duplicate profiles" note
+turned out to be the hardcoded USERS roster rendering beside real profiles
+— fixed with the merged `buildRoster()` (`feeea44`), DB was always clean.
+Along the way: RUN-THIS-SQL.md rewritten fully idempotent (`538fba9`) after
+his re-run hit 42P07 and rolled back — every future hand-off SQL block must
+be idempotent (drop policy if exists / create if not exists / guarded
+publication adds).
 
 ## Session log — MODULES M1–M7 SHIPPED (2026-07-16 evening, all pushed)
 

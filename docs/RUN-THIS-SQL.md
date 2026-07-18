@@ -1,6 +1,15 @@
 # Danny: run this SQL (one paste, Supabase dashboard → SQL Editor)
 
-## 0) FIRST — profile duplicates (Danny/Wilder) + admin roles
+> **STATUS 2026-07-17: ✅ ALL SQL BELOW HAS BEEN RUN AND VERIFIED.** Danny
+> pasted the migration block and the 5-way diagnostic returned all `true`.
+> The profile-duplicates section is **superseded** — the DB was clean (3
+> real people, no dupes); the duplication Danny saw was the hardcoded
+> legacy roster rendering beside real profiles, fixed in code (`feeea44`,
+> `buildRoster()`). **Do not delete any profiles.** The only remaining
+> action is the two edge-function deploys (see "Voice transcription is
+> down" below). This file is kept as the reference for what was applied.
+
+## 0) ~~FIRST — profile duplicates (Danny/Wilder) + admin roles~~ — RESOLVED, SKIP
 
 Profiles are 1:1 with Google sign-ins, so a "duplicate Danny" is a second
 sign-in under a different email (e.g. personal gmail vs @orbitalvs.com). The
