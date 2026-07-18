@@ -5,22 +5,40 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, Sun, Moon, Check } from 'lucide-react'
+import { LogOut, Sun, Moon, Check, ImagePlus, Settings } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import { useBackground, BACKGROUND_PRESETS, BG_SPEED, BG_INTENSITY } from '../../context/BackgroundContext.jsx'
+import { useToast } from '../../context/ToastContext.jsx'
+import { useBackground, BACKGROUND_PRESETS, BG_SPEED, BG_INTENSITY, fileToBackdropDataUrl } from '../../context/BackgroundContext.jsx'
 import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
 import clsx from 'clsx'
 
 const ROLE_LABEL = { admin: 'Admin', supervisor: 'Supervisor', crew: 'Crew' }
 
+// Shared by the quick menu here and the full /account page: turn a picked file
+// into the stored backdrop image, with quota errors surfaced as a toast.
+export async function applyBackdropFile(file, { setCustomImage, setBackground, toast }) {
+  try {
+    const dataUrl = await fileToBackdropDataUrl(file)
+    setCustomImage(dataUrl)
+    setBackground('image')
+    toast.success('Backdrop image set')
+  } catch (err) {
+    toast.error(err?.name === 'QuotaExceededError'
+      ? "That image is too large to store — try a smaller one"
+      : (err?.message || "Couldn't use that image"))
+  }
+}
+
 export function AccountMenu() {
   const { currentUser, logout } = useApp()
   const { theme, toggleTheme } = useTheme()
-  const { background, setBackground, speed, setSpeed, intensity, setIntensity } = useBackground()
+  const toast = useToast()
+  const { background, setBackground, speed, setSpeed, intensity, setIntensity, customImage, setCustomImage } = useBackground()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const panelRef = useRef(null)
+  const fileRef = useRef(null)
 
   // Close on outside click / Escape
   useEffect(() => {
@@ -113,12 +131,24 @@ export function AccountMenu() {
           {/* Ambient background */}
           <div className="p-4 border-b border-orbital-border">
             <p className="hud-label text-[10px] mb-2.5">Backdrop</p>
-            <div className="grid grid-cols-4 gap-1.5">
+            {/* The Image tile doubles as its own upload entry point */}
+            <input
+              ref={fileRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) applyBackdropFile(file, { setCustomImage, setBackground, toast })
+              }}
+            />
+            <div className="grid grid-cols-3 gap-1.5">
               {BACKGROUND_PRESETS.map(p => (
                 <button
                   key={p.id}
-                  onClick={() => setBackground(p.id)}
-                  title={p.hint}
+                  onClick={() => {
+                    if (p.id === 'image' && !customImage) fileRef.current?.click()
+                    else setBackground(p.id)
+                  }}
+                  title={p.id === 'image' && !customImage ? 'Upload a backdrop photo' : p.hint}
                   className={clsx(
                     'relative aspect-square border transition-all overflow-hidden group',
                     background === p.id
@@ -130,7 +160,7 @@ export function AccountMenu() {
                     ...(background === p.id ? { borderColor: 'var(--accent-bright)' } : {}),
                   }}
                 >
-                  <PresetThumb id={p.id} />
+                  <PresetThumb id={p.id} image={customImage} />
                   {background === p.id && (
                     <span
                       className="absolute inset-0 flex items-center justify-center"
@@ -167,6 +197,16 @@ export function AccountMenu() {
           {/* Session */}
           <div className="p-2">
             <button
+              onClick={() => { setOpen(false); navigate('/account') }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-orbital-subtle hover:text-orbital-text transition-colors"
+              style={{ borderRadius: 2 }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--btn-ghost-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <Settings size={14} />
+              Account settings
+            </button>
+            <button
               onClick={() => { setOpen(false); logout(); navigate('/login') }}
               className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-orbital-subtle hover:text-orbital-text transition-colors"
               style={{ borderRadius: 2 }}
@@ -190,7 +230,7 @@ export function AccountMenu() {
 }
 
 // Labelled range control for the backdrop's speed / intensity.
-function FxSlider({ label, valueLabel, min, max, step, value, onChange }) {
+export function FxSlider({ label, valueLabel, min, max, step, value, onChange }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
@@ -208,8 +248,24 @@ function FxSlider({ label, valueLabel, min, max, step, value, onChange }) {
   )
 }
 
-// Miniature representation of each backdrop preset — pure CSS, no images.
-function PresetThumb({ id }) {
+// Miniature representation of each backdrop preset — pure CSS, except the
+// user-photo tile which shows the actual image (or an upload affordance).
+export function PresetThumb({ id, image }) {
+  if (id === 'image') {
+    if (image) {
+      return (
+        <span
+          className="absolute inset-0"
+          style={{ backgroundImage: `url(${image})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+        />
+      )
+    }
+    return (
+      <span className="absolute inset-0 flex items-center justify-center">
+        <ImagePlus size={14} style={{ color: 'var(--accent-bright)', opacity: 0.85 }} />
+      </span>
+    )
+  }
   if (id === 'orbit') {
     return (
       <span className="absolute inset-0">

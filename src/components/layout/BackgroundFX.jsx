@@ -27,6 +27,7 @@ export function BackgroundFX({ preset: forced }) {
       {preset === 'starfield' && <StarfieldLayer />}
       {preset === 'grid'      && <GridLayer />}
       {preset === 'aurora'    && <AuroraLayer />}
+      {preset === 'image'     && <ImageLayer src={ctx?.customImage} />}
     </div>
   )
 }
@@ -135,6 +136,19 @@ function LogoFlipLayer() {
     )
   }
   return <div className="bgfx-wave">{cells}</div>
+}
+
+// ── Image — the user's own photo, cover-fit, behind a theme-aware scrim so
+//    text and glass cards stay readable on any picture. The intensity slider
+//    still dims the whole layer toward the flat theme canvas.
+function ImageLayer({ src }) {
+  if (!src) return null
+  return (
+    <>
+      <div className="bgfx-image" style={{ backgroundImage: `url(${src})` }} />
+      <div className="bgfx-image-scrim" />
+    </>
+  )
 }
 
 function StarfieldLayer() {

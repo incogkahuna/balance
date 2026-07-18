@@ -84,6 +84,7 @@
   --fx-emblem:    0.20;
   --fx-wave-ink:  #2a7bbb;
   --fx-wave-dim:  0.35;
+  --fx-image-scrim: linear-gradient(180deg, rgba(243,245,249,0.80), rgba(243,245,249,0.62));
   --fx-wave-hot:  0.90;
 }
 
@@ -143,6 +144,7 @@
   --fx-wave-ink:  #58c4ec;
   --fx-wave-dim:  0.30;
   --fx-wave-hot:  0.95;
+  --fx-image-scrim: linear-gradient(180deg, rgba(7,10,18,0.72), rgba(7,10,18,0.52));
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -620,6 +622,19 @@
   right: -18vw; bottom: -22vw;
   background: radial-gradient(circle at 60% 60%, var(--fx-glow-b), transparent 65%);
   animation: bgfx-float-b calc(58s / var(--fx-speed, 1)) ease-in-out infinite;
+}
+
+/* ── Preset: IMAGE — the user's own photo behind a theme-aware scrim ───────── */
+.bgfx-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+.bgfx-image-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--fx-image-scrim);
 }
 
 /* Giant emblem watermark, low-left (orbit preset) — mostly on-screen so it
