@@ -550,8 +550,15 @@ export function AppProvider({ children }) {
       USERS.find(u => u.email && u.email.toLowerCase() === profileEmail) ||
       USERS.find(u => u.name.toLowerCase() === profileName)
     if (legacy) {
+      // Keep the legacy id (demo data references it) but let the profile win
+      // on display fields — same rule buildRoster applies — so edits made on
+      // the account page (name, color) show up everywhere immediately.
+      const name = profile.name || legacy.name
       return {
         ...legacy,
+        name,
+        color: profile.color || legacy.color,
+        avatar: name === legacy.name ? legacy.avatar : name.charAt(0).toUpperCase(),
         role: profile.role,
         email: profile.email,
         profileId: profile.id,

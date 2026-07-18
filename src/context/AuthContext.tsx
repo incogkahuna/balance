@@ -29,6 +29,7 @@ interface AuthContextValue {
   error: string | null
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
+  updateProfile: (patch: Partial<Pick<Profile, 'name' | 'color' | 'avatar_url'>>) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -231,6 +232,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error
   }
 
+  // Own-row edits only (name / color / avatar) — the profiles_update_own RLS
+  // policy blocks role changes, so role is deliberately not in the patch type.
+  async function updateProfile(patch: Partial<Pick<Profile, 'name' | 'color' | 'avatar_url'>>) {
+    if (!session?.user) throw new Error('Not signed in')
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(patch)
+      .eq('id', session.user.id)
+      .select()
+      .single()
+    if (error) throw error
+    setProfile(data as Profile)
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -241,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         signInWithGoogle,
         signOut,
+        updateProfile,
       }}
     >
       {children}

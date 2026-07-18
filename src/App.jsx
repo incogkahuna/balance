@@ -61,6 +61,7 @@ const PrototypePage  = lazyWithRetry(() => import('./pages/PrototypePage.jsx').t
 const GearPage       = lazyWithRetry(() => import('./pages/GearPage.jsx').then(m => ({ default: m.GearPage })))
 const FeedbackPage   = lazyWithRetry(() => import('./pages/FeedbackPage.jsx').then(m => ({ default: m.FeedbackPage })))
 const ToDosPage      = lazyWithRetry(() => import('./pages/ToDosPage.jsx').then(m => ({ default: m.ToDosPage })))
+const AccountPage    = lazyWithRetry(() => import('./pages/AccountPage.jsx').then(m => ({ default: m.AccountPage })))
 
 // ── Per-page error boundary — keeps sidebar alive if one page crashes ─────────
 class PageBoundary extends Component {
@@ -145,6 +146,8 @@ export default function App() {
             <Route path="/feedback"             element={wrap(<FeedbackPage />)} />
             {/* To-Dos — daily-scoped work items, distinct from production Tasks */}
             <Route path="/todos"                element={wrap(<ToDosPage />)} />
+            {/* Account — profile, appearance, session (#21 v2) */}
+            <Route path="/account"              element={wrap(<AccountPage />)} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
