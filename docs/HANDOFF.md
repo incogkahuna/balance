@@ -37,11 +37,11 @@ statuses current). `docs/AUDIT-2026-07.md` is the deeper original audit.
    `transcribe` returns 404 (genuinely undeployed — Danny's mic error);
    `parse-intake` needs a redeploy to pick up the new `events` extraction
    (scout/prelight/shoot dates → form dates + milestone seeds). CLI on this
-   machine is logged in; the deploy needs Danny's permission approval:
+   machine is logged in; Danny SAID "deploy" (2026-07-18) but the permission
+   layer blocks production deploys in auto mode — he must approve the two
+   commands interactively when Claude runs them, or paste them himself:
    `supabase functions deploy transcribe --project-ref ectyohuqgpnwivpjpuga`
    `supabase functions deploy parse-intake --project-ref ectyohuqgpnwivpjpuga`
-   Danny has been asked twice and hasn't said "deploy" yet — ask once,
-   don't nag.
 2. **Danny re-tests New Production on the live site** with a real screenshot
    (post-redeploy) — that's the end-to-end proof of the events parsing.
 3. **Get Danny's real starter-task checklist per production type** — the
@@ -50,8 +50,11 @@ statuses current). `docs/AUDIT-2026-07.md` is the deeper original audit.
 4. **Nitzkin discovery (#18)** — still the only 22-list item blocked: what
    the quoting app is, which statuses quotes drive.
 5. Then: **#17 constellation/grav-map rework** (own session, big canvas)
-   and M6-remaining polish (page composition, image-upload backdrops, full
-   account page).
+   and M6-remaining page-composition polish (taste-driven — do it live with
+   Danny). **Image-upload backdrops + full account page SHIPPED 2026-07-18**
+   (`ade426e`, `bf8f184`): "Image" backdrop preset (client-side compressed,
+   per-browser stored, theme-aware scrim) and `/account` (name/color edits →
+   profiles row via profiles_update_own RLS, full appearance kit, session).
 
 **Still on Danny (older items):** demo-wipe SQL (#10), confirm phase6h ran,
 Supabase free→paid upgrade.

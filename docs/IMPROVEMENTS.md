@@ -136,8 +136,20 @@ orbitalvs.com (Inter Tight brand face, official emblem + gradient throughout).
   Verified in dev: flip preset (54 independent clocks), live slider drag
   updates `--fx-speed`/opacity + durations instantly and persists, sliders
   hide on Minimal, no console errors. **AWAITING DANNY'S EYES.**
+- ✅ **M6: image-upload backdrops SHIPPED 2026-07-18 (`ade426e`)** — new
+  "Image" preset: any photo, downscaled client-side (1920px JPEG) and stored
+  per browser (no bucket/SQL needed), cover-fit behind a theme-aware scrim
+  (`--fx-image-scrim` both themes) so cards stay readable. Picker tile = the
+  upload entry point; quota errors toast. Verified in dev both themes.
+- ✅ **M6/#21 v2: full account page SHIPPED 2026-07-18 (`bf8f184`)** —
+  `/account` (linked from AccountMenu → "Account settings"): editable display
+  name + accent color persisted to profiles (profiles_update_own RLS, role
+  locked), theme + full backdrop kit (incl. image upload/replace/remove) +
+  motion sliders, session + sign out. `currentUser` now prefers profile
+  name/color over the legacy roster entry (matches buildRoster's
+  profiles-win rule). Dev-bypass sees identity edits disabled.
 - ⏳ **M6 remaining:** page-level composition polish (dashboard layout, detail
-  pages), image-upload backdrops (needs storage), full account page, and
+  pages — taste-driven, wants Danny's direction live), and
   **#17 constellation/grav-map rework** (its own session — big canvas).
   - Key files: `src/components/layout/BackgroundFX.jsx`,
     `src/context/BackgroundContext.jsx` (preset registry),
