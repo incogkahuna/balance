@@ -7,7 +7,7 @@ import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
 import {
   PRODUCTION_STATUS, LOCATION_TYPE, ROLES,
   PRODUCTION_ROLE_PRESETS, normalizeAssignedMember,
-  createProduction, USERS, PROJECT_KIND, PROJECT_KIND_LABEL,
+  createProduction, PROJECT_KIND, PROJECT_KIND_LABEL,
 } from '../../data/models.js'
 
 // Sentinel for the per-phase role dropdown "Other…" option.
@@ -17,7 +17,7 @@ const CUSTOM_ROLE = '__custom_role__'
 const NO_WALL = '__no_wall__'
 
 export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, kind: kindProp }) {
-  const { currentUser, ledWalls = [], productions = [], syncProductionWallAssignment } = useApp()
+  const { currentUser, ledWalls = [], productions = [], users = [], syncProductionWallAssignment } = useApp()
   const isEdit = Boolean(initial?.id)
   // Project kind (M4 / #5): tours + internal projects share the record shape
   // but skip production-only fields (LED wall / type / location).
@@ -390,7 +390,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, 
       <div>
         <label className="label">Team</label>
         <div className="space-y-3">
-          {USERS.map(user => {
+          {users.map(user => {
             const assigned = form.assignedMembers.find(m => m.userId === user.id)
             return (
               <div

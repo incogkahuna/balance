@@ -2,11 +2,11 @@ import { useState, useRef } from 'react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
-import { TASK_PRIORITY, TASK_STATUS, USERS, createTask } from '../../data/models.js'
+import { TASK_PRIORITY, TASK_STATUS, createTask } from '../../data/models.js'
 import { DictationMic } from '../voice/DictationMic.tsx'
 
 export function TaskForm({ productionId, initial, onClose }) {
-  const { currentUser, addTask, updateTask, deleteTask, getProduction } = useApp()
+  const { currentUser, addTask, updateTask, deleteTask, getProduction, users } = useApp()
   // Cross-fill (M7 / #16): prep tasks are due by the shoot — default a new
   // task's due date to the production's start date.
   const production = productionId ? getProduction(productionId) : null
@@ -111,7 +111,7 @@ export function TaskForm({ productionId, initial, onClose }) {
             onChange={e => set('assigneeId', e.target.value)}
           >
             <option value="">Select person</option>
-            {USERS.map(u => (
+            {users.map(u => (
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import {
-  USERS, TASK_STATUS, TASK_VISIBILITY, createTask,
+  TASK_STATUS, TASK_VISIBILITY, createTask,
 } from '../data/models.js'
 import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
@@ -19,7 +19,7 @@ import clsx from 'clsx'
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ToDosPage() {
-  const { currentUser, tasks, addTask, updateTask, deleteTask, profiles, resolveUserName } = useApp()
+  const { currentUser, tasks, addTask, updateTask, deleteTask, users, resolveUserName } = useApp()
 
   // Anything the current user can be addressed as (legacy id + profile UUID).
   const isMe = (id) => Boolean(id) && (id === currentUser?.id || id === currentUser?.profileId)
@@ -140,7 +140,7 @@ export function ToDosPage() {
         </div>
 
         {/* Quick-add */}
-        <QuickAdd onAdd={handleQuickAdd} currentUser={currentUser} profiles={profiles} />
+        <QuickAdd onAdd={handleQuickAdd} currentUser={currentUser} roster={users} />
 
         {/* Scope chips */}
         <div className="flex gap-1 mt-4 mb-4 flex-wrap">
@@ -220,18 +220,15 @@ function StatCell({ label, value, color }) {
 }
 
 // ── QuickAdd — single-line input with assignee + due-date + visibility ─────
-function QuickAdd({ onAdd, currentUser, profiles }) {
+function QuickAdd({ onAdd, currentUser, roster }) {
   const [title, setTitle]           = useState('')
   const [dueDate, setDueDate]       = useState(() => format(new Date(), 'yyyy-MM-dd'))
   const [assigneeId, setAssigneeId] = useState(currentUser?.id || '')
   const [visibility, setVisibility] = useState(TASK_VISIBILITY.TEAM)
   const [expanded, setExpanded]     = useState(false)
 
-  // Assignee roster: real profiles when loaded, legacy USERS as fallback
-  // (dev bypass has no profiles). Both id kinds resolve fine downstream.
-  const roster = (profiles && profiles.length > 0)
-    ? profiles.map(p => ({ id: p.id, name: p.name }))
-    : USERS.map(u => ({ id: u.id, name: u.name }))
+  // Assignee roster: the app's merged roster (real profiles deduped against
+  // the legacy list), so each person appears once.
   const meId = roster.some(r => r.id === currentUser?.profileId)
     ? currentUser?.profileId
     : currentUser?.id

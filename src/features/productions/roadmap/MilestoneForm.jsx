@@ -6,7 +6,7 @@ import { DictationMic } from '../../../components/voice/DictationMic.tsx'
 import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
   MILESTONE_TYPE, MILESTONE_STATUS, MILESTONE_PRIORITY,
-  createMilestone, USERS,
+  createMilestone,
 } from '../../../data/models.js'
 
 // Selectable people for milestone owner / participant lookups. Per Danny:
@@ -15,11 +15,11 @@ import {
 // from outside the production team. Contractors on THIS production are
 // layered in afterward since they're production-specific additions rather
 // than always-on-the-roster.
-function useProductionTeam(production) {
+function useProductionTeam(production, roster) {
   const { resolveAssignee } = useApp()
   return useMemo(() => {
-    const result = [...USERS]
-    const seen = new Set(USERS.map(u => u.id))
+    const result = [...roster]
+    const seen = new Set(roster.map(u => u.id))
     const contractorIds = [
       ...(production.assignedContractors || []).map(a => a.contractorId),
       production.stageManagerId,
@@ -30,12 +30,12 @@ function useProductionTeam(production) {
       if (c) { result.push(c); seen.add(cid) }
     }
     return result
-  }, [production, resolveAssignee])
+  }, [production, resolveAssignee, roster])
 }
 
 export function MilestoneForm({ production, initial, onClose }) {
-  const { currentUser, addMilestone, updateMilestone, deleteMilestone } = useApp()
-  const team = useProductionTeam(production)
+  const { currentUser, addMilestone, updateMilestone, deleteMilestone, users } = useApp()
+  const team = useProductionTeam(production, users)
 
   // Eager-create flow: if there's no `initial`, we create a placeholder
   // milestone the moment this form mounts so subsequent edits can save
@@ -214,7 +214,7 @@ export function MilestoneForm({ production, initial, onClose }) {
           </div>
 
           {/* Participants — two-section roster: AVAILABLE / ASSIGNED.
-              Shows the entire salary team (USERS) regardless of whether each
+              Shows the entire salary team (merged roster) regardless of whether each
               person is on this production, so milestone owners can pull in
               anyone from the studio. Clicking a chip moves it between
               sections. The current Owner sits in AVAILABLE as a greyed-out
@@ -244,7 +244,7 @@ export function MilestoneForm({ production, initial, onClose }) {
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
-                  {USERS.filter(p => form.participantIds.includes(p.id)).map(person => (
+                  {users.filter(p => form.participantIds.includes(p.id)).map(person => (
                     <button
                       key={person.id}
                       type="button"
@@ -277,7 +277,7 @@ export function MilestoneForm({ production, initial, onClose }) {
                 AVAILABLE
               </p>
               {(() => {
-                const available = USERS.filter(p => !form.participantIds.includes(p.id))
+                const available = users.filter(p => !form.participantIds.includes(p.id))
                 if (available.length === 0) {
                   return (
                     <p className="text-[11px] text-orbital-dim italic py-1">

@@ -9,7 +9,7 @@ import {
 import { ChevronLeft, ChevronRight, Users, MapPin } from 'lucide-react'
 import { MiniCalendar } from '../components/ui/MiniCalendar.jsx'
 import { useApp } from '../context/AppContext.jsx'
-import { USERS, PRODUCTION_STATUS } from '../data/models.js'
+import { PRODUCTION_STATUS } from '../data/models.js'
 import { MILESTONE_TYPE_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge } from '../components/ui/StatusBadge.jsx'
 import { ContractorPhoto } from '../components/files/ContractorPhoto.tsx'
@@ -28,7 +28,7 @@ export function SchedulePage() {
   const [reference, setReference] = useState(new Date())
   const navigate = useNavigate()
 
-  const { productions, contractors } = useApp()
+  const { productions, contractors, users } = useApp()
 
   // Calendar popover state — replaces the native date input so we can
   // decorate days with event indicators (per Wilder: dates with stuff
@@ -99,7 +99,7 @@ export function SchedulePage() {
     const rowMap = {}
 
     // Orbital staff
-    USERS.forEach(user => {
+    users.forEach(user => {
       const prods = visibleProductions.filter(p =>
         p.assignedMembers.some(m => m.userId === user.id)
       )
@@ -149,7 +149,7 @@ export function SchedulePage() {
     })
 
     return Object.values(rowMap)
-  }, [visibleProductions, contractors])
+  }, [visibleProductions, contractors, users])
 
   // Milestones from all visible productions (for Gantt markers)
   const allMilestones = useMemo(() =>

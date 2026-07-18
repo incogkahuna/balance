@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
-import { ROLES, USERS } from '../../../data/models.js'
+import { ROLES } from '../../../data/models.js'
 import { StageManagerSlot } from './StageManagerSlot.jsx'
 import { AssignedTeamMember } from './AssignedTeamMember.jsx'
 import { ContractorSelectSheet } from './ContractorSelectSheet.jsx'
 
 export function TeamAssignment({ production }) {
-  const { currentUser, assignContractor } = useApp()
+  const { currentUser, assignContractor, resolveAssignee } = useApp()
   const [showContractorSelect, setShowContractorSelect] = useState(false)
 
   const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
@@ -35,7 +35,7 @@ export function TeamAssignment({ production }) {
           <p className="section-title mb-3">Orbital Staff</p>
           <div className="space-y-2">
             {production.assignedMembers.map(({ userId, roleOnProduction }) => {
-              const user = USERS.find(u => u.id === userId)
+              const user = resolveAssignee(userId)
               if (!user) return null
               return (
                 <div

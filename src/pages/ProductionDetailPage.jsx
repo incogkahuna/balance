@@ -8,7 +8,7 @@ import {
   ChevronDown, Check,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, PRODUCTION_STATUS, TASK_STATUS, USERS, createDebriefNote } from '../data/models.js'
+import { ROLES, PRODUCTION_STATUS, TASK_STATUS, createDebriefNote } from '../data/models.js'
 import { DictationMic } from '../components/voice/DictationMic.tsx'
 import { computeRoadmapHealth, ROADMAP_HEALTH } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
@@ -645,7 +645,8 @@ function AddonsTab({ production, canAdd, onAdd, onDelete, isAdminOrSup }) {
 }
 
 function AddonCard({ addon, canDelete, onDelete }) {
-  const loggedByUser = USERS.find(u => u.id === addon.loggedBy)
+  const { resolveAssignee } = useApp()
+  const loggedByUser = resolveAssignee(addon.loggedBy)
   const [showPhotos, setShowPhotos] = useState(false)
 
   return (
@@ -748,8 +749,6 @@ function DebriefTab({ production, canDebrief, onEdit }) {
     setNoteText('')
   }
 
-  const submittedByUser = fb ? USERS.find(u => u.id === fb.submittedBy) : null
-
   return (
     <div className="space-y-5">
       {/* ── Quick notes — capture as it happens ─────────────────────────── */}
@@ -846,9 +845,9 @@ function DebriefTab({ production, canDebrief, onEdit }) {
 
           {fb.submittedBy && (
             <div className="flex items-center gap-2 text-xs text-orbital-subtle">
-              {submittedByUser && <Avatar userId={fb.submittedBy} size="xs" />}
+              <Avatar userId={fb.submittedBy} size="xs" />
               <span>
-                Submitted by {submittedByUser?.name || resolveUserName(fb.submittedBy) || fb.submittedBy}
+                Submitted by {resolveUserName(fb.submittedBy) || fb.submittedBy}
                 {fb.submittedAt && ` on ${format(parseISO(fb.submittedAt), 'MMMM d, yyyy')}`}
               </span>
             </div>

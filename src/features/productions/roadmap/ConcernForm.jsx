@@ -5,18 +5,18 @@ import { useAutoSave } from '../../../hooks/useAutoSave.js'
 import { DictationMic } from '../../../components/voice/DictationMic.tsx'
 import { SaveStatusPill } from '../../../components/ui/SaveStatusPill.jsx'
 import {
-  CONCERN_CATEGORY, CONCERN_IMPACT, CONCERN_STATUS, createLogisticalConcern, USERS,
+  CONCERN_CATEGORY, CONCERN_IMPACT, CONCERN_STATUS, createLogisticalConcern,
 } from '../../../data/models.js'
 
 // Selectable people for concern owner. Per Danny: the entire salary roster
 // is eligible regardless of whether they're on this production. Contractors
 // who ARE on this production get layered in afterward since they're
 // production-specific additions.
-function useProductionTeam(production) {
+function useProductionTeam(production, roster) {
   const { resolveAssignee } = useApp()
   return useMemo(() => {
-    const result = [...USERS]
-    const seen = new Set(USERS.map(u => u.id))
+    const result = [...roster]
+    const seen = new Set(roster.map(u => u.id))
     const contractorIds = [
       ...(production.assignedContractors || []).map(a => a.contractorId),
       production.stageManagerId,
@@ -27,12 +27,12 @@ function useProductionTeam(production) {
       if (c) { result.push(c); seen.add(cid) }
     }
     return result
-  }, [production, resolveAssignee])
+  }, [production, resolveAssignee, roster])
 }
 
 export function ConcernForm({ production, initial, onClose }) {
-  const { currentUser, addConcern, updateConcern, deleteConcern } = useApp()
-  const team = useProductionTeam(production)
+  const { currentUser, addConcern, updateConcern, deleteConcern, users } = useApp()
+  const team = useProductionTeam(production, users)
 
   // ── Eager-create placeholder ──────────────────────────────────────────────
   // Same pattern as MilestoneForm: create an empty record on mount so

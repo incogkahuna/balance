@@ -1,5 +1,5 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { USERS, LED_WALLS_SEED, createWallAssignment, ROLES, computeDateDrivenStatus, PRODUCTION_STATUS_RANK } from '../data/models.js'
+import { USERS, buildRoster, LED_WALLS_SEED, createWallAssignment, ROLES, computeDateDrivenStatus, PRODUCTION_STATUS_RANK } from '../data/models.js'
 import { FEEDBACK_STATUS } from '../data/models.js'
 import { useAuth } from './AuthContext.tsx'
 import { useToast } from './ToastContext.jsx'
@@ -436,6 +436,11 @@ export function AppProvider({ children }) {
       })
     return () => { cancelled = true }
   }, [profile])
+
+  // Merged team roster: real signed-in profiles deduped against the legacy
+  // hardcoded list. This is what every person-picker in the app should show —
+  // so "Danny" (legacy) and "Danny Horgan" (profile) collapse into one.
+  const roster = useMemo(() => buildRoster(profilesList), [profilesList])
 
   // Resolve any user identifier (auth UUID or legacy string id) to a display
   // name. Falls back through profiles → USERS → contractors → null.
@@ -923,7 +928,9 @@ export function AppProvider({ children }) {
   // Resolves any assignee ID to a display-ready object.
   // Checks USERS first, then contractors — backward compatible with existing data.
   const resolveAssignee = useCallback((userId) => {
-    const user = USERS.find(u => u.id === userId)
+    // Merged roster first (real profiles + unmatched legacy), so a UUID
+    // assignee resolves as well as a legacy string id.
+    const user = roster.find(u => u.id === userId) || USERS.find(u => u.id === userId)
     if (user) return { ...user, type: 'user' }
     const contractor = contractors.find(c => c.id === userId)
     if (contractor) return {
@@ -937,7 +944,7 @@ export function AppProvider({ children }) {
       type: 'contractor',
     }
     return null
-  }, [contractors])
+  }, [contractors, roster])
 
   // ─── Roadmap CRUD ─────────────────────────────────────────────────────────
   // All writes go through the production record's roadmap sub-object via the
@@ -1167,7 +1174,9 @@ export function AppProvider({ children }) {
     // Auth
     currentUser,
     logout,
-    users: USERS,
+    // Merged team roster (real profiles deduped against the legacy list).
+    // Every person-picker should read this, not the raw USERS import.
+    users: roster,
 
     // Dev-only profile impersonation
     devViewAs,

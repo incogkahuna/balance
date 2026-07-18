@@ -1,8 +1,11 @@
 import clsx from 'clsx'
-import { USERS } from '../../data/models.js'
+import { useApp } from '../../context/AppContext.jsx'
 
 export function Avatar({ userId, size = 'sm', className, showName = false }) {
-  const user = USERS.find(u => u.id === userId)
+  const { resolveAssignee } = useApp()
+  // Resolve through the merged roster (real profiles + legacy) AND contractors
+  // so a profile-UUID assignee renders, not just legacy string ids.
+  const user = resolveAssignee(userId)
   if (!user) return null
 
   const sizeClass = {
@@ -26,6 +29,7 @@ export function Avatar({ userId, size = 'sm', className, showName = false }) {
 }
 
 export function AvatarGroup({ userIds, max = 4, size = 'sm' }) {
+  const { resolveAssignee } = useApp()
   const visible = userIds.slice(0, max)
   const overflow = userIds.length - max
 
@@ -38,7 +42,7 @@ export function AvatarGroup({ userIds, max = 4, size = 'sm' }) {
   return (
     <div className="flex items-center">
       {visible.map((uid, i) => {
-        const user = USERS.find(u => u.id === uid)
+        const user = resolveAssignee(uid)
         if (!user) return null
         return (
           <div

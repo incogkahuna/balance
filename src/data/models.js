@@ -227,6 +227,64 @@ export const USERS = [
   { id: 'nitz',   name: 'Brian Nitzkin', email: 'brian@orbitalvs.com', role: ROLES.CREW,    avatar: 'BN', color: '#14b8a6' },
 ]
 
+// ─── Roster merge (dedup real profiles vs the legacy hardcoded list) ─────────
+// The app predates real auth and shipped with the hardcoded USERS roster above.
+// Now that people sign in, both a legacy entry ("Danny") and a real profile
+// ("Danny Horgan") can describe the same person — that's the duplicate Danny
+// flagged. buildRoster merges them: real profiles win (their UUID is the
+// assignable id), and a legacy USERS entry survives ONLY if no profile
+// represents that person. A person is "already represented" when a profile
+// matches by email, by exact full name, or by an unambiguous single-token
+// first name (so legacy "Wilder" folds into "Wilder Herms", while the two
+// different Brians — Rodriguez and Nitzkin — never collapse into each other).
+export function buildRoster(profiles = []) {
+  const norm = s => (s || '').trim().toLowerCase()
+  const firstToken = s => norm(s).split(/\s+/)[0]
+
+  // Legacy first-token frequencies — a first name shared by two legacy people
+  // (Brian, Brian Nitzkin) is ambiguous and never eligible for first-name folds.
+  const legacyFirstTokenCounts = {}
+  for (const u of USERS) {
+    const ft = firstToken(u.name)
+    legacyFirstTokenCounts[ft] = (legacyFirstTokenCounts[ft] || 0) + 1
+  }
+
+  const roster = []
+  const emails = new Set()
+  const fullNames = new Set()
+  const profileFirstTokenCounts = {}
+
+  for (const p of profiles) {
+    roster.push({
+      id:      p.id,
+      name:    p.name,
+      email:   p.email || '',
+      role:    p.role,
+      avatar:  (p.name || '?').charAt(0).toUpperCase(),
+      color:   p.color || '#6b7280',
+      isProfile: true,
+    })
+    if (p.email) emails.add(norm(p.email))
+    fullNames.add(norm(p.name))
+    const ft = firstToken(p.name)
+    profileFirstTokenCounts[ft] = (profileFirstTokenCounts[ft] || 0) + 1
+  }
+
+  for (const u of USERS) {
+    const ft = firstToken(u.name)
+    const singleToken = norm(u.name).split(/\s+/).length === 1
+    const emailHit    = u.email && emails.has(norm(u.email))
+    const fullNameHit = fullNames.has(norm(u.name))
+    const firstNameHit = singleToken
+      && profileFirstTokenCounts[ft] === 1
+      && legacyFirstTokenCounts[ft] === 1
+    if (emailHit || fullNameHit || firstNameHit) continue
+    roster.push({ ...u, isProfile: false })
+  }
+
+  return roster
+}
+
 // ─── Factory functions ────────────────────────────────────────────────────────
 export function createProduction(overrides = {}) {
   return {

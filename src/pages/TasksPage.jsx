@@ -6,7 +6,7 @@ import {
   Search, Film, User, ArrowUpDown, Plus,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, TASK_STATUS, TASK_PRIORITY, USERS, PRODUCTION_STATUS } from '../data/models.js'
+import { ROLES, TASK_STATUS, TASK_PRIORITY, PRODUCTION_STATUS } from '../data/models.js'
 import { TaskCard } from '../components/tasks/TaskCard.jsx'
 import { TaskForm } from '../components/tasks/TaskForm.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
@@ -48,7 +48,7 @@ const STATUS_RANK = {
 }
 
 export function TasksPage() {
-  const { currentUser, tasks, productions, tasksLoading } = useApp()
+  const { currentUser, tasks, productions, tasksLoading, users } = useApp()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -200,8 +200,8 @@ export function TasksPage() {
   // Assignee picker — only people who actually have tasks in the base list
   const assigneesWithTasks = useMemo(() => {
     const ids = new Set(baseList.map(t => t.assigneeId).filter(Boolean))
-    return USERS.filter(u => ids.has(u.id))
-  }, [baseList])
+    return users.filter(u => ids.has(u.id))
+  }, [baseList, users])
 
   // Crew cannot see the "pending verification" filter — it's an admin concern.
   const availableFilters = Object.entries(FILTERS).filter(([key]) => {
