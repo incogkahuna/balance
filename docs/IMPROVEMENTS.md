@@ -81,9 +81,16 @@ originals kept in `balance_todos_v1_backup`). **Migration in RUN-THIS-SQL.md.**
   = day rate × days × quantity** (total editable); "Generate Document"
   compiles debrief answers + costed add-on table + floor notes into a
   copyable plain-text doc.
-- ⏳ **#18 Nitzkin quoting app integration:** still **blocked on discovery** —
-  need what the quoting app is (URL/repo/export format) and which status
-  transitions a quote should drive.
+- ✅ **#18 Nitzkin quoting — SHIPPED 2026-07-19/20** as the full job
+  pipeline (`src/features/pipeline/`, `/pipeline` routes): deals (top-level
+  object; quotes optional), versioned rate card (TVC + Mobile, Little Dipper
+  excluded), quote builder (dependency rules, day-driven qty, discounts with
+  required labels, internal floors), client PDF, client history, yellow/
+  green-lit auto-triggers into a real Balance production + handoff (gates,
+  9–9 TBA calendar holds), four-role money scoping (Mike Sill rule via RLS
+  table separation), analytics, rate-card admin. See
+  `docs/pipeline/ARCHITECTURE-NOTES.md`. Awaiting: Danny runs the pipeline
+  SQL block (top of RUN-THIS-SQL.md); Brian/AJ first sign-ins.
 
 ## Module 5 — Frictionless feedback (`#3`) — ✅ SHIPPED 2026-07-16 (`5f12851`)
 

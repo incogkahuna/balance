@@ -1,8 +1,31 @@
 # Balance — Session Handoff
 
-*Updated 2026-07-17 early AM (end of the marathon session: M6 dial-ups,
-modules M1–M7, Danny's 12-item live review, roster dedup). Read this first,
-then `docs/IMPROVEMENTS.md` (the working plan), then go.*
+*Updated 2026-07-19/20 (job-pipeline build session). Read this first, then
+`docs/IMPROVEMENTS.md` (the working plan), then go.*
+
+## ⭑⭑ NEWEST — JOB PIPELINE (#18 Nitzkin) IS BUILT (2026-07-19/20)
+
+The full intake/quoting/handoff system shipped in this session — deals,
+versioned rate card (TVC + Mobile templates, Little Dipper excluded), quote
+builder with live dependency rules + day-driven quantities + internal
+floors, client PDF (legacy sheet format, print CSS), client history,
+yellow-lit/green-lit auto-triggers (spawns a real draft Balance production +
+handoff with crew/tech-spec/three-sentence summary; green-light publishes it
++ 9–9 TBA calendar holds + deposit/COI tech-scout gate), role-scoped access
+(Mike Sill rule at the data layer: money in separate RLS-guarded tables;
+Brian=admin_finance, AJ+Danny=admin_exec, Mark=production, Wilder=pipeline),
+pipeline analytics, rate card admin with versioning, 7-deal demo seed.
+
+Read `docs/pipeline/ARCHITECTURE-NOTES.md` for the design. Verified
+end-to-end in dev (definition-of-done walkthrough passed, incl. budget-first
+zero-quote green-light, dependency-violation send block, rate version
+pinning). **On Danny:** paste the pipeline block in `docs/RUN-THIS-SQL.md`
+(top section, idempotent) — until then the live app falls back to
+per-browser localStorage for pipeline data (works, but not shared). Brian
+(brian@orbitalvs.com) and AJ (aj@orbitalvs.com) get their roles
+automatically on first Google sign-in (pre-assigned by email in the
+migration). Dev testing: the DevProfileSwitcher (Nitzkin/Mark/Wilder
+entries) exercises all four role projections.
 
 ## What this project is right now
 
