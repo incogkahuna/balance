@@ -5,7 +5,7 @@ import { usePipeline } from './PipelineContext.jsx'
 import {
   resolveRate, lineSubtotal, computeTotals, fmtMoney, quoteExpiryDate,
 } from './quoteMath.js'
-import { fmtDate } from './components.jsx'
+import { fmtDate, PipelineNoAccess } from './components.jsx'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QuotePdfPage — the CLIENT-FACING render. This is Orbital's IP: the full
@@ -38,13 +38,14 @@ const PRINT_CSS = `
 export function QuotePdfPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { ready, isAdmin, quotes, deals, rateCardByVersion } = usePipeline()
+  const { ready, isAdmin, pipelineRole, quotes, deals, rateCardByVersion } = usePipeline()
 
   const quote = quotes.find((q) => q.id === id)
   const deal = quote ? deals.find((d) => d.id === quote.dealId) : null
   const card = quote ? rateCardByVersion(quote.rateCardVersion) : null
   const totals = useMemo(() => (card && quote ? computeTotals(card, quote) : null), [card, quote])
 
+  if (!pipelineRole) return <PipelineNoAccess />
   if (!ready) return null
   if (!isAdmin || !quote || !deal || !card) {
     return (

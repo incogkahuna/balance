@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, AlertTriangle, Eye, Send, Lock, Sparkles } from 'lucide-react'
 import { usePipeline } from './PipelineContext.jsx'
-import { fmtDate } from './components.jsx'
+import { fmtDate, PipelineNoAccess } from './components.jsx'
 import {
   resolveRate, proposedQty, lineSubtotal, computeTotals, resolveDependencies,
   dependencyViolations, activeFlags, internalFloor, fmtMoney,
@@ -24,7 +24,7 @@ export function QuoteBuilderPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const {
-    ready, isAdmin, quotes, deals, patchQuote, markQuoteSent, markQuoteAccepted,
+    ready, isAdmin, pipelineRole, quotes, deals, patchQuote, markQuoteSent, markQuoteAccepted,
     rateCardByVersion,
   } = usePipeline()
 
@@ -40,6 +40,7 @@ export function QuoteBuilderPage() {
   const flags = useMemo(() => (card && quote ? activeFlags(card, quote) : []), [card, quote])
   const floors = useMemo(() => (card && quote ? internalFloor(card, quote) : []), [card, quote])
 
+  if (!pipelineRole) return <PipelineNoAccess />
   if (!ready) return <Center>LOADING</Center>
   if (!isAdmin) return <Center>Quotes are visible to admin roles only.</Center>
   if (!quote || !deal || !card) {

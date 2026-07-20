@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Briefcase, Sparkles } from 'lucide-react'
 import { usePipeline, STATUS_ORDER, STATUS_LABELS, ROLE_LABELS } from './PipelineContext.jsx'
-import { DealStatusBadge, VenueChip, ModeChip, MoneyTriple, ClientHistoryList, fmtDate } from './components.jsx'
+import { DealStatusBadge, VenueChip, ModeChip, MoneyTriple, ClientHistoryList, fmtDate, PipelineNoAccess } from './components.jsx'
 import { Modal } from '../../components/ui/Modal.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
 import { seedDemoData } from './demoSeed.js'
@@ -37,6 +37,8 @@ export function DealsPage() {
     for (const d of filtered) (buckets[d.status] || (buckets[d.status] = [])).push(d)
     return buckets
   }, [filtered])
+
+  if (!pipelineRole) return <PipelineNoAccess />
 
   const handleSeed = async () => {
     setSeeding(true)

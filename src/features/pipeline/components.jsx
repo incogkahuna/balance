@@ -6,6 +6,20 @@ import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import { usePipeline, STATUS_LABELS, STATUS_COLORS } from './PipelineContext.jsx'
 import { fmtMoneyShort, quoteIsExpired, quoteExpiryDate, computeTotals } from './quoteMath.js'
 
+// Shown when someone without a pipeline role deep-links into /pipeline/*.
+// The nav is already hidden for them; this covers bookmarks and typed URLs.
+export function PipelineNoAccess() {
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-10 text-center">
+      <p className="hud-label mb-2">JOB PIPELINE</p>
+      <p className="text-sm text-orbital-subtle">
+        The pipeline is limited to the deal team (Brian, AJ, Mark, Wilder).
+        Ask Danny if you need access.
+      </p>
+    </div>
+  )
+}
+
 // ── Small shared chips/badges for the pipeline domain ────────────────────────
 
 export function DealStatusBadge({ status, className }) {

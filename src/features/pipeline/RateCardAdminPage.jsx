@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, History, Trash2 } from 'lucide-react'
 import { usePipeline } from './PipelineContext.jsx'
 import { fmtMoney } from './quoteMath.js'
-import { fmtDate } from './components.jsx'
+import { fmtDate, PipelineNoAccess } from './components.jsx'
 import { Modal } from '../../components/ui/Modal.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
 
@@ -18,7 +18,7 @@ import { useToast } from '../../context/ToastContext.jsx'
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function RateCardAdminPage() {
-  const { ready, isAdmin, currentRateCard, rateCards, publishRateCardVersion } = usePipeline()
+  const { ready, isAdmin, pipelineRole, currentRateCard, rateCards, publishRateCardVersion } = usePipeline()
   const toast = useToast()
 
   const [draft, setDraft] = useState(null)      // working copy of card.data
@@ -34,6 +34,7 @@ export function RateCardAdminPage() {
 
   const template = useMemo(() => card?.templates?.[venue], [card, venue])
 
+  if (!pipelineRole) return <PipelineNoAccess />
   if (!ready) return null
   if (!isAdmin) {
     return (

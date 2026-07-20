@@ -7,10 +7,14 @@ import {
 import { usePipeline, STATUS_ORDER, STATUS_LABELS, STATUS_COLORS } from './PipelineContext.jsx'
 import {
   DealStatusBadge, VenueChip, ModeChip, ClientHistoryList, GateDot, fmtDate,
+  PipelineNoAccess,
 } from './components.jsx'
 import { computeTotals, fmtMoney, fmtMoneyShort, quoteIsExpired, quoteExpiryDate } from './quoteMath.js'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx'
 import { Modal } from '../../components/ui/Modal.jsx'
+import { FileUploadButton } from '../../components/files/FileUploadButton.tsx'
+import { StoredFileLink } from '../../components/files/StoredFileLink.tsx'
+import { BUCKETS, paths } from '../../lib/storage.ts'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DealDetailPage — one deal, everything about it, role-scoped.
@@ -24,7 +28,7 @@ export function DealDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const {
-    ready, deals, money, quotes, handoffs, canSeeMoney, isAdmin,
+    ready, deals, money, quotes, handoffs, canSeeMoney, isAdmin, pipelineRole,
     setDealStatus, patchDeal, removeDeal, addDealNote, setDealMoney,
     addQuote, markQuoteSent, markQuoteAccepted, removeQuote,
     patchHandoff, rateCardByVersion,
@@ -40,6 +44,7 @@ export function DealDetailPage() {
   const [deadOpen, setDeadOpen] = useState(false)
   const [lostReason, setLostReason] = useState('')
 
+  if (!pipelineRole) return <PipelineNoAccess />
   if (!ready) {
     return <div className="max-w-5xl mx-auto px-4 py-10 text-center">
       <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">LOADING</p>
@@ -528,7 +533,34 @@ function HandoffCard({ handoff, deal, patchHandoff, isAdmin }) {
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-orbital-dim mt-1">Creative deck slot: {kickoff.creativeDeck ? 'attached' : 'empty'}.</p>
+        {/* Creative-deck attachment slot — reuses the instruction-packages
+            bucket (deck is production-scoped instruction material). */}
+        <div className="flex items-center gap-2 mt-1.5">
+          {kickoff.creativeDeck ? (
+            <StoredFileLink
+              bucket={kickoff.creativeDeck.bucket || BUCKETS.instructionPackages}
+              path={kickoff.creativeDeck.path}
+              label={kickoff.creativeDeck.name || 'Creative deck'}
+            />
+          ) : (
+            <span className="text-[11px] text-orbital-dim">Creative deck slot: empty.</span>
+          )}
+          <FileUploadButton
+            bucket={BUCKETS.instructionPackages}
+            pathFor={(file) => paths.instructionPackage(handoff.productionId || handoff.dealId, file.name)}
+            accept="application/pdf,image/*,.key,.ppt,.pptx"
+            className="btn-ghost text-xs"
+            onUploaded={(result) => patchHandoff(handoff.id, {
+              handoff: {
+                ...kickoff,
+                creativeDeck: { path: result.path, bucket: result.bucket, name: result.name, at: new Date().toISOString() },
+                creativeReceived: true,
+              },
+            })}
+          >
+            {kickoff.creativeDeck ? 'Replace deck' : 'Attach deck'}
+          </FileUploadButton>
+        </div>
       </div>
 
       {/* Calendar blocks (green-lit) */}

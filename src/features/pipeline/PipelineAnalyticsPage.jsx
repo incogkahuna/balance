@@ -3,7 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import { usePipeline, STATUS_LABELS, STATUS_COLORS } from './PipelineContext.jsx'
-import { computeTotals, fmtMoneyShort } from './quoteMath.js'
+import { PipelineNoAccess } from './components.jsx'
+import { fmtMoneyShort } from './quoteMath.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PipelineAnalyticsPage — Wilder's layer. Every metric derives from data
@@ -17,7 +18,7 @@ import { computeTotals, fmtMoneyShort } from './quoteMath.js'
 const DAY_MS = 86400000
 
 export function PipelineAnalyticsPage() {
-  const { ready, deals, money, quotes, canSeeMoney, rateCardByVersion, remoteAggregates } = usePipeline()
+  const { ready, deals, money, quotes, canSeeMoney, pipelineRole, rateCardByVersion, remoteAggregates } = usePipeline()
 
   const stats = useMemo(() => {
     const total = deals.length
@@ -128,6 +129,7 @@ export function PipelineAnalyticsPage() {
     }
   }, [deals, money, quotes, canSeeMoney, rateCardByVersion, remoteAggregates])
 
+  if (!pipelineRole) return <PipelineNoAccess />
   if (!ready) return null
 
   const s = stats

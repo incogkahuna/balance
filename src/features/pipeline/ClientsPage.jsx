@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Search, Users } from 'lucide-react'
 import { usePipeline } from './PipelineContext.jsx'
-import { ClientHistoryList, MoneyTriple } from './components.jsx'
+import { ClientHistoryList, PipelineNoAccess } from './components.jsx'
 import { fmtMoneyShort } from './quoteMath.js'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12,7 +12,7 @@ import { fmtMoneyShort } from './quoteMath.js'
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ClientsPage() {
-  const { ready, deals, money, canSeeMoney } = usePipeline()
+  const { ready, deals, money, canSeeMoney, pipelineRole } = usePipeline()
   const [search, setSearch] = useState('')
 
   const clients = useMemo(() => {
@@ -39,6 +39,8 @@ export function ClientsPage() {
   }, [deals, money, search])
 
   const [openClient, setOpenClient] = useState(null)
+
+  if (!pipelineRole) return <PipelineNoAccess />
 
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-5">
