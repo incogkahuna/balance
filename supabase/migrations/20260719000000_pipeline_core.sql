@@ -35,8 +35,9 @@ create table if not exists public.pipeline_role_assignments (
 );
 
 insert into public.pipeline_role_assignments (email, pipeline_role) values
+  -- NOTE: brian@ is Brian NITZKIN (Business Manager). brodriguez@ is a
+  -- different Brian (crew) and deliberately gets no pipeline role.
   ('brian@orbitalvs.com',      'admin_finance'),  -- Brian Nitzkin — Business Manager
-  ('brodriguez@orbitalvs.com', 'admin_finance'),
   ('aj@orbitalvs.com',         'admin_exec'),     -- AJ — CEO
   ('dhorgan@orbitalvs.com',    'admin_exec'),     -- Danny — owner
   ('mark@orbitalvs.com',       'production'),     -- Mark — Production

@@ -1189,6 +1189,9 @@ export function AppProvider({ children }) {
     devViewAs,
     setDevViewAs,
 
+    // Activity log (fire-and-forget) — exposed for sibling domains (pipeline)
+    logActivity,
+
     // Productions
     productions,
     productionsLoading,

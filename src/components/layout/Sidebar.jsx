@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor, Bug, ListChecks, CheckSquare } from 'lucide-react'
+import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor, Bug, ListChecks, CheckSquare, Briefcase, BookUser, TrendingUp, Receipt } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
+import { usePipeline } from '../../features/pipeline/PipelineContext.jsx'
 import { ROLES } from '../../data/models.js'
 import { DevProfileSwitcher } from '../dev/DevProfileSwitcher.jsx'
 import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
@@ -28,6 +29,17 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    // The job pipeline (#18) — visible only to the four pipeline roles;
+    // clients/analytics render role-scoped data, rate card is admin-only.
+    title: 'Pipeline',
+    items: [
+      { to: '/pipeline',           icon: Briefcase, label: 'Deals',        pipeline: true },
+      { to: '/pipeline/clients',   icon: BookUser,  label: 'Clients',      pipeline: true },
+      { to: '/pipeline/analytics', icon: TrendingUp, label: 'Deal Analytics', pipeline: true },
+      { to: '/pipeline/ratecard',  icon: Receipt,   label: 'Rate Card',    pipelineAdmin: true },
+    ],
+  },
+  {
     title: 'People & Gear',
     items: [
       { to: '/team',        icon: UserSquare2, label: 'Team'        },
@@ -47,8 +59,11 @@ const NAV_SECTIONS = [
 
 export function Sidebar() {
   const { currentUser } = useApp()
+  const { pipelineRole, isAdmin: isPipelineAdmin } = usePipeline()
 
   const canSee = (item) => {
+    if (item.pipelineAdmin) return isPipelineAdmin
+    if (item.pipeline)      return pipelineRole != null
     if (item.adminOnly)  return currentUser?.role === ROLES.ADMIN
     if (item.adminOrSup) return currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
     return true

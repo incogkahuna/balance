@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext.jsx'
 import { BackgroundProvider } from './context/BackgroundContext.jsx'
 import { ToastProvider } from './context/ToastContext.jsx'
 import { NavHistoryProvider } from './context/NavHistoryContext.jsx'
+import { PipelineProvider } from './features/pipeline/PipelineContext.jsx'
 import { AppShell } from './components/layout/AppShell.jsx'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage.jsx'
@@ -62,6 +63,14 @@ const GearPage       = lazyWithRetry(() => import('./pages/GearPage.jsx').then(m
 const FeedbackPage   = lazyWithRetry(() => import('./pages/FeedbackPage.jsx').then(m => ({ default: m.FeedbackPage })))
 const ToDosPage      = lazyWithRetry(() => import('./pages/ToDosPage.jsx').then(m => ({ default: m.ToDosPage })))
 const AccountPage    = lazyWithRetry(() => import('./pages/AccountPage.jsx').then(m => ({ default: m.AccountPage })))
+// Job pipeline (deals → quotes → handoffs) — its own lazy chunk group
+const DealsPage             = lazyWithRetry(() => import('./features/pipeline/DealsPage.jsx').then(m => ({ default: m.DealsPage })))
+const DealDetailPage        = lazyWithRetry(() => import('./features/pipeline/DealDetailPage.jsx').then(m => ({ default: m.DealDetailPage })))
+const QuoteBuilderPage      = lazyWithRetry(() => import('./features/pipeline/QuoteBuilderPage.jsx').then(m => ({ default: m.QuoteBuilderPage })))
+const QuotePdfPage          = lazyWithRetry(() => import('./features/pipeline/QuotePdfPage.jsx').then(m => ({ default: m.QuotePdfPage })))
+const ClientsPage           = lazyWithRetry(() => import('./features/pipeline/ClientsPage.jsx').then(m => ({ default: m.ClientsPage })))
+const PipelineAnalyticsPage = lazyWithRetry(() => import('./features/pipeline/PipelineAnalyticsPage.jsx').then(m => ({ default: m.PipelineAnalyticsPage })))
+const RateCardAdminPage     = lazyWithRetry(() => import('./features/pipeline/RateCardAdminPage.jsx').then(m => ({ default: m.RateCardAdminPage })))
 
 // ── Per-page error boundary — keeps sidebar alive if one page crashes ─────────
 class PageBoundary extends Component {
@@ -121,6 +130,7 @@ export default function App() {
     <AuthProvider>
     <ToastProvider>
     <AppProvider>
+    <PipelineProvider>
       <BrowserRouter>
         <NavHistoryProvider>
         <Routes>
@@ -148,11 +158,20 @@ export default function App() {
             <Route path="/todos"                element={wrap(<ToDosPage />)} />
             {/* Account — profile, appearance, session (#21 v2) */}
             <Route path="/account"              element={wrap(<AccountPage />)} />
+            {/* Job pipeline (#18 — Nitzkin) — deals, quotes, handoffs */}
+            <Route path="/pipeline"                element={wrap(<DealsPage />)} />
+            <Route path="/pipeline/deals/:id"      element={wrap(<DealDetailPage />)} />
+            <Route path="/pipeline/quotes/:id"     element={wrap(<QuoteBuilderPage />)} />
+            <Route path="/pipeline/quotes/:id/pdf" element={wrap(<QuotePdfPage />)} />
+            <Route path="/pipeline/clients"        element={wrap(<ClientsPage />)} />
+            <Route path="/pipeline/analytics"      element={wrap(<PipelineAnalyticsPage />)} />
+            <Route path="/pipeline/ratecard"       element={wrap(<RateCardAdminPage />)} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         </NavHistoryProvider>
       </BrowserRouter>
+    </PipelineProvider>
     </AppProvider>
     </ToastProvider>
     </AuthProvider>
