@@ -50,6 +50,19 @@ const CAPTURED_OAUTH_CODE =
     ? new URLSearchParams(window.location.search).get('code')
     : null
 
+// ─── Domain allowlist ────────────────────────────────────────────────────────
+// Balance is for Orbital Studios staff only. This is the client-side gate: any
+// session whose email isn't an @orbitalvs.com address is signed out on sight
+// and told why. It's belt-and-braces with the server-side enforcement — the
+// handle_new_user trigger REJECTS non-orbital signups so those accounts can't
+// be created in the first place (see migration 20260720000000).
+const ALLOWED_EMAIL_DOMAIN = '@orbitalvs.com'
+function isAllowedEmail(email?: string | null): boolean {
+  return !!email && email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN)
+}
+const ACCESS_DENIED_MSG =
+  'Access is restricted to Orbital Studios accounts. Please sign in with your @orbitalvs.com email.'
+
 async function fetchProfile(userId: string): Promise<Profile | null> {
   log('fetchProfile starting for', userId)
   try {
@@ -123,6 +136,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     log('initialising — checking for existing session')
     log('window.location.href =', window.location.href)
 
+    // Sign out + clear any session that isn't an allowed Orbital account, and
+    // surface the reason on the login screen. Signing out re-fires
+    // onAuthStateChange with a null session, which the guards below ignore, so
+    // there's no loop.
+    const blockDisallowed = async (email?: string | null) => {
+      warn('blocking non-orbital session:', email)
+      try { await supabase.auth.signOut() } catch { /* best-effort */ }
+      if (!cancelled) {
+        setSession(null)
+        setProfile(null)
+        setError(ACCESS_DENIED_MSG)
+        setLoading(false)
+      }
+    }
+
     ;(async () => {
       try {
         // ── Complete the OAuth PKCE exchange FIRST, if we just came back from
@@ -167,6 +195,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const initialSession = data?.session ?? null
         log('initial session:', initialSession ? `present (${initialSession.user.email})` : 'null')
+        // Domain gate BEFORE trusting the session — a non-orbital account never
+        // gets a profile or app access.
+        if (initialSession?.user && !isAllowedEmail(initialSession.user.email)) {
+          await blockDisallowed(initialSession.user.email)
+          return
+        }
         setSession(initialSession)
         if (initialSession?.user) {
           const p = await fetchProfile(initialSession.user.id)
@@ -194,6 +228,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, nextSession) => {
         log('onAuthStateChange:', event, nextSession ? `session for ${nextSession.user.email}` : 'no session')
+        // Same domain gate on every auth transition — catches the moment a
+        // non-orbital account completes Google OAuth.
+        if (nextSession?.user && !isAllowedEmail(nextSession.user.email)) {
+          await blockDisallowed(nextSession.user.email)
+          return
+        }
         setSession(nextSession)
         if (nextSession?.user) {
           const p = await fetchProfile(nextSession.user.id)

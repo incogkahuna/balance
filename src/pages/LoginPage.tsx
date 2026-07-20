@@ -12,7 +12,7 @@ import { OrbitalMark } from '../components/brand/OrbitalLogo.jsx'
 // single luminous action. Everything rises in on a stagger.
 
 export function LoginPage() {
-  const { session, loading, signInWithGoogle } = useAuth()
+  const { session, loading, signInWithGoogle, error: authError } = useAuth()
   const { currentUser, setDevViewAs } = useApp()
   const navigate = useNavigate()
   const [signingIn, setSigningIn] = useState(false)
@@ -118,8 +118,8 @@ export function LoginPage() {
               </span>
             </button>
 
-            {error && (
-              <p className="mt-4 text-xs text-red-400 text-center">{error}</p>
+            {(error || authError) && (
+              <p className="mt-4 text-xs text-red-400 text-center">{error || authError}</p>
             )}
 
             <p className="mt-5 text-[11px] text-orbital-subtle/80 text-center leading-relaxed">
