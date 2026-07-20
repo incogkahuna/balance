@@ -426,12 +426,21 @@ export function PipelineProvider({ children }) {
       createdBy: profile?.id || '',
       instructionPackage: { files: [], voiceMemos: [], notes: summary },
     })
-    addProduction(production)
+    // Await the production COMMIT before inserting the handoff. The handoff
+    // (and the deal's production_id) have FKs to productions; in remote mode
+    // the inserts are async, so firing them together races the handoff ahead
+    // of its production row → "violates foreign key constraint". If the
+    // production insert fails (e.g. a non-admin Balance role can't insert
+    // productions under RLS), degrade gracefully: still create the handoff so
+    // the deal progresses and Mark keeps the summary/crew/gates, just without
+    // the production link.
+    const createdProduction = await addProduction(production)
+    const productionId = createdProduction ? production.id : null
 
     const handoff = {
       id: uid(),
       dealId: deal.id,
-      productionId: production.id,
+      productionId,
       state: 'pending',
       summary,
       crew,
@@ -451,8 +460,13 @@ export function PipelineProvider({ children }) {
     } catch (err) {
       console.error('[Pipeline] createHandoff failed:', err)
       toast.error(`Couldn't create the production handoff — ${err?.message || 'unknown error'}`)
+      // Roll back the optimistic handoff so it doesn't linger as a phantom.
+      setHandoffs((prev) => prev.filter((h) => h.id !== handoff.id))
+      return null
     }
-    patchDeal(deal.id, { productionId: production.id })
+    // Link the deal to its production only once the row is known to exist —
+    // pipeline_deals.production_id also FKs productions.
+    if (productionId) patchDeal(deal.id, { productionId })
     return handoff
   }, [bestQuoteForDeal, rateCardByVersion, currentRateCard, addProduction, patchDeal, profile, toast])
 

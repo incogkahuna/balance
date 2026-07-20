@@ -593,17 +593,25 @@ export function AppProvider({ children }) {
   // errors for now; UI-level error handling lands in a follow-up.
   const addProduction = useCallback((production) => {
     setProductionsState(prev => [production, ...prev])
-    createProductionApi(production)
-      .then(() => {
+    // Returns a promise that resolves to the committed production (or null on
+    // failure) so callers that must reference the row before it exists — e.g.
+    // the pipeline handoff, which has a FK to productions — can await the
+    // commit. It NEVER rejects, so existing fire-and-forget callers (intake,
+    // etc.) that don't await keep working unchanged with no unhandled
+    // rejection.
+    return createProductionApi(production)
+      .then((created) => {
         logActivity('created', 'production', {
           id: production.id, label: production.name, productionId: production.id,
         })
+        return created ?? production
       })
       .catch((err) => {
         console.error('[AppContext] createProduction failed:', err)
         toast.error(`Couldn't create production — ${err?.message || 'unknown error'}`)
         // Rollback optimistic insert
         setProductionsState(prev => prev.filter(p => p.id !== production.id))
+        return null
       })
   }, [toast, logActivity])
 
