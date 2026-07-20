@@ -42,7 +42,7 @@ const EMAIL_ROLES = {
   'aj@orbitalvs.com': 'admin_exec',
   'dhorgan@orbitalvs.com': 'admin_exec',
   'mark@orbitalvs.com': 'production',
-  'wilder@orbitalvs.com': 'pipeline',
+  'wilder@orbitalvs.com': 'admin_exec', // dev team — full access, money included
 }
 
 export const STATUS_ORDER = ['new', 'quote_sent', 'agreement', 'green_light']
@@ -94,7 +94,7 @@ export function PipelineProvider({ children }) {
     if (currentUser?.isDevImpersonation) {
       const byId = {
         nitz: 'admin_finance', aj: 'admin_exec', danny: 'admin_exec',
-        mark: 'production', wilder: 'pipeline',
+        mark: 'production', wilder: 'admin_exec',
       }
       return byId[currentUser.id] ?? null
     }

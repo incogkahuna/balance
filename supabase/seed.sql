@@ -12,7 +12,7 @@ insert into public.role_assignments (email, role, display_name, display_color) v
   ('aj@orbitalvs.com',         'admin', 'AJ',     '#8b5cf6'),
   ('dhorgan@orbitalvs.com',    'admin', 'Danny',  '#3b82f6'),
   ('brodriguez@orbitalvs.com', 'crew',  'Brian',  '#10b981'),
-  ('wilder@orbitalvs.com',     'crew',  'Wilder', '#f59e0b'),
+  ('wilder@orbitalvs.com',     'admin', 'Wilder', '#f59e0b'),
   ('mike@orbitalvs.com',       'crew',  'Mike',   '#06b6d4'),
   ('geo@orbitalvs.com',        'crew',  'Geo',    '#ec4899'),
   ('brian@orbitalvs.com',      'crew',  'Brian Nitzkin', '#14b8a6')

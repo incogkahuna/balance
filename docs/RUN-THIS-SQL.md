@@ -64,7 +64,7 @@ insert into public.pipeline_role_assignments (email, pipeline_role) values
   ('aj@orbitalvs.com',         'admin_exec'),     -- AJ — CEO
   ('dhorgan@orbitalvs.com',    'admin_exec'),     -- Danny — owner
   ('mark@orbitalvs.com',       'production'),     -- Mark — Production
-  ('wilder@orbitalvs.com',     'pipeline')        -- Wilder — Head of AI
+  ('wilder@orbitalvs.com',     'admin_exec')      -- Wilder — Head of AI (dev team: full access)
 on conflict (email) do nothing;
 
 -- Resolve the caller's pipeline role. Fallback chain:

@@ -221,7 +221,7 @@ export const USERS = [
   { id: 'aj',     name: 'AJ',     email: 'aj@orbitalvs.com',         role: ROLES.ADMIN,      avatar: 'A',  color: '#8b5cf6' },
   { id: 'danny',  name: 'Danny',  email: 'dhorgan@orbitalvs.com',    role: ROLES.ADMIN,      avatar: 'D',  color: '#3b82f6' },
   { id: 'brian',  name: 'Brian',  email: 'brodriguez@orbitalvs.com', role: ROLES.CREW,       avatar: 'B',  color: '#10b981' },
-  { id: 'wilder', name: 'Wilder', email: 'wilder@orbitalvs.com',     role: ROLES.CREW,       avatar: 'W',  color: '#f59e0b' },
+  { id: 'wilder', name: 'Wilder', email: 'wilder@orbitalvs.com',     role: ROLES.ADMIN,      avatar: 'W',  color: '#f59e0b' },
   { id: 'mike',   name: 'Mike',   email: 'mike@orbitalvs.com',       role: ROLES.CREW,       avatar: 'MS', color: '#06b6d4' },
   { id: 'geo',    name: 'Geo',    email: 'geo@orbitalvs.com',        role: ROLES.CREW,       avatar: 'G',  color: '#ec4899' },
   { id: 'nitz',   name: 'Brian Nitzkin', email: 'brian@orbitalvs.com', role: ROLES.CREW,    avatar: 'BN', color: '#14b8a6' },
