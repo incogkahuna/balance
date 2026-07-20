@@ -160,22 +160,6 @@
     min-height: 100dvh;
   }
 
-  /* Native date/time picker indicator — black on light, white on dark, so
-     the calendar icon is visible everywhere (Danny item 12). WebKit renders
-     it as a black glyph; invert flips it for dark surfaces. */
-  input[type='date']::-webkit-calendar-picker-indicator,
-  input[type='datetime-local']::-webkit-calendar-picker-indicator,
-  input[type='time']::-webkit-calendar-picker-indicator {
-    filter: none;
-    opacity: 0.8;
-    cursor: pointer;
-  }
-  .dark input[type='date']::-webkit-calendar-picker-indicator,
-  .dark input[type='datetime-local']::-webkit-calendar-picker-indicator,
-  .dark input[type='time']::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-  }
-
   /* iOS Safari zooms in on focus when input font-size < 16px. We use 14px
      visually on desktop, but bump to 16px on touch-primary devices so the
      keyboard doesn't trigger a zoom-and-scroll dance on phones. */
@@ -308,13 +292,17 @@
     box-shadow: 0 0 0 2px var(--accent-soft);
   }
 
-  /* ── Date / time inputs ─────────────────────────────────────────────────────
-     The native calendar picker icon (and the picker popover itself) is
-     rendered by the browser using the page's color-scheme. Setting this per
-     theme makes Chromium/Firefox use a white icon on dark backgrounds and a
-     dark icon on light backgrounds. The ::-webkit-calendar-picker-indicator
-     filter is a belt-and-braces fallback for browsers that ignore
-     color-scheme on input elements specifically. */
+  /* ── Date / time inputs — calendar icon = inverse of the background ─────────
+     The native calendar picker indicator (and the picker popover) is rendered
+     by the browser from the element's color-scheme. `color-scheme: dark` makes
+     WebKit/Chromium/Firefox draw a WHITE glyph on dark surfaces; `light` draws
+     a dark glyph on light surfaces. That alone gives us the inverse-of-
+     background rule Danny wants — every date/time input, everywhere.
+
+     Do NOT also apply `filter: invert()` here: color-scheme already flips the
+     glyph, so inverting on top turns the white dark-mode glyph black again and
+     it vanishes on the dark background (the exact bug this replaced). One
+     mechanism only. */
   input[type="date"],
   input[type="datetime-local"],
   input[type="time"],
@@ -329,17 +317,19 @@
   .dark input[type="week"] {
     color-scheme: dark;
   }
-  .dark input[type="date"]::-webkit-calendar-picker-indicator,
-  .dark input[type="datetime-local"]::-webkit-calendar-picker-indicator,
-  .dark input[type="time"]::-webkit-calendar-picker-indicator,
-  .dark input[type="month"]::-webkit-calendar-picker-indicator,
-  .dark input[type="week"]::-webkit-calendar-picker-indicator {
-    filter: invert(1) brightness(1.2);
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="month"]::-webkit-calendar-picker-indicator,
+  input[type="week"]::-webkit-calendar-picker-indicator {
     cursor: pointer;
-    opacity: 0.7;
+    opacity: 0.75;
   }
-  .dark input[type="date"]::-webkit-calendar-picker-indicator:hover,
-  .dark input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  input[type="date"]::-webkit-calendar-picker-indicator:hover,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+  input[type="time"]::-webkit-calendar-picker-indicator:hover,
+  input[type="month"]::-webkit-calendar-picker-indicator:hover,
+  input[type="week"]::-webkit-calendar-picker-indicator:hover {
     opacity: 1;
   }
 
