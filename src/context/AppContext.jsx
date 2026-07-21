@@ -27,6 +27,12 @@ import {
   subscribeToContractors,
 } from '../lib/data/contractors.ts'
 import { listProfiles as listProfilesApi } from '../lib/data/profiles.ts'
+import {
+  listLedWalls as listLedWallsApi,
+  upsertLedWall as upsertLedWallApi,
+  deleteLedWallApi,
+  subscribeToLedWalls,
+} from '../lib/data/ledWalls.ts'
 import { recordActivity } from '../lib/data/activity.ts'
 import {
   listFeedbackItems as listFeedbackItemsApi,
@@ -64,25 +70,118 @@ export function AppProvider({ children }) {
   const [profilesList, setProfilesList] = useState([])
 
   // ─── LED Walls ─────────────────────────────────────────────────────────────
-  // v1 is localStorage-backed (no Supabase table yet). Seeded with three
-  // demo walls on first load so the /gear page isn't empty out of the box.
-  // When Danny is happy with the data model, port to a Postgres table with
-  // RLS + realtime in the same shape as productions/tasks.
+  // Now backed by the shared led_walls table (Danny's report: wall pickers
+  // showed stale per-browser options). All seven mutators still flow through
+  // setLedWallsState as the single mutation point — a write-through effect
+  // below diffs state against the last-synced snapshot and upserts/deletes
+  // whole rows, while realtime reconciles other clients. Pre-migration (or
+  // dev bypass with no session) everything degrades to the old localStorage
+  // behaviour, and local walls import once the table first answers.
   const LED_WALLS_KEY = 'balance_led_walls_v1'
-  const [ledWalls, setLedWallsState] = useState(() => {
-    if (typeof window === 'undefined') return LED_WALLS_SEED
+  const readLocalWalls = () => {
     try {
       const raw = window.localStorage.getItem(LED_WALLS_KEY)
       if (!raw) return LED_WALLS_SEED
       const parsed = JSON.parse(raw)
       return Array.isArray(parsed) ? parsed : LED_WALLS_SEED
     } catch { return LED_WALLS_SEED }
-  })
-  // Persist on every change. Cheap (small data) and survives refresh.
+  }
+  const [ledWalls, setLedWallsState] = useState(() =>
+    typeof window === 'undefined' ? LED_WALLS_SEED : readLocalWalls())
+  // 'local' until the remote table answers; then every state change syncs up.
+  const wallsSyncRef = useRef({ mode: 'local', synced: new Map() })
+
+  // Hydrate + realtime once a session exists.
   useEffect(() => {
-    try {
-      window.localStorage.setItem(LED_WALLS_KEY, JSON.stringify(ledWalls))
-    } catch { /* quota / private mode — ignore */ }
+    if (!profile) return
+    let cancelled = false
+
+    listLedWallsApi()
+      .then(async (rows) => {
+        if (cancelled) return
+        const sync = wallsSyncRef.current
+        // One-time import: push this browser's walls up if the table is empty
+        // (first device to migrate seeds the shared list). Legacy/demo wall
+        // ids ('wall-main-volume') aren't UUIDs — remap them so the uuid
+        // column accepts the row; assignments ride along in jsonb unchanged.
+        if (rows.length === 0) {
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          const locals = readLocalWalls()
+          for (const w of locals) {
+            try {
+              const saved = await upsertLedWallApi(
+                UUID_RE.test(w.id) ? w : { ...w, id: crypto.randomUUID() },
+              )
+              rows.push(saved)
+            } catch (err) {
+              console.warn('[AppContext] wall import halted:', err?.message || err)
+              break
+            }
+          }
+        }
+        if (cancelled) return
+        sync.mode = 'remote'
+        sync.synced = new Map(rows.map(w => [w.id, JSON.stringify(w)]))
+        setLedWallsState(rows)
+      })
+      .catch(() => {
+        // Table missing (pre-migration) — stay in localStorage mode.
+      })
+
+    const unsub = subscribeToLedWalls((event) => {
+      const sync = wallsSyncRef.current
+      if (sync.mode !== 'remote') return
+      // Record the server row first so the write-through diff sees it as
+      // already-synced and doesn't echo the write back.
+      if (event.type === 'DELETE') {
+        sync.synced.delete(event.id)
+        setLedWallsState(prev => prev.filter(w => w.id !== event.id))
+      } else {
+        sync.synced.set(event.row.id, JSON.stringify(event.row))
+        setLedWallsState(prev => {
+          const exists = prev.some(w => w.id === event.row.id)
+          return exists
+            ? prev.map(w => (w.id === event.row.id ? event.row : w))
+            : [...prev, event.row]
+        })
+      }
+    })
+
+    return () => { cancelled = true; unsub() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile])
+
+  // Persist on every change: remote mode diffs against the synced snapshot
+  // and writes through (fire-and-forget with toast on failure); local mode
+  // keeps the old per-browser localStorage behaviour.
+  useEffect(() => {
+    const sync = wallsSyncRef.current
+    if (sync.mode !== 'remote') {
+      try {
+        window.localStorage.setItem(LED_WALLS_KEY, JSON.stringify(ledWalls))
+      } catch { /* quota / private mode — ignore */ }
+      return
+    }
+    const seen = new Set()
+    for (const w of ledWalls) {
+      seen.add(w.id)
+      const json = JSON.stringify(w)
+      if (sync.synced.get(w.id) === json) continue
+      sync.synced.set(w.id, json)
+      upsertLedWallApi(w).catch((err) => {
+        console.error('[AppContext] wall save failed:', err)
+        toast.error(`Couldn't save wall changes — ${err?.message || 'unknown error'}`)
+      })
+    }
+    for (const id of [...sync.synced.keys()]) {
+      if (seen.has(id)) continue
+      sync.synced.delete(id)
+      deleteLedWallApi(id).catch((err) => {
+        console.error('[AppContext] wall delete failed:', err)
+        toast.error(`Couldn't delete wall — ${err?.message || 'unknown error'}`)
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ledWalls])
 
   // ─── To-Dos (merged into tasks in M2) ───────────────────────────────────────
