@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor, Bug, CheckSquare, Briefcase, BookUser, TrendingUp, Receipt } from 'lucide-react'
+import { LayoutDashboard, Film, Calendar, BarChart3, Users, UserSquare2, Sparkles, Rocket, Monitor, Bug, CheckSquare, Briefcase, BookUser, TrendingUp, Receipt, FileText } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { usePipeline } from '../../features/pipeline/PipelineContext.jsx'
 import { ROLES } from '../../data/models.js'
@@ -28,6 +28,7 @@ export const NAV_SECTIONS = [
       // distribution difference is just production vs no-production.
       { to: '/tasks',       icon: CheckSquare, label: 'Tasks'       },
       { to: '/schedule',    icon: Calendar,    label: 'Schedule'    },
+      { to: '/debriefs',    icon: FileText,    label: 'Debriefs'    },
       { to: '/resources',   icon: Sparkles,    label: 'Resources'   },
     ],
   },

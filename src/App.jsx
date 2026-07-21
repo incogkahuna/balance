@@ -62,6 +62,7 @@ const PrototypePage  = lazyWithRetry(() => import('./pages/PrototypePage.jsx').t
 const GearPage       = lazyWithRetry(() => import('./pages/GearPage.jsx').then(m => ({ default: m.GearPage })))
 const FeedbackPage   = lazyWithRetry(() => import('./pages/FeedbackPage.jsx').then(m => ({ default: m.FeedbackPage })))
 const AccountPage    = lazyWithRetry(() => import('./pages/AccountPage.jsx').then(m => ({ default: m.AccountPage })))
+const DebriefsPage   = lazyWithRetry(() => import('./pages/DebriefsPage.jsx').then(m => ({ default: m.DebriefsPage })))
 // Job pipeline (deals → quotes → handoffs) — its own lazy chunk group
 const DealsPage             = lazyWithRetry(() => import('./features/pipeline/DealsPage.jsx').then(m => ({ default: m.DealsPage })))
 const DealDetailPage        = lazyWithRetry(() => import('./features/pipeline/DealDetailPage.jsx').then(m => ({ default: m.DealDetailPage })))
@@ -155,6 +156,8 @@ export default function App() {
             <Route path="/feedback"             element={wrap(<FeedbackPage />)} />
             {/* To-Dos merged into Tasks (internal scope) — old bookmarks land */}
             <Route path="/todos"                element={<Navigate to="/tasks?scope=internal" replace />} />
+            {/* Debriefs folder — every submitted debrief, reviewed together */}
+            <Route path="/debriefs"             element={wrap(<DebriefsPage />)} />
             {/* Account — profile, appearance, session (#21 v2) */}
             <Route path="/account"              element={wrap(<AccountPage />)} />
             {/* Job pipeline (#18 — Nitzkin) — deals, quotes, handoffs */}

@@ -8,6 +8,7 @@ import {
   ChevronDown, Check,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
+import { useToast } from '../context/ToastContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS, createDebriefNote } from '../data/models.js'
 import { DictationMic } from '../components/voice/DictationMic.tsx'
 import { computeRoadmapHealth, ROADMAP_HEALTH } from '../features/productions/roadmap/roadmapUtils.js'
@@ -876,8 +877,11 @@ function DebriefTab({ production, canDebrief, onEdit }) {
 
 // Compile the accumulated notes + structured debrief + costed add-ons into a
 // formatted document. Plain text/markdown so it pastes cleanly into email,
-// Slack, or a doc — no export pipeline needed for v1.
+// Slack, or a doc — printable to PDF from the Debriefs folder.
 function DebriefDocument({ production, onClose }) {
+  const { currentUser, updateProduction } = useApp()
+  const toast = useToast()
+  const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
   const fb = production.feedback || {}
   const notes = production.debriefNotes || []
@@ -926,14 +930,47 @@ function DebriefDocument({ production, onClose }) {
     } catch { /* clipboard denied — user can select manually */ }
   }
 
+  // SUBMIT (Danny's '!! Important'): snapshot the generated document onto the
+  // production (feedback.submissions[]) so it stays attached here AND shows in
+  // the /debriefs folder where all submissions are reviewed together — with
+  // the costed add-ons riding along toward collection.
+  const submissions = fb.submissions || []
+  const submit = () => {
+    const submission = {
+      id: crypto.randomUUID(),
+      submittedAt: new Date().toISOString(),
+      submittedBy: currentUser?.id || '',
+      submittedByName: currentUser?.name || '',
+      doc,
+      rating: fb.rating || null,
+      addonTotal,
+      addonCount: addons.length,
+    }
+    updateProduction(production.id, {
+      feedback: { ...fb, submissions: [...submissions, submission] },
+    })
+    toast.success('Debrief submitted — filed under Debriefs for review.')
+    onClose()
+    navigate('/debriefs')
+  }
+
   return (
     <div className="space-y-3">
       <pre className="card p-4 text-xs text-orbital-text whitespace-pre-wrap max-h-96 overflow-y-auto font-mono">
         {doc}
       </pre>
-      <div className="flex gap-3">
-        <button onClick={copy} className="btn-primary flex-1">
-          {copied ? 'Copied' : 'Copy to clipboard'}
+      {submissions.length > 0 && (
+        <p className="text-[11px] text-orbital-dim">
+          Submitted {submissions.length}× — last {format(parseISO(submissions[submissions.length - 1].submittedAt), 'MMM d, yyyy')}.
+          Submitting again files a new version.
+        </p>
+      )}
+      <div className="flex gap-3 flex-wrap">
+        <button onClick={submit} className="btn-primary flex-1">
+          Submit debrief
+        </button>
+        <button onClick={copy} className="btn-secondary">
+          {copied ? 'Copied' : 'Copy'}
         </button>
         <button onClick={onClose} className="btn-secondary">Close</button>
       </div>
