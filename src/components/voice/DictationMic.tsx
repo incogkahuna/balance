@@ -14,6 +14,13 @@ export interface DictationMicProps {
   maxDurationSec?: number
 }
 
+// Speech-to-text kill switch. The `transcribe` Edge Function isn't deployed
+// yet, so every mic in the app dead-ends in an error — hide them all until
+// the integration is live (Danny's report). To re-enable: set
+// VITE_VOICE_ENABLED=true (Vercel env or .env.local) and redeploy — no code
+// change needed.
+export const VOICE_ENABLED = import.meta.env.VITE_VOICE_ENABLED === 'true'
+
 /**
  * Compact inline mic for long-text fields (M3 / #19). One tap to record, one
  * tap to stop — transcription starts immediately (no review step; this is
@@ -26,6 +33,8 @@ export function DictationMic({
   className,
   maxDurationSec = 120,
 }: DictationMicProps) {
+  // All hooks must still run unconditionally; the flag only gates the render
+  // (see the `if (!VOICE_ENABLED) return null` before the JSX below).
   const recorder = useVoiceRecorder()
   const [busy, setBusy]   = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +75,9 @@ export function DictationMic({
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recorder.state, recorder.blob])
+
+  // Hidden until the transcription backend is live.
+  if (!VOICE_ENABLED) return null
 
   if (busy) {
     return (
