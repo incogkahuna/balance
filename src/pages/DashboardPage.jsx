@@ -262,7 +262,7 @@ export function DashboardPage() {
             <SectionHeader
               label="Today's To-Dos"
               action={
-                <button onClick={() => navigate('/todos')}
+                <button onClick={() => navigate('/tasks?scope=internal')}
                   className="flex items-center gap-0.5 text-[11px] text-orbital-subtle hover:text-orbital-text transition-colors">
                   All to-dos <ChevronRight size={12} />
                 </button>

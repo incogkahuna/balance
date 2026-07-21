@@ -6,9 +6,10 @@ import {
   Search, Film, User, ArrowUpDown, Plus,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, TASK_STATUS, TASK_PRIORITY } from '../data/models.js'
+import { ROLES, TASK_STATUS, TASK_PRIORITY, TASK_VISIBILITY, createTask } from '../data/models.js'
 import { TaskCard } from '../components/tasks/TaskCard.jsx'
 import { TaskForm } from '../components/tasks/TaskForm.jsx'
+import { QuickAdd } from '../components/tasks/QuickAdd.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
 import { EmptyState } from '../components/ui/EmptyState.jsx'
 import clsx from 'clsx'
@@ -48,15 +49,23 @@ const STATUS_RANK = {
 }
 
 export function TasksPage() {
-  const { currentUser, tasks, productions, tasksLoading, users } = useApp()
+  const { currentUser, tasks, productions, tasksLoading, users, addTask } = useApp()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
   const filter = searchParams.get('filter') || 'mine'
-  const setFilter = (next) => {
-    if (next === 'mine') setSearchParams({})
-    else setSearchParams({ filter: next })
+  // Distribution scope (the old Tasks/To-Dos split, now one page): a task is
+  // 'production' work or 'internal' work based purely on whether it's
+  // assigned to a production.
+  const scope = searchParams.get('scope') || 'all'
+  const setParams = (nextFilter, nextScope) => {
+    const params = {}
+    if (nextFilter !== 'mine') params.filter = nextFilter
+    if (nextScope !== 'all') params.scope = nextScope
+    setSearchParams(params)
   }
+  const setFilter = (next) => setParams(next, scope)
+  const setScope = (next) => setParams(filter, next)
 
   const isCrew    = currentUser?.role === ROLES.CREW
   const isAdmin   = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
@@ -90,12 +99,23 @@ export function TasksPage() {
 
   // The base list everyone-on-this-account can see. Crew see only their own
   // tasks regardless of any later filter; admin/sup see everything. Internal
-  // tasks (productionId null — the merged To-Dos) are included so a task you
-  // just created here never vanishes; RLS already limits personal ones to
-  // their creator/assignee. The To-Dos page remains the focused view.
+  // tasks (productionId null — the merged To-Dos) are first-class here.
+  // Personal-visibility internal tasks are creator+assignee only — RLS
+  // enforces it server-side; this mirrors it for dev/impersonation modes.
+  const isMineOrCreated = useMemo(() => {
+    const ids = new Set([currentUser?.id, currentUser?.profileId].filter(Boolean))
+    return (t) => ids.has(t.assigneeId) || ids.has(t.createdBy)
+  }, [currentUser])
   const baseList = useMemo(
-    () => (isCrew ? tasks.filter(isMine) : tasks),
-    [tasks, isCrew, isMine]
+    () => {
+      const visible = tasks.filter(t =>
+        t.productionId ||
+        t.visibility !== TASK_VISIBILITY.PERSONAL ||
+        isMineOrCreated(t)
+      )
+      return isCrew ? visible.filter(isMine) : visible
+    },
+    [tasks, isCrew, isMine, isMineOrCreated]
   )
 
   // Stats — computed from base list (not after filtering) so the numbers
@@ -114,6 +134,10 @@ export function TasksPage() {
   // Apply chip + page-level controls
   const filtered = useMemo(() => {
     let list = baseList
+
+    // Distribution scope: production-bound vs internal (no production).
+    if (scope === 'production') list = list.filter(t => t.productionId)
+    else if (scope === 'internal') list = list.filter(t => !t.productionId)
 
     switch (filter) {
       case 'mine':
@@ -185,7 +209,7 @@ export function TasksPage() {
           return 0
       }
     })
-  }, [baseList, filter, search, productionId, assigneeId, sortBy, isMine, isAdmin])
+  }, [baseList, filter, scope, search, productionId, assigneeId, sortBy, isMine, isAdmin])
 
   // Production picker — only productions that actually have tasks (skip the
   // empty options so the dropdown isn't a wall of unrelated names).
@@ -242,6 +266,38 @@ export function TasksPage() {
           <StatCell label="OVERDUE"  value={stats.overdue}  icon={AlertTriangle} color={stats.overdue > 0 ? '#ef4444' : 'var(--orbital-subtle)'} />
           <StatCell label="MINE"     value={stats.mine}     icon={CheckSquare}   color="#a78bfa" />
           <StatCell label="VERIFIED" value={stats.verified} icon={CheckCheck}    color="#22c55e" />
+        </div>
+
+        {/* ── Quick add (the keeper from the To-Dos merge) — rapid internal
+                entry; the full New Task modal handles production work. ── */}
+        <div className="mb-3">
+          <QuickAdd
+            currentUser={currentUser}
+            roster={users}
+            onAdd={(payload) => addTask(createTask({
+              ...payload,
+              productionId: '',
+              createdBy: currentUser?.profileId || currentUser?.id || '',
+            }))}
+          />
+        </div>
+
+        {/* ── Distribution scope: everything / production work / internal ── */}
+        <div className="flex gap-2 mb-3">
+          {[['all', 'All work'], ['production', 'Production'], ['internal', 'Internal']].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setScope(key)}
+              className={clsx(
+                'px-3 py-2 lg:py-1.5 rounded-lg text-xs font-medium transition-colors',
+                scope === key
+                  ? 'bg-blue-500/15 text-blue-300 border border-blue-500/40'
+                  : 'bg-orbital-surface border border-orbital-border text-orbital-subtle hover:text-orbital-text'
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* ── Search + scope controls ─────────────────────────────────── */}

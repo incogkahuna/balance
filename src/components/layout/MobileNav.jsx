@@ -23,7 +23,7 @@ const BAR_LABELS = {
   '/feedback': 'Bugs',
 }
 
-const DEFAULT_BAR = ['/dashboard', '/tasks', '/productions', '/pipeline', '/schedule', '/todos', '/resources']
+const DEFAULT_BAR = ['/dashboard', '/tasks', '/productions', '/pipeline', '/schedule', '/resources']
 const BAR_KEY = 'balance_mobile_bar_v1'
 
 export function MobileNav() {

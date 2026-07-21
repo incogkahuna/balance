@@ -61,7 +61,6 @@ const IntakePage     = lazyWithRetry(() => import('./pages/IntakePage.jsx').then
 const PrototypePage  = lazyWithRetry(() => import('./pages/PrototypePage.jsx').then(m => ({ default: m.PrototypePage })))
 const GearPage       = lazyWithRetry(() => import('./pages/GearPage.jsx').then(m => ({ default: m.GearPage })))
 const FeedbackPage   = lazyWithRetry(() => import('./pages/FeedbackPage.jsx').then(m => ({ default: m.FeedbackPage })))
-const ToDosPage      = lazyWithRetry(() => import('./pages/ToDosPage.jsx').then(m => ({ default: m.ToDosPage })))
 const AccountPage    = lazyWithRetry(() => import('./pages/AccountPage.jsx').then(m => ({ default: m.AccountPage })))
 // Job pipeline (deals → quotes → handoffs) — its own lazy chunk group
 const DealsPage             = lazyWithRetry(() => import('./features/pipeline/DealsPage.jsx').then(m => ({ default: m.DealsPage })))
@@ -154,8 +153,8 @@ export default function App() {
             <Route path="/gear"                 element={wrap(<GearPage />)} />
             {/* Bugs & Ideas board — everyone can submit, admin/sup can move status */}
             <Route path="/feedback"             element={wrap(<FeedbackPage />)} />
-            {/* To-Dos — daily-scoped work items, distinct from production Tasks */}
-            <Route path="/todos"                element={wrap(<ToDosPage />)} />
+            {/* To-Dos merged into Tasks (internal scope) — old bookmarks land */}
+            <Route path="/todos"                element={<Navigate to="/tasks?scope=internal" replace />} />
             {/* Account — profile, appearance, session (#21 v2) */}
             <Route path="/account"              element={wrap(<AccountPage />)} />
             {/* Job pipeline (#18 — Nitzkin) — deals, quotes, handoffs */}
