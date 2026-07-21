@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Bug, Lightbulb, StickyNote, Plus, X, Send, Filter, MessageSquare, Trash2,
@@ -15,6 +15,7 @@ import { DictationMic } from '../components/voice/DictationMic.tsx'
 import {
   formatFeedbackPrompt, formatFeedbackPromptBatch, copyText,
 } from '../features/feedback/feedbackPrompt.js'
+import { ScreenshotAttach } from '../features/feedback/ScreenshotAttach.jsx'
 import clsx from 'clsx'
 
 // ─── Visual config ──────────────────────────────────────────────────────────
@@ -375,8 +376,23 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
       {/* Expanded body */}
       {isExpanded && (
         <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid var(--orbital-border)' }}>
+          {item.context && (
+            <p className="text-xs mt-3">
+              <span className="text-orbital-dim font-telemetry tracking-wider">WHERE / EXPECTED · </span>
+              <span className="text-orbital-text">{item.context}</span>
+            </p>
+          )}
           {item.description && (
             <p className="text-sm text-orbital-subtle whitespace-pre-wrap mt-3">{item.description}</p>
+          )}
+          {item.screenshot && (
+            <a href={item.screenshot} target="_blank" rel="noopener noreferrer" className="block mt-3">
+              <img
+                src={item.screenshot}
+                alt="Report screenshot"
+                className="rounded border border-orbital-border max-h-72 object-contain hover:opacity-90 transition-opacity"
+              />
+            </a>
           )}
           {item.resolutionNote && !editingNote && (
             <div
@@ -473,12 +489,15 @@ function SubmitFeedbackModal({ onSubmit, onClose }) {
   const [kind, setKind]               = useState(FEEDBACK_KIND.IDEA)
   const [title, setTitle]             = useState('')
   const [description, setDescription] = useState('')
+  const [context, setContext]         = useState('')
+  const [screenshot, setScreenshot]   = useState('')
+  const formRef = useRef(null)
 
   const canSubmit = title.trim().length > 0
 
   return (
     <Modal open={true} onClose={onClose} title="New report" size="md">
-      <div className="space-y-4">
+      <div className="space-y-4" ref={formRef}>
         {/* Kind toggle */}
         <div>
           <label className="label">Type</label>
@@ -543,10 +562,30 @@ function SubmitFeedbackModal({ onSubmit, onClose }) {
           />
         </div>
 
+        {/* Where / expected — the one line that makes an idea buildable first-try */}
+        <div>
+          <label className="label">Where in the app? (optional)</label>
+          <input
+            className="input"
+            value={context}
+            onChange={e => setContext(e.target.value)}
+            placeholder="e.g. Team tab, inside a production"
+          />
+        </div>
+
+        {/* Screenshot */}
+        <div>
+          <label className="label">Screenshot (optional)</label>
+          <ScreenshotAttach value={screenshot} onChange={setScreenshot} pasteScope={formRef} />
+        </div>
+
         {/* Actions */}
         <div className="flex gap-3 pt-2">
           <button
-            onClick={() => onSubmit(createFeedbackItem({ kind, title: title.trim(), description: description.trim() }))}
+            onClick={() => onSubmit(createFeedbackItem({
+              kind, title: title.trim(), description: description.trim(),
+              context: context.trim(), screenshot,
+            }))}
             disabled={!canSubmit}
             className="btn-primary flex-1 justify-center"
           >

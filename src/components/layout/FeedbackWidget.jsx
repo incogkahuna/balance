@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
 import { FEEDBACK_KIND, FEEDBACK_KIND_LABEL, createFeedbackItem } from '../../data/models.js'
 import { DictationMic } from '../voice/DictationMic.tsx'
+import { ScreenshotAttach } from '../../features/feedback/ScreenshotAttach.jsx'
 import clsx from 'clsx'
 
 // ─── Global feedback widget (M5 / #3) ────────────────────────────────────────
@@ -47,7 +48,10 @@ export function FeedbackWidget() {
   const [kind, setKind] = useState(FEEDBACK_KIND.NOTE)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [context, setContext] = useState('')
+  const [screenshot, setScreenshot] = useState('')
   const panelRef = useRef(null)
+  const formRef = useRef(null)
 
   // ── Position (persisted, drag to move) ──────────────────────────────────────
   // Start from the stored value if any, else null — the real default is
@@ -158,10 +162,14 @@ export function FeedbackWidget() {
       kind,
       title: title.trim(),
       description: description.trim(),
+      context: context.trim(),
+      screenshot,
     }))
     toast.success('Feedback sent — thank you.')
     setTitle('')
     setDescription('')
+    setContext('')
+    setScreenshot('')
     setOpen(false)
   }
 
@@ -180,6 +188,7 @@ export function FeedbackWidget() {
       {/* Panel */}
       {open && (
         <div
+          ref={formRef}
           className="absolute w-80 max-w-[calc(100vw-24px)] card-elevated animate-hud-in p-4 space-y-3"
           style={panelStyle}
         >
@@ -238,6 +247,15 @@ export function FeedbackWidget() {
               onText={t => setDescription(d => d ? `${d}\n${t}` : t)}
             />
           </div>
+
+          <input
+            className="input text-sm"
+            placeholder="Where in the app? (optional)"
+            value={context}
+            onChange={e => setContext(e.target.value)}
+          />
+
+          <ScreenshotAttach value={screenshot} onChange={setScreenshot} pasteScope={formRef} compact />
 
           <button onClick={send} disabled={!title.trim()} className="btn-primary w-full disabled:opacity-40">
             <Send size={13} /> Send

@@ -603,6 +603,8 @@ export function createFeedbackItem(overrides = {}) {
     kind: FEEDBACK_KIND.IDEA,
     title: '',
     description: '',
+    context: '',             // optional "where / expected" line (e.g. "Team tab, inside a production")
+    screenshot: '',          // optional compressed JPEG data URL
     status: FEEDBACK_STATUS.NEW,
     submittedBy: '',         // currentUser.id
     submittedByName: '',     // snapshot at submit time (legacy users can't be looked up later)

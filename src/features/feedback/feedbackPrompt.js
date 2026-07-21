@@ -27,8 +27,14 @@ export function formatFeedbackPrompt(item) {
   ].filter(Boolean).join(' · ')
   if (meta) lines.push(`*${meta}*`)
 
+  if (item.context?.trim()) {
+    lines.push('', `**Where / expected:** ${item.context.trim()}`)
+  }
   if (item.description?.trim()) {
     lines.push('', item.description.trim())
+  }
+  if (item.screenshot) {
+    lines.push('', '> 📎 A screenshot is attached to this report in the app. It is not included in this text prompt — if the change is visual and you need to see it, ask the user to paste the screenshot before proceeding.')
   }
   if (item.resolutionNote?.trim()) {
     lines.push('', `> Prior resolution note: ${item.resolutionNote.trim()}`)
@@ -41,7 +47,11 @@ export function formatFeedbackPromptBatch(items, { filterLabel = '' } = {}) {
   const header = [
     `The following ${items.length === 1 ? 'is a user-filed report' : `are ${items.length} user-filed reports`}${filterLabel ? ` (${filterLabel})` : ''} from Balance — Orbital Studios' production-management app (React 18 + Vite + Tailwind + Supabase, repo layout: pages in \`src/pages/\`, feature folders in \`src/features/\`, data layer in \`src/lib/data/\`, app hub in \`src/context/AppContext.jsx\`).`,
     '',
-    'For each item below: find the relevant code, implement the fix or feature, verify it in the running app, and commit. Work through them one at a time. If an item is ambiguous, make the smallest reasonable interpretation and note the assumption.',
+    'Work through them one at a time: find the relevant code, make the change, verify it in the running app, and commit.',
+    '',
+    '- **Bugs:** fix directly — they describe a wrong behavior to correct.',
+    '- **Feature ideas:** if the scope is clear, build it. If it is ambiguous about *what* or *where*, do NOT guess — briefly confirm the intended scope with the user before building, then implement.',
+    '- A "Where / expected" line or an attached screenshot (noted per item) is the ground truth for *where* in the app a change belongs — use it.',
     '',
     '---',
     '',

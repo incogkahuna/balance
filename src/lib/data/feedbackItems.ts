@@ -9,6 +9,8 @@ export interface FeedbackItem {
   kind: FeedbackKind
   title: string
   description: string
+  context: string
+  screenshot: string
   status: FeedbackStatus
   submittedBy: string | null
   submittedByName: string
@@ -25,6 +27,8 @@ interface FeedbackRow {
   kind: FeedbackKind
   title: string
   description: string
+  context: string | null
+  screenshot: string | null
   status: FeedbackStatus
   submitted_by: string | null
   submitted_by_name: string
@@ -43,6 +47,8 @@ function rowToItem(r: FeedbackRow): FeedbackItem {
     kind:            r.kind,
     title:           r.title,
     description:     r.description,
+    context:         r.context ?? '',
+    screenshot:      r.screenshot ?? '',
     status:          r.status,
     submittedBy:     r.submitted_by,
     submittedByName: r.submitted_by_name,
@@ -62,6 +68,11 @@ function itemToRow(i: NewFeedbackItem): Partial<FeedbackRow> {
   if (i.submittedBy     !== undefined) row.submitted_by      = asUuidOrNull(i.submittedBy)
   if (i.submittedByName !== undefined) row.submitted_by_name = i.submittedByName
   if (i.resolutionNote  !== undefined) row.resolution_note   = i.resolutionNote
+  // Only reference the newer columns when they carry data, so a plain report
+  // still inserts on a DB where the context/screenshot columns migration
+  // hasn't been run yet. Empty values are omitted rather than sent as ''.
+  if (i.context)    row.context    = i.context
+  if (i.screenshot) row.screenshot = i.screenshot
   return row
 }
 

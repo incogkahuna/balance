@@ -29,7 +29,10 @@ export const BACKGROUND_PRESETS = [
 // Downscale + recompress an uploaded image so it fits comfortably inside the
 // localStorage quota (a 1920px JPEG lands around 200-500KB as a dataURL).
 // Server-side storage can replace this when user settings move to the profile.
-export function fileToBackdropDataUrl(file) {
+// Compress an image File/Blob to a JPEG data URL. Options let callers trade
+// size for fidelity — backdrops want big+crisp (default), feedback screenshots
+// want small enough to sit in a DB text column.
+export function fileToBackdropDataUrl(file, { max = 1920, quality = 0.82 } = {}) {
   return new Promise((resolve, reject) => {
     if (!file?.type?.startsWith('image/')) {
       reject(new Error('Pick an image file (JPG, PNG, WebP…)'))
@@ -39,13 +42,12 @@ export function fileToBackdropDataUrl(file) {
     const img = new Image()
     img.onload = () => {
       URL.revokeObjectURL(url)
-      const MAX = 1920
-      const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+      const scale = Math.min(1, max / Math.max(img.width, img.height))
       const canvas = document.createElement('canvas')
       canvas.width = Math.round(img.width * scale)
       canvas.height = Math.round(img.height * scale)
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-      resolve(canvas.toDataURL('image/jpeg', 0.82))
+      resolve(canvas.toDataURL('image/jpeg', quality))
     }
     img.onerror = () => {
       URL.revokeObjectURL(url)
