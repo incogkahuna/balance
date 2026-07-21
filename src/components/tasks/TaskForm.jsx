@@ -6,10 +6,16 @@ import { TASK_PRIORITY, TASK_STATUS, createTask } from '../../data/models.js'
 import { DictationMic } from '../voice/DictationMic.tsx'
 
 export function TaskForm({ productionId, initial, onClose }) {
-  const { currentUser, addTask, updateTask, deleteTask, getProduction, users } = useApp()
+  const { currentUser, addTask, updateTask, deleteTask, getProduction, users, productions } = useApp()
+
+  // ── Purpose: Internal (default) or a production ───────────────────────────
+  // Tasks default to internal use; a dropdown switches them onto a production
+  // (Danny's report). When the form is opened FROM a production (detail page
+  // passes productionId), that production is preselected instead.
+  const [prodId, setProdId] = useState(initial?.productionId ?? productionId ?? '')
   // Cross-fill (M7 / #16): prep tasks are due by the shoot — default a new
   // task's due date to the production's start date.
-  const production = productionId ? getProduction(productionId) : null
+  const production = prodId ? getProduction(prodId) : null
 
   // ── Create-on-first-title ─────────────────────────────────────────────────
   // The old eager-create pattern inserted an empty placeholder on mount, but
@@ -37,23 +43,28 @@ export function TaskForm({ productionId, initial, onClose }) {
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
   // ── Auto-save ─────────────────────────────────────────────────────────────
+  // prodId rides in the watched value so changing the purpose dropdown
+  // persists like any other field (and lands on the initial create).
   const { status: saveStatus, lastSavedAt, error: saveError } = useAutoSave(
-    form,
+    { ...form, prodId },
     (value) => {
       const id = workingIdRef.current
       if (!id) return
+      const { prodId: vProdId, ...fields } = value
       // Editing an existing task (or one we already created) — plain update.
       if (initial?.id || createdHereRef.current) {
-        updateTask(id, value)
+        updateTask(id, { ...fields, productionId: vProdId || '' })
         return
       }
       // New task: wait for a title, then create with the full current form.
-      if (!value.title.trim()) return
+      if (!fields.title.trim()) return
       createdHereRef.current = true
       addTask(createTask({
-        ...value,
+        ...fields,
         id,
-        productionId,
+        // '' = internal (freestanding, M2 to-do semantics, team-visible).
+        productionId: vProdId || '',
+        ...(vProdId ? {} : { visibility: 'team' }),
         status: TASK_STATUS.NOT_STARTED,
         assignedBy: currentUser?.id || '',
         // Real auth UUID — satisfies the tasks.created_by FK to profiles.
@@ -76,6 +87,20 @@ export function TaskForm({ productionId, initial, onClose }) {
     <div className="space-y-4">
       <div className="flex items-center justify-end">
         <SaveStatusPill status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} compact />
+      </div>
+
+      <div>
+        <label className="label">For</label>
+        <select
+          className="select"
+          value={prodId}
+          onChange={e => setProdId(e.target.value)}
+        >
+          <option value="">Internal use (no production)</option>
+          {productions.map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
       </div>
 
       <div>

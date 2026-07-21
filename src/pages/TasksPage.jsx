@@ -6,7 +6,7 @@ import {
   Search, Film, User, ArrowUpDown, Plus,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
-import { ROLES, TASK_STATUS, TASK_PRIORITY, PRODUCTION_STATUS } from '../data/models.js'
+import { ROLES, TASK_STATUS, TASK_PRIORITY } from '../data/models.js'
 import { TaskCard } from '../components/tasks/TaskCard.jsx'
 import { TaskForm } from '../components/tasks/TaskForm.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
@@ -68,40 +68,34 @@ export function TasksPage() {
   const [sortBy, setSortBy]           = useState('dueAsc')
 
   // ── New Task modal ──────────────────────────────────────────────────────
-  // Tasks need a production; pick one first, then the normal TaskForm runs.
-  // Insert is RLS-gated to admin/supervisor, so crew don't see the button.
+  // Opens the TaskForm directly — it defaults to "Internal use" with a
+  // dropdown to attach a production (Danny's report). If the list is already
+  // scoped to one production, that production is preselected.
   const [showNewTask, setShowNewTask] = useState(false)
   const [newTaskProdId, setNewTaskProdId] = useState('')
   const openNewTask = () => {
-    // If the list is already scoped to one production, start there.
     setNewTaskProdId(productionId !== 'all' ? productionId : '')
     setShowNewTask(true)
   }
   const closeNewTask = () => { setShowNewTask(false); setNewTaskProdId('') }
 
-  // Productions offered in the picker — live ones first, then the rest.
-  const STATUS_ORDER = {
-    [PRODUCTION_STATUS.ACTIVE]: 0,
-    [PRODUCTION_STATUS.INCOMING]: 1,
-    [PRODUCTION_STATUS.WRAP]: 2,
-    [PRODUCTION_STATUS.COMPLETED]: 3,
-  }
-  const pickableProductions = useMemo(() =>
-    productions.slice().sort((a, b) =>
-      (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) ||
-      (a.name || '').localeCompare(b.name || '')
-    ),
-  [productions]) // eslint-disable-line react-hooks/exhaustive-deps
+  // "Mine" must match BOTH identities: the legacy id ('danny') the app uses
+  // day-to-day AND the auth-profile UUID — pickers backed by the merged
+  // roster assign by profile UUID, so matching only one hid self-assigned
+  // tasks (Danny's report: "assigned myself a task, can't see it").
+  const isMine = useMemo(() => {
+    const ids = new Set([currentUser?.id, currentUser?.profileId].filter(Boolean))
+    return (t) => ids.has(t.assigneeId)
+  }, [currentUser])
 
   // The base list everyone-on-this-account can see. Crew see only their own
-  // tasks regardless of any later filter; admin/sup see everything.
-  // Freestanding to-dos (productionId null since M2) live on the To-Dos page.
+  // tasks regardless of any later filter; admin/sup see everything. Internal
+  // tasks (productionId null — the merged To-Dos) are included so a task you
+  // just created here never vanishes; RLS already limits personal ones to
+  // their creator/assignee. The To-Dos page remains the focused view.
   const baseList = useMemo(
-    () => {
-      const productionTasks = tasks.filter(t => t.productionId)
-      return isCrew ? productionTasks.filter(t => t.assigneeId === currentUser?.id) : productionTasks
-    },
-    [tasks, isCrew, currentUser]
+    () => (isCrew ? tasks.filter(isMine) : tasks),
+    [tasks, isCrew, isMine]
   )
 
   // Stats — computed from base list (not after filtering) so the numbers
@@ -111,11 +105,11 @@ export function TasksPage() {
       t.dueDate && t.status !== TASK_STATUS.VERIFIED && isPast(parseISO(t.dueDate))
     ).length
     const mine = baseList.filter(t =>
-      t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED
+      isMine(t) && t.status !== TASK_STATUS.VERIFIED
     ).length
     const verified = baseList.filter(t => t.status === TASK_STATUS.VERIFIED).length
     return { total: baseList.length, overdue, mine, verified }
-  }, [baseList, currentUser])
+  }, [baseList, isMine])
 
   // Apply chip + page-level controls
   const filtered = useMemo(() => {
@@ -124,7 +118,7 @@ export function TasksPage() {
     switch (filter) {
       case 'mine':
         list = list.filter(t =>
-          t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED
+          isMine(t) && t.status !== TASK_STATUS.VERIFIED
         )
         break
       case 'overdue':
@@ -163,8 +157,13 @@ export function TasksPage() {
       list = list.filter(t => t.assigneeId === assigneeId)
     }
 
-    // Sort
+    // Sort. Open work ALWAYS stacks above completed/verified, whatever the
+    // secondary sort — done items sink to the bottom (Danny's report).
+    const doneRank = (t) =>
+      (t.status === TASK_STATUS.COMPLETE || t.status === TASK_STATUS.VERIFIED) ? 1 : 0
     return list.slice().sort((a, b) => {
+      const d = doneRank(a) - doneRank(b)
+      if (d !== 0) return d
       switch (sortBy) {
         case 'dueAsc':
           if (!a.dueDate && !b.dueDate) return 0
@@ -186,7 +185,7 @@ export function TasksPage() {
           return 0
       }
     })
-  }, [baseList, filter, search, productionId, assigneeId, sortBy, currentUser, isAdmin])
+  }, [baseList, filter, search, productionId, assigneeId, sortBy, isMine, isAdmin])
 
   // Production picker — only productions that actually have tasks (skip the
   // empty options so the dropdown isn't a wall of unrelated names).
@@ -346,33 +345,10 @@ export function TasksPage() {
         )}
       </div>
 
-      {/* ── New Task modal — pick a production, then the standard form ──── */}
+      {/* ── New Task modal — the form defaults to Internal; the "For"
+              dropdown inside it switches to a production ──────────────────── */}
       <Modal open={showNewTask} onClose={closeNewTask} title="New Task" size="lg">
-        {!newTaskProdId ? (
-          pickableProductions.length === 0 ? (
-            <p className="text-sm text-orbital-subtle py-4 text-center">
-              No productions yet — create one first from the Productions page.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <p className="label">Which production is this task for?</p>
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {pickableProductions.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => setNewTaskProdId(p.id)}
-                    className="w-full flex items-center justify-between gap-3 p-3 rounded-lg border border-orbital-border bg-orbital-surface hover:border-blue-500/40 transition-colors text-left"
-                  >
-                    <span className="text-sm font-medium text-orbital-text truncate">{p.name}</span>
-                    <span className="text-xs text-orbital-subtle flex-shrink-0">{p.status}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )
-        ) : (
-          <TaskForm productionId={newTaskProdId} onClose={closeNewTask} />
-        )}
+        {showNewTask && <TaskForm productionId={newTaskProdId} onClose={closeNewTask} />}
       </Modal>
     </div>
   )
