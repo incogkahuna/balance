@@ -12,7 +12,7 @@ import { useToast } from '../../context/ToastContext.jsx'
 // value: data URL string ('' = none). onChange(dataUrl | '').
 // pasteScope: a ref to the element that should accept clipboard image pastes
 // (usually the form/modal). Optional.
-export function ScreenshotAttach({ value, onChange, pasteScope, compact = false }) {
+export function ScreenshotAttach({ value, onChange, pasteScope, compact = false, label = 'Attach screenshot', alt = 'Attached screenshot' }) {
   const toast = useToast()
   const inputRef = useRef(null)
   const [busy, setBusy] = useState(false)
@@ -51,7 +51,7 @@ export function ScreenshotAttach({ value, onChange, pasteScope, compact = false 
       <div className="relative inline-block">
         <img
           src={value}
-          alt="Attached screenshot"
+          alt={alt}
           className="rounded border border-orbital-border max-h-28 object-contain"
         />
         <button
@@ -76,7 +76,7 @@ export function ScreenshotAttach({ value, onChange, pasteScope, compact = false 
         className="inline-flex items-center gap-1.5 text-xs text-orbital-subtle hover:text-orbital-text transition-colors disabled:opacity-50"
       >
         {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-        {busy ? 'Processing…' : (compact ? 'Screenshot' : 'Attach screenshot')}
+        {busy ? 'Processing…' : (compact ? 'Screenshot' : label)}
         {!compact && <span className="text-orbital-dim">· or paste an image</span>}
       </button>
       <input

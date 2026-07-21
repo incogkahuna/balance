@@ -543,6 +543,7 @@ export function createLedWall(overrides = {}) {
     id: crypto.randomUUID(),
     name: '',
     description: '',                // freeform spec — pixel pitch, dimensions, panel make, processor
+    photo: '',                      // compressed JPEG data URL — shown on the gear card
     status: LED_WALL_STATUS.IN_SERVICE,
     notes: '',
     // [{ id, productionId, startDate, endDate, notes, createdAt, createdBy }]

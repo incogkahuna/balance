@@ -8,6 +8,7 @@ import { ROLES, createLedWall, LED_WALL_STATUS } from '../data/models.js'
 import { DictationMic } from '../components/voice/DictationMic.tsx'
 import { Modal } from '../components/ui/Modal.jsx'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
+import { ScreenshotAttach } from '../features/feedback/ScreenshotAttach.jsx'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GearPage — v1 of the gear database, scoped to LED walls per Danny's spec.
@@ -170,6 +171,16 @@ function WallCard({ wall, productions, isAdmin, onEdit, onAssign }) {
 
   return (
     <div className="card-elevated p-4 flex flex-col gap-3">
+      {/* Wall photo — click to open full size */}
+      {wall.photo && (
+        <a href={wall.photo} target="_blank" rel="noopener noreferrer" className="-mx-4 -mt-4 mb-1 block">
+          <img
+            src={wall.photo}
+            alt={`${wall.name} photo`}
+            className="w-full h-36 object-cover rounded-t hover:opacity-90 transition-opacity"
+          />
+        </a>
+      )}
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
@@ -359,6 +370,7 @@ function WallFormModal({ wall, onClose }) {
   const [form, setForm] = useState({
     name: wall?.name || '',
     description: wall?.description || '',
+    photo: wall?.photo || '',
     status: wall?.status || LED_WALL_STATUS.IN_SERVICE,
     notes: wall?.notes || '',
   })
@@ -398,6 +410,15 @@ function WallFormModal({ wall, onClose }) {
             value={form.description}
             onChange={e => set('description', e.target.value)}
             placeholder="ROE Black Pearl 2.8mm · 30m × 5m · Brompton SX40 processor"
+          />
+        </div>
+        <div>
+          <label className="label">Photo</label>
+          <ScreenshotAttach
+            value={form.photo}
+            onChange={v => set('photo', v)}
+            label="Attach photo"
+            alt={`${form.name || 'Wall'} photo`}
           />
         </div>
         <div>
