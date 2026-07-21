@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Bug, Lightbulb, StickyNote, Plus, X, Send, Filter, MessageSquare, Trash2,
-  CheckCircle2, Circle, AlertCircle, Ban, ClipboardCopy,
+  CheckCircle2, Circle, AlertCircle, Ban, ClipboardCopy, CheckSquare, Square,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -54,6 +54,9 @@ export function FeedbackPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [expandedId, setExpandedId]   = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)   // feedback item pending delete confirmation
+  // Prompt list — a curated "cart" of reports built up across filters. Persists
+  // as filters change, so you can gather bugs + a few ideas into one export.
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
 
   const filtered = useMemo(() => {
     return feedbackItems
@@ -62,18 +65,43 @@ export function FeedbackPage() {
       .sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''))
   }, [feedbackItems, kindFilter, statusFilter])
 
-  // Export the CURRENTLY FILTERED list as one paste-ready coding-agent prompt
-  // — the filter chips double as the selection mechanism (e.g. Bugs + New →
-  // copy exactly those). Danny pastes the result straight into Claude Code.
-  const handleCopyPrompt = async () => {
-    if (filtered.length === 0) return
-    const bits = []
-    if (kindFilter !== 'all') bits.push(KIND_FILTERS.find(k => k.id === kindFilter)?.label?.toLowerCase())
-    if (statusFilter !== 'all') bits.push(`status: ${statusFilter}`)
-    const text = formatFeedbackPromptBatch(filtered, { filterLabel: bits.filter(Boolean).join(', ') })
+  // The selected reports, newest-first — copied ALL AT ONCE regardless of the
+  // current filter (they were curated deliberately).
+  const selectedItems = useMemo(
+    () => feedbackItems
+      .filter(f => selectedIds.has(f.id))
+      .sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || '')),
+    [feedbackItems, selectedIds],
+  )
+
+  const toggleSelect = (id) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+  const addAllShown = () => setSelectedIds(prev => {
+    const next = new Set(prev)
+    filtered.forEach(f => next.add(f.id))
+    return next
+  })
+  const clearSelection = () => setSelectedIds(new Set())
+  const allShownSelected = filtered.length > 0 && filtered.every(f => selectedIds.has(f.id))
+
+  // Copy the whole list as one paste-ready coding-agent prompt.
+  const handleCopyList = async () => {
+    if (selectedItems.length === 0) return
+    const text = formatFeedbackPromptBatch(selectedItems)
     const ok = await copyText(text)
-    if (ok) toast.success(`Copied ${filtered.length} report${filtered.length === 1 ? '' : 's'} as a prompt`)
+    if (ok) toast.success(`Copied ${selectedItems.length} report${selectedItems.length === 1 ? '' : 's'} as a prompt`)
     else toast.error("Couldn't access the clipboard — try again")
+  }
+
+  // Batch-set status on the whole list (admin) — e.g. move everything you just
+  // exported to "Acknowledged" or "In Progress" in one go.
+  const applyStatusToSelected = (status) => {
+    if (!status || selectedItems.length === 0) return
+    selectedItems.forEach(it => updateFeedbackItem(it.id, { status }))
+    toast.success(`Set ${selectedItems.length} report${selectedItems.length === 1 ? '' : 's'} to “${status}”`)
   }
 
   // Counts for filter chip badges
@@ -102,23 +130,10 @@ export function FeedbackPage() {
               Spot something broken or have an idea? Drop it here. {isAdmin ? 'Move status as items get worked on.' : 'Track when your suggestions ship.'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopyPrompt}
-              disabled={filtered.length === 0}
-              className="btn-secondary"
-              title="Copy the filtered reports as a paste-ready prompt for Claude Code"
-            >
-              <ClipboardCopy size={14} />
-              <span className="hidden sm:inline">Copy as prompt</span>
-              <span className="sm:hidden">Prompt</span>
-              <span className="font-mono text-[10px] opacity-60">{filtered.length}</span>
-            </button>
-            <button onClick={() => setShowSubmit(true)} className="btn-primary">
-              <Plus size={14} />
-              New report
-            </button>
-          </div>
+          <button onClick={() => setShowSubmit(true)} className="btn-primary">
+            <Plus size={14} />
+            New report
+          </button>
         </div>
 
         {/* Filters */}
@@ -176,6 +191,18 @@ export function FeedbackPage() {
               })}
             </div>
           </div>
+          {/* Add-all toggle — bulk-add the current filter to the prompt list */}
+          {filtered.length > 0 && (
+            <button
+              onClick={allShownSelected ? clearSelection : addAllShown}
+              className="ml-auto inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium text-orbital-subtle hover:text-orbital-text border border-orbital-border hover:bg-orbital-muted transition-colors"
+              title="Add all reports matching the current filter to the prompt list"
+            >
+              {allShownSelected
+                ? <><CheckSquare size={12} /> Clear shown</>
+                : <><Plus size={12} /> Add all shown</>}
+            </button>
+          )}
         </div>
 
         {/* List */}
@@ -198,6 +225,8 @@ export function FeedbackPage() {
                 key={item.id}
                 item={item}
                 isAdmin={isAdmin}
+                isSelected={selectedIds.has(item.id)}
+                onToggleSelect={() => toggleSelect(item.id)}
                 isExpanded={expandedId === item.id}
                 onToggleExpand={() => setExpandedId(id => id === item.id ? null : item.id)}
                 onUpdateStatus={(status) => updateFeedbackItem(item.id, { status })}
@@ -208,6 +237,46 @@ export function FeedbackPage() {
           </div>
         )}
       </div>
+
+      {/* ── Prompt list bar — appears once you've added reports ── */}
+      {selectedItems.length > 0 && (
+        <div
+          className="fixed inset-x-0 z-40 px-3 pointer-events-none"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom) + 76px)' }}
+        >
+          <div className="lg:pl-52">
+            <div className="max-w-4xl mx-auto pointer-events-auto">
+              <div className="card-elevated shadow-2xl flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 flex-wrap">
+                <span className="text-sm font-medium text-orbital-text">
+                  <span className="font-telemetry">{selectedItems.length}</span> in list
+                </span>
+                <button onClick={clearSelection} className="btn-ghost text-xs">
+                  <X size={13} /> Clear
+                </button>
+                <div className="flex items-center gap-2 ml-auto flex-wrap">
+                  {isAdmin && (
+                    <select
+                      className="text-xs px-2 py-1.5 bg-orbital-surface border border-orbital-border text-orbital-text rounded"
+                      value=""
+                      onChange={(e) => { applyStatusToSelected(e.target.value); e.target.value = '' }}
+                      title="Set the status of every report in the list"
+                    >
+                      <option value="" disabled>Set status…</option>
+                      {Object.values(FEEDBACK_STATUS).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button onClick={handleCopyList} className="btn-primary text-xs">
+                    <ClipboardCopy size={13} />
+                    Copy all as prompt
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSubmit && (
         <SubmitFeedbackModal
@@ -230,7 +299,7 @@ export function FeedbackPage() {
 }
 
 // ── FeedbackRow ─────────────────────────────────────────────────────────────
-function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus, onUpdateResolution, onDelete }) {
+function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, onToggleExpand, onUpdateStatus, onUpdateResolution, onDelete }) {
   const toast = useToast()
   const kindMeta   = KIND_META[item.kind] || KIND_META[FEEDBACK_KIND.IDEA]
   const statusMeta = STATUS_META[item.status] || STATUS_META[FEEDBACK_STATUS.NEW]
@@ -254,13 +323,24 @@ function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus
   return (
     <div
       className="card-elevated overflow-hidden"
-      style={{ borderLeft: `3px solid ${kindMeta.color}` }}
+      style={{ borderLeft: `3px solid ${kindMeta.color}`, ...(isSelected ? { background: 'rgba(59,130,246,0.06)' } : null) }}
     >
-      {/* Header row */}
-      <button
-        onClick={onToggleExpand}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-orbital-muted transition-colors"
-      >
+      {/* Header row — checkbox is a sibling of the expand button (can't nest
+          a button inside a button). */}
+      <div className="flex items-center">
+        <button
+          onClick={onToggleSelect}
+          className="pl-4 pr-1 py-3 flex-shrink-0 transition-colors"
+          style={{ color: isSelected ? '#60a5fa' : 'var(--orbital-dim)' }}
+          title={isSelected ? 'Remove from prompt list' : 'Add to prompt list'}
+          aria-pressed={isSelected}
+        >
+          {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
+        </button>
+        <button
+          onClick={onToggleExpand}
+          className="flex-1 min-w-0 flex items-center gap-3 pl-2 pr-4 py-3 text-left hover:bg-orbital-muted transition-colors"
+        >
         {/* Kind icon */}
         <span
           className="w-7 h-7 flex items-center justify-center flex-shrink-0"
@@ -289,7 +369,8 @@ function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus
           <StatusIcon size={11} />
           {item.status}
         </span>
-      </button>
+        </button>
+      </div>
 
       {/* Expanded body */}
       {isExpanded && (
