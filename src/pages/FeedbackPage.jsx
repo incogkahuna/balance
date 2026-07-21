@@ -484,10 +484,16 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
             </button>
           </div>
 
-          {/* Admin controls — status now lives on the always-visible row pill */}
+          {/* Admin controls */}
           {isAdmin && (
             <>
-              <div className="flex items-center gap-2 mt-4 flex-wrap">
+              {/* Status — changeable right here inside the opened issue, not
+                  only from the row header pill. */}
+              <div className="flex items-center gap-2 mt-4">
+                <label className="text-[10px] text-orbital-dim font-telemetry tracking-wider">STATUS</label>
+                <StatusPillSelect status={item.status} onChange={onUpdateStatus} />
+              </div>
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
                 {!editingNote && (
                   <button
                     onClick={() => { setNoteDraft(item.resolutionNote || ''); setEditingNote(true) }}
