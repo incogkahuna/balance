@@ -11,7 +11,9 @@ import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
 // (adminOnly / adminOrSup) unchanged.
 // NOTE: Tasks was previously missing from the desktop sidebar entirely
 // (only reachable via mobile nav + dashboard stat links) — restored here.
-const NAV_SECTIONS = [
+// Exported: MobileNav's hamburger sheet renders the same sections with the
+// same role gating, so the two navs can't drift apart.
+export const NAV_SECTIONS = [
   {
     title: null,   // top block, no header
     items: [
