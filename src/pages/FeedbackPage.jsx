@@ -2,15 +2,19 @@ import { useState, useMemo } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Bug, Lightbulb, StickyNote, Plus, X, Send, Filter, MessageSquare, Trash2,
-  CheckCircle2, Circle, AlertCircle, Ban,
+  CheckCircle2, Circle, AlertCircle, Ban, ClipboardCopy,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
+import { useToast } from '../context/ToastContext.jsx'
 import { Modal } from '../components/ui/Modal.jsx'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog.jsx'
 import {
   ROLES, FEEDBACK_KIND, FEEDBACK_STATUS, createFeedbackItem,
 } from '../data/models.js'
 import { DictationMic } from '../components/voice/DictationMic.tsx'
+import {
+  formatFeedbackPrompt, formatFeedbackPromptBatch, copyText,
+} from '../features/feedback/feedbackPrompt.js'
 import clsx from 'clsx'
 
 // ─── Visual config ──────────────────────────────────────────────────────────
@@ -42,6 +46,7 @@ const STATUS_FILTERS = ['all', ...Object.values(FEEDBACK_STATUS)]
 // ────────────────────────────────────────────────────────────────────────────
 export function FeedbackPage() {
   const { currentUser, feedbackItems, addFeedbackItem, updateFeedbackItem, deleteFeedbackItem } = useApp()
+  const toast = useToast()
   const isAdmin = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
   const [showSubmit, setShowSubmit]   = useState(false)
@@ -56,6 +61,20 @@ export function FeedbackPage() {
       .filter(f => statusFilter === 'all' || f.status === statusFilter)
       .sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''))
   }, [feedbackItems, kindFilter, statusFilter])
+
+  // Export the CURRENTLY FILTERED list as one paste-ready coding-agent prompt
+  // — the filter chips double as the selection mechanism (e.g. Bugs + New →
+  // copy exactly those). Danny pastes the result straight into Claude Code.
+  const handleCopyPrompt = async () => {
+    if (filtered.length === 0) return
+    const bits = []
+    if (kindFilter !== 'all') bits.push(KIND_FILTERS.find(k => k.id === kindFilter)?.label?.toLowerCase())
+    if (statusFilter !== 'all') bits.push(`status: ${statusFilter}`)
+    const text = formatFeedbackPromptBatch(filtered, { filterLabel: bits.filter(Boolean).join(', ') })
+    const ok = await copyText(text)
+    if (ok) toast.success(`Copied ${filtered.length} report${filtered.length === 1 ? '' : 's'} as a prompt`)
+    else toast.error("Couldn't access the clipboard — try again")
+  }
 
   // Counts for filter chip badges
   const counts = useMemo(() => {
@@ -83,10 +102,23 @@ export function FeedbackPage() {
               Spot something broken or have an idea? Drop it here. {isAdmin ? 'Move status as items get worked on.' : 'Track when your suggestions ship.'}
             </p>
           </div>
-          <button onClick={() => setShowSubmit(true)} className="btn-primary">
-            <Plus size={14} />
-            New report
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopyPrompt}
+              disabled={filtered.length === 0}
+              className="btn-secondary"
+              title="Copy the filtered reports as a paste-ready prompt for Claude Code"
+            >
+              <ClipboardCopy size={14} />
+              <span className="hidden sm:inline">Copy as prompt</span>
+              <span className="sm:hidden">Prompt</span>
+              <span className="font-mono text-[10px] opacity-60">{filtered.length}</span>
+            </button>
+            <button onClick={() => setShowSubmit(true)} className="btn-primary">
+              <Plus size={14} />
+              New report
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -199,10 +231,17 @@ export function FeedbackPage() {
 
 // ── FeedbackRow ─────────────────────────────────────────────────────────────
 function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus, onUpdateResolution, onDelete }) {
+  const toast = useToast()
   const kindMeta   = KIND_META[item.kind] || KIND_META[FEEDBACK_KIND.IDEA]
   const statusMeta = STATUS_META[item.status] || STATUS_META[FEEDBACK_STATUS.NEW]
   const KindIcon   = kindMeta.icon
   const StatusIcon = statusMeta.icon
+
+  const handleCopyOne = async () => {
+    const ok = await copyText(formatFeedbackPrompt(item))
+    if (ok) toast.success('Report copied as a prompt')
+    else toast.error("Couldn't access the clipboard — try again")
+  }
 
   // Admin resolution-note editor state. Draft is local; Save persists.
   const [editingNote, setEditingNote] = useState(false)
@@ -269,6 +308,18 @@ function FeedbackRow({ item, isAdmin, isExpanded, onToggleExpand, onUpdateStatus
               <p className="text-xs text-orbital-text whitespace-pre-wrap">{item.resolutionNote}</p>
             </div>
           )}
+
+          {/* Copy this one report as a standalone prompt — everyone */}
+          <div className="mt-3">
+            <button
+              onClick={handleCopyOne}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
+              title="Copy this report as a paste-ready prompt"
+            >
+              <ClipboardCopy size={11} />
+              Copy as prompt
+            </button>
+          </div>
 
           {/* Admin controls */}
           {isAdmin && (

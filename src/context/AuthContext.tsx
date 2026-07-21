@@ -50,18 +50,22 @@ const CAPTURED_OAUTH_CODE =
     ? new URLSearchParams(window.location.search).get('code')
     : null
 
-// ─── Domain allowlist ────────────────────────────────────────────────────────
-// Balance is for Orbital Studios staff only. This is the client-side gate: any
-// session whose email isn't an @orbitalvs.com address is signed out on sight
-// and told why. It's belt-and-braces with the server-side enforcement — the
-// handle_new_user trigger REJECTS non-orbital signups so those accounts can't
-// be created in the first place (see migration 20260720000000).
+// ─── Domain allowlist + per-email grants ─────────────────────────────────────
+// Balance is for Orbital Studios staff — plus specific outside accounts Danny
+// explicitly grants. The server is the source of truth: handle_new_user
+// (migration 20260720000000) only provisions a profile for @orbitalvs.com
+// addresses OR emails pre-authorized in role_assignments; everything else is
+// rejected at signup. The client-side gate mirrors that rule for sessions
+// that already exist: orbital domain → in; outside domain → in ONLY if a
+// profiles row exists (meaning the server approved it); otherwise sign out
+// with a message. Granting an outside account is one SQL insert into
+// role_assignments — no code change.
 const ALLOWED_EMAIL_DOMAIN = '@orbitalvs.com'
 function isAllowedEmail(email?: string | null): boolean {
   return !!email && email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN)
 }
 const ACCESS_DENIED_MSG =
-  'Access is restricted to Orbital Studios accounts. Please sign in with your @orbitalvs.com email.'
+  'Access is restricted to Orbital Studios accounts. Sign in with your @orbitalvs.com email, or ask Danny to grant this address access.'
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
   log('fetchProfile starting for', userId)
@@ -195,20 +199,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         const initialSession = data?.session ?? null
         log('initial session:', initialSession ? `present (${initialSession.user.email})` : 'null')
-        // Domain gate BEFORE trusting the session — a non-orbital account never
-        // gets a profile or app access.
-        if (initialSession?.user && !isAllowedEmail(initialSession.user.email)) {
-          await blockDisallowed(initialSession.user.email)
-          return
-        }
-        setSession(initialSession)
         if (initialSession?.user) {
+          const allowedDomain = isAllowedEmail(initialSession.user.email)
           const p = await fetchProfile(initialSession.user.id)
-          if (!cancelled) {
-            // Fall back to a synthetic profile if the row doesn't exist yet
-            // or the query failed. Lets the user into the app while we debug.
-            setProfile(p || profileFromSession(initialSession.user))
+          if (cancelled) return
+          // Outside-domain sessions are admitted ONLY when their profile row
+          // exists — that row is the server's proof the account was granted
+          // (fail closed: no profile → no access, no synthetic fallback).
+          if (!allowedDomain && !p) {
+            await blockDisallowed(initialSession.user.email)
+            return
           }
+          setSession(initialSession)
+          // Orbital accounts keep the synthetic-profile fallback so a flaky
+          // profiles query never locks staff out while we debug.
+          setProfile(p || profileFromSession(initialSession.user))
+        } else {
+          setSession(null)
         }
       } catch (e) {
         warn('initialisation failed:', e)
@@ -228,17 +235,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, nextSession) => {
         log('onAuthStateChange:', event, nextSession ? `session for ${nextSession.user.email}` : 'no session')
-        // Same domain gate on every auth transition — catches the moment a
-        // non-orbital account completes Google OAuth.
-        if (nextSession?.user && !isAllowedEmail(nextSession.user.email)) {
-          await blockDisallowed(nextSession.user.email)
-          return
-        }
-        setSession(nextSession)
         if (nextSession?.user) {
+          // Same gate on every auth transition — catches the moment an
+          // account completes Google OAuth. Outside domains need their
+          // server-provisioned profile row to exist; no row → signed out.
+          const allowedDomain = isAllowedEmail(nextSession.user.email)
           const p = await fetchProfile(nextSession.user.id)
+          if (!allowedDomain && !p) {
+            await blockDisallowed(nextSession.user.email)
+            return
+          }
+          setSession(nextSession)
           setProfile(p || profileFromSession(nextSession.user))
         } else {
+          setSession(nextSession)
           setProfile(null)
         }
         // If we somehow get here while still loading, unstick.
