@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Search, Briefcase, Sparkles } from 'lucide-react'
-import { usePipeline, STATUS_ORDER, STATUS_LABELS, ROLE_LABELS } from './PipelineContext.jsx'
+import { usePipeline, STATUS_ORDER, STATUS_LABELS } from './PipelineContext.jsx'
 import { DealStatusBadge, VenueChip, ModeChip, MoneyTriple, ClientHistoryList, fmtDate, PipelineNoAccess } from './components.jsx'
 import { Modal } from '../../components/ui/Modal.jsx'
 import { useToast } from '../../context/ToastContext.jsx'
@@ -70,9 +70,6 @@ export function DealsPage() {
         )}
       </div>
       <p className="text-sm text-orbital-subtle mb-4">
-        {pipelineRole && (
-          <>Viewing as <span className="text-orbital-text">{ROLE_LABELS[pipelineRole] || pipelineRole}</span>. </>
-        )}
         Type a client to pull every past deal instantly.
       </p>
 

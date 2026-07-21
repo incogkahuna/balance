@@ -36,12 +36,12 @@ const PipelineContext = createContext(null)
 
 // Mirrors pipeline_role_assignments in the migration — used for dev
 // impersonation and as a client-side hint before the profiles column exists.
-// brian@ = NITZKIN (Business Manager); brodriguez@ is a different Brian (crew).
+// CURRENT UNLOCK: Danny, Wilder, AJ only. Next unlock adds Brian Nitzkin
+// (brian@ → admin_finance) and Mark (mark@ → production) — re-add them here
+// AND in the DB assignments when Danny says go.
 const EMAIL_ROLES = {
-  'brian@orbitalvs.com': 'admin_finance',
   'aj@orbitalvs.com': 'admin_exec',
   'dhorgan@orbitalvs.com': 'admin_exec',
-  'mark@orbitalvs.com': 'production',
   'wilder@orbitalvs.com': 'admin_exec', // dev team — full access, money included
 }
 
@@ -85,21 +85,18 @@ export function PipelineProvider({ children }) {
   const [remoteAggregates, setRemoteAggregates] = useState(null)
 
   // ── Role resolution ────────────────────────────────────────────────────────
-  // Explicit profiles.pipeline_role (post-migration) → email map → Balance
-  // admin fallback → legacy dev-impersonation ids (nitz/mark/wilder…).
+  // Explicit profiles.pipeline_role (post-migration) → email map → dev
+  // impersonation ids. Deliberately NO Balance-admin fallback anymore: the
+  // pipeline is explicit-grant only (currently Danny / Wilder / AJ).
   const pipelineRole = useMemo(() => {
     if (profile?.pipeline_role) return profile.pipeline_role
     const email = (currentUser?.email || profile?.email || '').toLowerCase()
     if (EMAIL_ROLES[email]) return EMAIL_ROLES[email]
     if (currentUser?.isDevImpersonation) {
-      const byId = {
-        nitz: 'admin_finance', aj: 'admin_exec', danny: 'admin_exec',
-        mark: 'production', wilder: 'admin_exec',
-      }
+      // Next unlock: nitz → admin_finance, mark → production.
+      const byId = { aj: 'admin_exec', danny: 'admin_exec', wilder: 'admin_exec' }
       return byId[currentUser.id] ?? null
     }
-    const appRole = profile?.role || currentUser?.role
-    if (appRole === 'admin') return 'admin_exec'
     return null
   }, [profile, currentUser])
 

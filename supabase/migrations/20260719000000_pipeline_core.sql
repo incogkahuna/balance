@@ -34,19 +34,21 @@ create table if not exists public.pipeline_role_assignments (
   created_at     timestamptz not null default now()
 );
 
+-- CURRENT UNLOCK: Danny, Wilder, AJ only (per Danny 2026-07-20). The next
+-- unlock adds Brian Nitzkin (brian@ → admin_finance; brodriguez@ is a
+-- different Brian, crew, no role) and Mark (mark@ → production) — insert
+-- their rows when Danny says go.
 insert into public.pipeline_role_assignments (email, pipeline_role) values
-  -- NOTE: brian@ is Brian NITZKIN (Business Manager). brodriguez@ is a
-  -- different Brian (crew) and deliberately gets no pipeline role.
-  ('brian@orbitalvs.com',      'admin_finance'),  -- Brian Nitzkin — Business Manager
   ('aj@orbitalvs.com',         'admin_exec'),     -- AJ — CEO
   ('dhorgan@orbitalvs.com',    'admin_exec'),     -- Danny — owner
-  ('mark@orbitalvs.com',       'production'),     -- Mark — Production
   ('wilder@orbitalvs.com',     'admin_exec')      -- Wilder — Head of AI (dev team: full access)
 on conflict (email) do nothing;
 
--- Resolve the caller's pipeline role. Fallback chain:
+-- Resolve the caller's pipeline role. EXPLICIT GRANTS ONLY:
 --   explicit profiles.pipeline_role → email match in pipeline_role_assignments
---   → 'admin_exec' for Balance admins (owner accounts keep working) → null.
+--   → null. (The old "Balance admin ⇒ admin_exec" fallback was removed — it
+--   silently granted every app admin pipeline money access; the pipeline is
+--   opt-in per person.)
 -- SECURITY DEFINER so RLS policies can call it without recursive table grants.
 create or replace function public.pipeline_role()
 returns text
@@ -58,10 +60,9 @@ as $$
 declare
   v_role  text;
   v_email text;
-  v_app   text;
 begin
-  select p.pipeline_role, p.email, p.role
-    into v_role, v_email, v_app
+  select p.pipeline_role, p.email
+    into v_role, v_email
   from public.profiles p
   where p.id = auth.uid();
 
@@ -71,9 +72,7 @@ begin
   from public.pipeline_role_assignments a
   where a.email = v_email;
 
-  if v_role is not null then return v_role; end if;
-  if v_app = 'admin' then return 'admin_exec'; end if;
-  return null;
+  return v_role;
 end;
 $$;
 
