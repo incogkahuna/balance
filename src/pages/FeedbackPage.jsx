@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns'
 import {
   Bug, Lightbulb, StickyNote, Plus, X, Send, Filter, MessageSquare, Trash2,
   CheckCircle2, Circle, AlertCircle, Ban, ClipboardCopy, CheckSquare, Square,
+  ChevronDown,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -109,6 +110,22 @@ export function FeedbackPage() {
     if (!status || selectedItems.length === 0) return
     selectedItems.forEach(it => updateFeedbackItem(it.id, { status }))
     toast.success(`Set ${selectedItems.length} report${selectedItems.length === 1 ? '' : 's'} to “${status}”`)
+  }
+
+  // Would this item still show under the active filters?
+  const matchesView = (it) =>
+    (kindFilter === 'all' || it.kind === kindFilter) &&
+    (statusFilter === 'all' ? !CLOSED_STATUSES.includes(it.status) : it.status === statusFilter)
+
+  // Single-item status change (from the row's inline pill). If the new status
+  // drops the item out of the current view (e.g. → Shipped while on "All"),
+  // say where it went so it never feels like the control just vanished.
+  const handleSetStatus = (item, status) => {
+    if (status === item.status) return
+    updateFeedbackItem(item.id, { status })
+    if (!matchesView({ ...item, status })) {
+      toast.info(`“${item.title || 'Report'}” moved to ${status} — find it under the ${status} filter.`)
+    }
   }
 
   // Counts for filter chip badges. Type chips count OPEN items (closed ones
@@ -241,7 +258,7 @@ export function FeedbackPage() {
                 onToggleSelect={() => toggleSelect(item.id)}
                 isExpanded={expandedId === item.id}
                 onToggleExpand={() => setExpandedId(id => id === item.id ? null : item.id)}
-                onUpdateStatus={(status) => updateFeedbackItem(item.id, { status })}
+                onUpdateStatus={(status) => handleSetStatus(item, status)}
                 onUpdateResolution={(resolutionNote) => updateFeedbackItem(item.id, { resolutionNote })}
                 onDelete={() => setDeleteTarget(item)}
               />
@@ -259,29 +276,33 @@ export function FeedbackPage() {
           <div className="lg:pl-52">
             <div className="max-w-4xl mx-auto pointer-events-auto">
               <div className="card-elevated shadow-2xl flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 flex-wrap">
-                <span className="text-sm font-medium text-orbital-text">
-                  <span className="font-telemetry">{selectedItems.length}</span> in list
+                <span className="text-sm font-medium text-orbital-text whitespace-nowrap">
+                  <span className="font-telemetry">{selectedItems.length}</span> selected
                 </span>
                 <button onClick={clearSelection} className="btn-ghost text-xs">
                   <X size={13} /> Clear
                 </button>
                 <div className="flex items-center gap-2 ml-auto flex-wrap">
                   {isAdmin && (
-                    <select
-                      className="text-xs px-2 py-1.5 bg-orbital-surface border border-orbital-border text-orbital-text rounded"
-                      value=""
-                      onChange={(e) => { applyStatusToSelected(e.target.value); e.target.value = '' }}
-                      title="Set the status of every report in the list"
-                    >
-                      <option value="" disabled>Set status…</option>
-                      {Object.values(FEEDBACK_STATUS).map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
+                    <label className="flex items-center gap-1.5 text-xs text-orbital-subtle">
+                      <span className="hidden sm:inline">Set status</span>
+                      <select
+                        className="text-xs px-2 py-1.5 bg-orbital-surface border border-orbital-border text-orbital-text rounded cursor-pointer"
+                        value=""
+                        onChange={(e) => { applyStatusToSelected(e.target.value); e.target.value = '' }}
+                        title="Set the status of every selected report"
+                      >
+                        <option value="" disabled>Change to…</option>
+                        {Object.values(FEEDBACK_STATUS).map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </label>
                   )}
                   <button onClick={handleCopyList} className="btn-primary text-xs">
                     <ClipboardCopy size={13} />
-                    Copy all as prompt
+                    <span className="hidden sm:inline">Copy all as prompt</span>
+                    <span className="sm:hidden">Prompt</span>
                   </button>
                 </div>
               </div>
@@ -306,6 +327,32 @@ export function FeedbackPage() {
         confirmLabel="Delete"
         danger
       />
+    </div>
+  )
+}
+
+// ── StatusPillSelect — the status pill IS the dropdown (admins) ──────────────
+// Always visible on the row, colored by the current status; picking a value
+// changes it immediately. This is the single, obvious place to organise
+// status — no need to expand the row.
+function StatusPillSelect({ status, onChange }) {
+  const meta = STATUS_META[status] || STATUS_META[FEEDBACK_STATUS.NEW]
+  const Icon = meta.icon
+  return (
+    <div className="relative inline-flex items-center">
+      <Icon size={11} className="absolute left-2 pointer-events-none" style={{ color: meta.color }} />
+      <ChevronDown size={11} className="absolute right-1.5 pointer-events-none" style={{ color: meta.color }} />
+      <select
+        value={status}
+        onChange={(e) => onChange(e.target.value)}
+        title="Change status"
+        className="appearance-none cursor-pointer text-[11px] font-medium pl-7 pr-5 py-1 rounded outline-none focus:ring-2"
+        style={{ color: meta.color, background: meta.bg, border: `1px solid ${meta.border}` }}
+      >
+        {Object.values(FEEDBACK_STATUS).map(s => (
+          <option key={s} value={s} style={{ color: 'var(--orbital-text)', background: 'var(--orbital-surface)' }}>{s}</option>
+        ))}
+      </select>
     </div>
   )
 }
@@ -337,51 +384,59 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
       className="card-elevated overflow-hidden"
       style={{ borderLeft: `3px solid ${kindMeta.color}`, ...(isSelected ? { background: 'rgba(59,130,246,0.06)' } : null) }}
     >
-      {/* Header row — checkbox is a sibling of the expand button (can't nest
-          a button inside a button). */}
+      {/* Header row — checkbox and status control are SIBLINGS of the expand
+          button (can't nest a button/select inside a button). The status
+          control is always visible, so changing status never requires
+          expanding the row. */}
       <div className="flex items-center">
         <button
           onClick={onToggleSelect}
           className="pl-4 pr-1 py-3 flex-shrink-0 transition-colors"
           style={{ color: isSelected ? '#60a5fa' : 'var(--orbital-dim)' }}
-          title={isSelected ? 'Remove from prompt list' : 'Add to prompt list'}
+          title={isSelected ? 'Deselect' : 'Select (for batch status / prompt export)'}
           aria-pressed={isSelected}
         >
           {isSelected ? <CheckSquare size={16} /> : <Square size={16} />}
         </button>
         <button
           onClick={onToggleExpand}
-          className="flex-1 min-w-0 flex items-center gap-3 pl-2 pr-4 py-3 text-left hover:bg-orbital-muted transition-colors"
+          className="flex-1 min-w-0 flex items-center gap-3 pl-2 pr-2 py-3 text-left hover:bg-orbital-muted transition-colors"
         >
-        {/* Kind icon */}
-        <span
-          className="w-7 h-7 flex items-center justify-center flex-shrink-0"
-          style={{ background: kindMeta.bg, border: `1px solid ${kindMeta.border}`, color: kindMeta.color }}
-        >
-          <KindIcon size={13} />
-        </span>
+          {/* Kind icon */}
+          <span
+            className="w-7 h-7 flex items-center justify-center flex-shrink-0"
+            style={{ background: kindMeta.bg, border: `1px solid ${kindMeta.border}`, color: kindMeta.color }}
+          >
+            <KindIcon size={13} />
+          </span>
 
-        {/* Title + meta */}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-orbital-text truncate">{item.title || '(Untitled)'}</p>
-          <p className="text-[11px] text-orbital-subtle mt-0.5 flex items-center gap-2 flex-wrap">
-            <span className="font-telemetry tracking-wider uppercase" style={{ color: kindMeta.color }}>{kindMeta.label}</span>
-            <span className="text-orbital-dim">·</span>
-            <span>{item.submittedByName || 'Anonymous'}</span>
-            <span className="text-orbital-dim">·</span>
-            <span className="font-mono">{submittedDate}</span>
-          </p>
-        </div>
-
-        {/* Status pill */}
-        <span
-          className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap flex-shrink-0"
-          style={{ color: statusMeta.color, background: statusMeta.bg, border: `1px solid ${statusMeta.border}` }}
-        >
-          <StatusIcon size={11} />
-          {item.status}
-        </span>
+          {/* Title + meta */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-orbital-text truncate">{item.title || '(Untitled)'}</p>
+            <p className="text-[11px] text-orbital-subtle mt-0.5 flex items-center gap-2 flex-wrap">
+              <span className="font-telemetry tracking-wider uppercase" style={{ color: kindMeta.color }}>{kindMeta.label}</span>
+              <span className="text-orbital-dim">·</span>
+              <span>{item.submittedByName || 'Anonymous'}</span>
+              <span className="text-orbital-dim">·</span>
+              <span className="font-mono">{submittedDate}</span>
+            </p>
+          </div>
         </button>
+
+        {/* Status control — admins get an inline dropdown; others a static pill */}
+        <div className="pr-3 flex-shrink-0">
+          {isAdmin ? (
+            <StatusPillSelect status={item.status} onChange={onUpdateStatus} />
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+              style={{ color: statusMeta.color, background: statusMeta.bg, border: `1px solid ${statusMeta.border}` }}
+            >
+              <StatusIcon size={11} />
+              {item.status}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Expanded body */}
@@ -429,20 +484,10 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
             </button>
           </div>
 
-          {/* Admin controls */}
+          {/* Admin controls — status now lives on the always-visible row pill */}
           {isAdmin && (
             <>
               <div className="flex items-center gap-2 mt-4 flex-wrap">
-                <label className="text-[10px] text-orbital-dim font-telemetry tracking-wider">SET STATUS</label>
-                <select
-                  className="text-xs px-2 py-1 bg-orbital-surface border border-orbital-border text-orbital-text rounded"
-                  value={item.status}
-                  onChange={(e) => onUpdateStatus(e.target.value)}
-                >
-                  {Object.values(FEEDBACK_STATUS).map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
                 {!editingNote && (
                   <button
                     onClick={() => { setNoteDraft(item.resolutionNote || ''); setEditingNote(true) }}
