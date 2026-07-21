@@ -4,12 +4,21 @@
 // in index.css under BACKGROUND FX), theme-aware via the --fx-* custom
 // properties, and user-selectable via BackgroundContext / the account menu.
 
+import { useLocation } from 'react-router-dom'
 import { useBackground } from '../../context/BackgroundContext.jsx'
 import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
 
 export function BackgroundFX({ preset: forced }) {
   const ctx = safeBackground()
-  const preset = forced || ctx?.background || 'orbit'
+  const location = safeLocation()
+
+  // Per-page backdrops (Danny's request): a page-specific assignment wins,
+  // otherwise the global choice — so toggling through pages can change the
+  // scenery. `forced` (login) bypasses both.
+  const resolved = !forced && ctx?.resolveForPath && location
+    ? ctx.resolveForPath(location.pathname)
+    : null
+  const preset = forced || resolved?.preset || ctx?.background || 'orbit'
   if (preset === 'none') return null
 
   // Speed scales every animation duration via --fx-speed; intensity dims the
@@ -17,6 +26,7 @@ export function BackgroundFX({ preset: forced }) {
   // without the provider) at the tuned look.
   const speed = ctx?.speed ?? 1
   const intensity = ctx?.intensity ?? 1
+  const imageSrc = resolved?.imageSrc ?? ctx?.customImage
 
   return (
     <div className="bgfx" aria-hidden="true" style={{ opacity: intensity, '--fx-speed': speed }}>
@@ -27,7 +37,7 @@ export function BackgroundFX({ preset: forced }) {
       {preset === 'starfield' && <StarfieldLayer />}
       {preset === 'grid'      && <GridLayer />}
       {preset === 'aurora'    && <AuroraLayer />}
-      {preset === 'image'     && <ImageLayer src={ctx?.customImage} />}
+      {preset === 'image'     && <ImageLayer src={imageSrc} />}
     </div>
   )
 }
@@ -35,6 +45,9 @@ export function BackgroundFX({ preset: forced }) {
 // The login page renders outside providers in some flows — degrade gracefully.
 function safeBackground() {
   try { return useBackground() } catch { return null }
+}
+function safeLocation() {
+  try { return useLocation() } catch { return null }
 }
 
 // ── Orbit — the signature preset. A ring system anchored off the top-right

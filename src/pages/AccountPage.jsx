@@ -12,7 +12,7 @@ import { useApp } from '../context/AppContext.jsx'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
-import { useBackground, BACKGROUND_PRESETS, BG_SPEED, BG_INTENSITY } from '../context/BackgroundContext.jsx'
+import { useBackground, BACKGROUND_PRESETS, BG_SPEED, BG_INTENSITY, BG_LIBRARY_MAX } from '../context/BackgroundContext.jsx'
 import { PresetThumb, FxSlider, applyBackdropFile } from '../components/layout/AccountMenu.jsx'
 import { OrbitalMark } from '../components/brand/OrbitalLogo.jsx'
 import clsx from 'clsx'
@@ -25,6 +25,22 @@ const COLOR_PALETTE = [
   '#ef4444', '#ec4899', '#06b6d4', '#84cc16', '#a78bfa',
 ]
 
+// Pages that can carry their own backdrop (top-level route → label).
+const ASSIGNABLE_PAGES = [
+  { path: '/dashboard',   label: 'Dashboard' },
+  { path: '/tasks',       label: 'Tasks' },
+  { path: '/productions', label: 'Productions' },
+  { path: '/schedule',    label: 'Schedule' },
+  { path: '/resources',   label: 'Resources' },
+  { path: '/pipeline',    label: 'Pipeline' },
+  { path: '/gear',        label: 'Gear' },
+  { path: '/team',        label: 'Team' },
+  { path: '/contractors', label: 'Contractors' },
+  { path: '/analytics',   label: 'Analytics' },
+  { path: '/feedback',    label: 'Bugs & Ideas' },
+  { path: '/account',     label: 'Account' },
+]
+
 export function AccountPage() {
   const { currentUser, logout } = useApp()
   const { profile, updateProfile } = useAuth()
@@ -33,6 +49,8 @@ export function AccountPage() {
   const {
     background, setBackground, speed, setSpeed, intensity, setIntensity,
     customImage, setCustomImage, clearCustomImage,
+    images, removeImage, selectImage, selectedImageId,
+    pageBackgrounds, setPageBackground,
   } = useBackground()
   const navigate = useNavigate()
   const fileRef = useRef(null)
@@ -265,6 +283,76 @@ export function AccountPage() {
             />
           </div>
         )}
+
+        {/* ── Image library — keep several backdrops, tap to use ── */}
+        <div className="mt-6">
+          <p className="hud-label text-[10px] mb-2">Image library</p>
+          <div className="flex flex-wrap gap-2">
+            {images.map((img, i) => (
+              <div key={img.id} className="relative">
+                <button
+                  onClick={() => { selectImage(img.id); toast.success('Backdrop applied') }}
+                  className="block w-24 h-16 overflow-hidden border transition-all"
+                  style={{
+                    borderColor: (background === 'image' && (selectedImageId || images[0]?.id) === img.id)
+                      ? 'var(--accent-bright)' : 'var(--orbital-border)',
+                  }}
+                  title={`Use image ${i + 1} as the backdrop`}
+                >
+                  <img src={img.dataUrl} alt={`Backdrop ${i + 1}`} className="w-full h-full object-cover" />
+                </button>
+                <button
+                  onClick={() => { removeImage(img.id); toast.info('Image removed') }}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center rounded-full bg-orbital-surface border border-orbital-border text-orbital-subtle hover:text-red-400"
+                  aria-label={`Remove backdrop ${i + 1}`}
+                >
+                  <Trash2 size={10} />
+                </button>
+              </div>
+            ))}
+            {images.length < BG_LIBRARY_MAX && (
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="w-24 h-16 flex flex-col items-center justify-center gap-1 border border-dashed border-orbital-border text-orbital-subtle hover:text-orbital-text hover:border-orbital-chrome transition-colors"
+              >
+                <ImagePlus size={14} />
+                <span className="text-[9px] font-telemetry tracking-wider">ADD</span>
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-orbital-dim mt-1.5">
+            Up to {BG_LIBRARY_MAX} images, stored in this browser. Tap one to use it everywhere,
+            or assign per page below.
+          </p>
+        </div>
+
+        {/* ── Per-page backdrops — scenery changes as you move around ── */}
+        <div className="mt-6">
+          <p className="hud-label text-[10px] mb-2">Per-page backdrops</p>
+          <p className="text-[11px] text-orbital-dim mb-2">
+            Give any page its own backdrop — it overrides the global pick just for that page.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 max-w-2xl">
+            {ASSIGNABLE_PAGES.map(({ path, label }) => (
+              <label key={path} className="flex items-center justify-between gap-3 text-sm text-orbital-text">
+                <span className="truncate">{label}</span>
+                <select
+                  className="text-xs px-2 py-1.5 bg-orbital-surface border border-orbital-border text-orbital-text rounded max-w-[46%]"
+                  value={pageBackgrounds[path] || 'default'}
+                  onChange={(e) => setPageBackground(path, e.target.value)}
+                >
+                  <option value="default">App default</option>
+                  {BACKGROUND_PRESETS.filter(p => p.id !== 'image').map(p => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                  {images.map((img, i) => (
+                    <option key={img.id} value={`image:${img.id}`}>Image {i + 1}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* ── Session ──────────────────────────────────────────────────── */}

@@ -12,7 +12,14 @@ const BackgroundContext = createContext(null)
 const STORAGE_KEY = 'balance_bg_v1'
 const SPEED_KEY = 'balance_bg_speed_v1'
 const INTENSITY_KEY = 'balance_bg_intensity_v1'
-const IMAGE_KEY = 'balance_bg_image_v1'
+const IMAGE_KEY = 'balance_bg_image_v1'          // legacy single image (imported into the library)
+const IMAGES_KEY = 'balance_bg_images_v1'        // [{id, dataUrl}] library
+const SELECTED_IMAGE_KEY = 'balance_bg_image_sel_v1'
+const PAGES_KEY = 'balance_bg_pages_v1'          // { '/tasks': 'aurora' | 'image:<id>' }
+
+// Library cap — images live in localStorage (~5MB quota); six 1600px JPEGs
+// fit comfortably. Server-side storage can lift this later.
+export const BG_LIBRARY_MAX = 6
 
 export const BACKGROUND_PRESETS = [
   { id: 'orbit',     label: 'Orbit',     hint: 'Slow orbital ring system' },
@@ -67,15 +74,48 @@ const clamp = (raw, { min, max, default: dflt }) => {
 }
 
 export function BackgroundProvider({ children }) {
-  const [customImage, setCustomImageState] = useState(() => {
-    const stored = typeof window !== 'undefined' ? localStorage.getItem(IMAGE_KEY) : null
-    return stored && stored.startsWith('data:image/') ? stored : null
+  // ── Image LIBRARY (Danny's request: multiple backdrops + per-page picks) ──
+  // Legacy single-image installs import their photo as the first entry.
+  const [images, setImagesState] = useState(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = localStorage.getItem(IMAGES_KEY)
+      const parsed = raw ? JSON.parse(raw) : null
+      if (Array.isArray(parsed)) return parsed.filter(i => i?.id && i?.dataUrl?.startsWith('data:image/'))
+    } catch { /* fall through */ }
+    const legacy = localStorage.getItem(IMAGE_KEY)
+    if (legacy && legacy.startsWith('data:image/')) {
+      return [{ id: 'legacy', dataUrl: legacy }]
+    }
+    return []
   })
+  const [selectedImageId, setSelectedImageIdState] = useState(() => {
+    if (typeof window === 'undefined') return null
+    const stored = localStorage.getItem(SELECTED_IMAGE_KEY)
+    return stored || (localStorage.getItem(IMAGE_KEY) ? 'legacy' : null)
+  })
+  // Per-page overrides: { '/tasks': presetId | 'image:<id>' }
+  const [pageBackgrounds, setPageBackgroundsState] = useState(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const raw = localStorage.getItem(PAGES_KEY)
+      const parsed = raw ? JSON.parse(raw) : null
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch { return {} }
+  })
+
+  // The globally-selected image (drives the 'image' preset); kept under the
+  // old `customImage` name so existing UI (thumbs, account page) keeps working.
+  const customImage = images.find(i => i.id === selectedImageId)?.dataUrl
+    || images[0]?.dataUrl
+    || null
   const [background, setBackgroundState] = useState(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
     if (!BACKGROUND_PRESETS.some(p => p.id === stored)) return 'orbit'
     // 'image' with no stored photo (cleared storage, new browser) → default
-    if (stored === 'image' && !localStorage.getItem(IMAGE_KEY)) return 'orbit'
+    if (stored === 'image'
+        && !localStorage.getItem(IMAGES_KEY)
+        && !localStorage.getItem(IMAGE_KEY)) return 'orbit'
     return stored
   })
   const [speed, setSpeedState] = useState(() =>
@@ -99,22 +139,101 @@ export function BackgroundProvider({ children }) {
   const setSpeed = useCallback((v) => setSpeedState(clamp(v, BG_SPEED)), [])
   const setIntensity = useCallback((v) => setIntensityState(clamp(v, BG_INTENSITY)), [])
 
-  // Persist-or-throw: a QuotaExceededError here must surface to the UI (toast)
-  // instead of silently keeping an image that won't survive a reload.
-  const setCustomImage = useCallback((dataUrl) => {
-    localStorage.setItem(IMAGE_KEY, dataUrl)
-    setCustomImageState(dataUrl)
+  useEffect(() => {
+    try { localStorage.setItem(IMAGES_KEY, JSON.stringify(images)) } catch { /* quota */ }
+  }, [images])
+  useEffect(() => {
+    try {
+      if (selectedImageId) localStorage.setItem(SELECTED_IMAGE_KEY, selectedImageId)
+      else localStorage.removeItem(SELECTED_IMAGE_KEY)
+    } catch { /* private mode */ }
+  }, [selectedImageId])
+  useEffect(() => {
+    try { localStorage.setItem(PAGES_KEY, JSON.stringify(pageBackgrounds)) } catch { /* private mode */ }
+  }, [pageBackgrounds])
+
+  // ── Library mutators ──────────────────────────────────────────────────────
+  // addImage persists-or-throws: a QuotaExceededError must surface to the UI
+  // (toast) instead of silently keeping an image that won't survive a reload.
+  const addImage = useCallback((dataUrl) => {
+    const id = crypto.randomUUID()
+    const next = [...images, { id, dataUrl }].slice(-BG_LIBRARY_MAX)
+    localStorage.setItem(IMAGES_KEY, JSON.stringify(next)) // throw before state
+    setImagesState(next)
+    setSelectedImageIdState(id)
+    return id
+  }, [images])
+
+  const removeImage = useCallback((id) => {
+    setImagesState(prev => {
+      const next = prev.filter(i => i.id !== id)
+      if (next.length === 0) setBackgroundState(bg => (bg === 'image' ? 'orbit' : bg))
+      return next
+    })
+    setSelectedImageIdState(sel => (sel === id ? null : sel))
+    // Drop any page assignment pointing at the removed image.
+    setPageBackgroundsState(prev => {
+      const next = { ...prev }
+      for (const k of Object.keys(next)) {
+        if (next[k] === `image:${id}`) delete next[k]
+      }
+      return next
+    })
   }, [])
+
+  const selectImage = useCallback((id) => {
+    setSelectedImageIdState(id)
+    setBackgroundState('image')
+  }, [])
+
+  // Back-compat shims for existing UI (account menu/page single-image flow).
+  const setCustomImage = useCallback((dataUrl) => { addImage(dataUrl) }, [addImage])
   const clearCustomImage = useCallback(() => {
-    try { localStorage.removeItem(IMAGE_KEY) } catch { /* private mode */ }
-    setCustomImageState(null)
+    setImagesState(prev => {
+      const sel = selectedImageId || prev[0]?.id
+      return prev.filter(i => i.id !== sel)
+    })
+    setSelectedImageIdState(null)
     setBackgroundState(bg => (bg === 'image' ? 'orbit' : bg))
+  }, [selectedImageId])
+
+  // ── Per-page assignment ───────────────────────────────────────────────────
+  // key = top-level path ('/tasks'); value = presetId or 'image:<id>'; delete
+  // by assigning 'default'.
+  const setPageBackground = useCallback((pathKey, spec) => {
+    setPageBackgroundsState(prev => {
+      const next = { ...prev }
+      if (!spec || spec === 'default') delete next[pathKey]
+      else next[pathKey] = spec
+      return next
+    })
   }, [])
+
+  // Resolve what to render for a pathname: page override → global setting.
+  // Returns { preset, imageSrc }.
+  const resolveForPath = useCallback((pathname) => {
+    const topLevel = '/' + (pathname || '').split('/').filter(Boolean)[0]
+    const spec = pageBackgrounds[topLevel]
+    const fromSpec = (s) => {
+      if (s?.startsWith('image:')) {
+        const img = images.find(i => i.id === s.slice(6))
+        return img ? { preset: 'image', imageSrc: img.dataUrl } : null
+      }
+      if (BACKGROUND_PRESETS.some(p => p.id === s)) {
+        return { preset: s, imageSrc: s === 'image' ? customImage : null }
+      }
+      return null
+    }
+    return (spec && fromSpec(spec))
+      || { preset: background, imageSrc: background === 'image' ? customImage : null }
+  }, [pageBackgrounds, images, background, customImage])
 
   return (
     <BackgroundContext.Provider value={{
       background, setBackground, speed, setSpeed, intensity, setIntensity,
       customImage, setCustomImage, clearCustomImage,
+      images, addImage, removeImage, selectImage, selectedImageId,
+      pageBackgrounds, setPageBackground, resolveForPath,
     }}>
       {children}
     </BackgroundContext.Provider>
