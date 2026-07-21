@@ -59,11 +59,17 @@ export function FeedbackPage() {
   // as filters change, so you can gather bugs + a few ideas into one export.
   const [selectedIds, setSelectedIds] = useState(() => new Set())
 
+  // Closed reports (Shipped / Won't Fix) drop out of the default "All" view —
+  // the board shows live work. They stay reachable via their own status chips.
+  const CLOSED_STATUSES = [FEEDBACK_STATUS.SHIPPED, FEEDBACK_STATUS.WONT_FIX]
   const filtered = useMemo(() => {
     return feedbackItems
       .filter(f => kindFilter === 'all' || f.kind === kindFilter)
-      .filter(f => statusFilter === 'all' || f.status === statusFilter)
+      .filter(f => statusFilter === 'all'
+        ? !CLOSED_STATUSES.includes(f.status)
+        : f.status === statusFilter)
       .sort((a, b) => (b.submittedAt || '').localeCompare(a.submittedAt || ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedbackItems, kindFilter, statusFilter])
 
   // The selected reports, newest-first — copied ALL AT ONCE regardless of the
@@ -105,21 +111,26 @@ export function FeedbackPage() {
     toast.success(`Set ${selectedItems.length} report${selectedItems.length === 1 ? '' : 's'} to “${status}”`)
   }
 
-  // Counts for filter chip badges
+  // Counts for filter chip badges. Type chips count OPEN items (closed ones
+  // are hidden from the default view); status chips keep per-status counts.
   const counts = useMemo(() => {
-    const all      = feedbackItems.length
-    const bugs     = feedbackItems.filter(f => f.kind === FEEDBACK_KIND.BUG).length
-    const ideas    = feedbackItems.filter(f => f.kind === FEEDBACK_KIND.IDEA).length
-    const notes    = feedbackItems.filter(f => f.kind === FEEDBACK_KIND.NOTE).length
+    const open     = feedbackItems.filter(f => !CLOSED_STATUSES.includes(f.status))
+    const all      = open.length
+    const bugs     = open.filter(f => f.kind === FEEDBACK_KIND.BUG).length
+    const ideas    = open.filter(f => f.kind === FEEDBACK_KIND.IDEA).length
+    const notes    = open.filter(f => f.kind === FEEDBACK_KIND.NOTE).length
     const byStatus = Object.fromEntries(
       Object.values(FEEDBACK_STATUS).map(s => [s, feedbackItems.filter(f => f.status === s).length])
     )
     return { all, bugs, ideas, notes, byStatus }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedbackItems])
 
   return (
     <div>
-      <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-5">
+      {/* When the prompt-list bar is up, pad the page bottom so the last rows
+          scroll clear of it instead of being covered. */}
+      <div className={clsx('max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-5', selectedItems.length > 0 && 'pb-32')}>
         {/* Header */}
         <div className="flex items-end justify-between mb-5 flex-wrap gap-3">
           <div>
