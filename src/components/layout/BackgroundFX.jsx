@@ -38,13 +38,19 @@ function safeBackground() {
 }
 
 // ── Orbit — the signature preset. A ring system anchored off the top-right
-//    corner, echoing the emblem's broken-ring geometry, with a satellite dot
-//    riding the middle ring and a giant ultra-faint watermark low-left.
+//    corner, echoing the emblem's broken-ring geometry, with planets riding
+//    the rings and a giant ultra-faint watermark low-left.
 function OrbitLayer() {
+  // Each ring carries its planets as { angle, size, opacity } — the angle
+  // offsets the planet around the ring (a rotated wrapper inside the spinning
+  // ring), so they orbit with the ring but start spread out.
   const rings = [
-    { size: '58vmax', cls: 'bgfx-spin-slow',   dashed: false, sat: true  },
-    { size: '78vmax', cls: 'bgfx-spin-slower', dashed: true,  sat: false },
-    { size: '98vmax', cls: 'bgfx-spin-slow',   dashed: false, sat: false },
+    { size: '58vmax', cls: 'bgfx-spin-slow',   dashed: false,
+      planets: [{ angle: 0, size: 9, opacity: 1 }, { angle: 205, size: 5, opacity: 0.7 }] },
+    { size: '78vmax', cls: 'bgfx-spin-slower', dashed: true,
+      planets: [{ angle: 65, size: 7, opacity: 0.85 }] },
+    { size: '98vmax', cls: 'bgfx-spin-slow',   dashed: false,
+      planets: [{ angle: 300, size: 11, opacity: 0.9 }, { angle: 145, size: 4, opacity: 0.6 }] },
   ]
   return (
     <>
@@ -61,7 +67,23 @@ function OrbitLayer() {
             right: `calc(-0.36 * ${r.size})`,
           }}
         >
-          {r.sat && <div className="bgfx-sat" />}
+          {r.planets.map((p, j) => (
+            <div
+              key={j}
+              style={{ position: 'absolute', inset: 0, transform: `rotate(${p.angle}deg)` }}
+            >
+              <div
+                className="bgfx-sat"
+                style={{
+                  width: p.size,
+                  height: p.size,
+                  top: -(p.size / 2),
+                  marginLeft: -(p.size / 2),
+                  opacity: p.opacity,
+                }}
+              />
+            </div>
+          ))}
         </div>
       ))}
       {/* far stars behind the rings */}
