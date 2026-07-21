@@ -910,6 +910,31 @@ export function AppProvider({ children }) {
     }))
   }, [mutateProduction])
 
+  // ─── Salary-staff (core team) assignment ────────────────────────────────────
+  // Core Orbital staff are assigned to a production via assignedMembers
+  // ({ userId, roleOnProduction }), distinct from external contractors. Mirrors
+  // the contractor helpers; persisted through mutateProduction.
+  const assignMember = useCallback((productionId, member) => {
+    mutateProduction(productionId, (p) => {
+      const already = (p.assignedMembers || []).some(m => m.userId === member.userId)
+      if (already) return {} // no-op patch
+      return { assignedMembers: [...(p.assignedMembers || []), member] }
+    })
+  }, [mutateProduction])
+
+  const removeMember = useCallback((productionId, userId) => {
+    mutateProduction(productionId, (p) => ({
+      assignedMembers: (p.assignedMembers || []).filter(m => m.userId !== userId),
+    }))
+  }, [mutateProduction])
+
+  const updateMemberRole = useCallback((productionId, userId, roleOnProduction) => {
+    mutateProduction(productionId, (p) => ({
+      assignedMembers: (p.assignedMembers || []).map(m =>
+        m.userId === userId ? { ...m, roleOnProduction } : m),
+    }))
+  }, [mutateProduction])
+
   // Returns work history for a contractor by scanning all productions.
   // Checks assignedContractors, stageManagerId, and legacy assignedMembers.
   // Derived at read-time — no duplication of data.
@@ -1256,6 +1281,11 @@ export function AppProvider({ children }) {
     setStageManager,
     assignContractor,
     removeContractor,
+
+    // Core-staff assignment
+    assignMember,
+    removeMember,
+    updateMemberRole,
 
     // Roadmap
     addMilestone,
