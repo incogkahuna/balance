@@ -54,7 +54,7 @@ export function AddonForm({ productionId, initial, onClose }) {
   })
   // Free-entry mode when editing an addon whose equipment isn't a preset.
   const [customEquipment, setCustomEquipment] = useState(
-    () => Boolean(initial?.equipment) && !ADDON_PRESETS.includes(initial.equipment)
+    () => Boolean(initial?.equipment) && !ADDON_PRESETS.some(p => p.name === initial.equipment)
   )
 
   const [uploading, setUploading] = useState(false)
@@ -157,14 +157,23 @@ export function AddonForm({ productionId, initial, onClose }) {
         ) : (
           <select
             className="select"
-            value={ADDON_PRESETS.includes(form.equipment) ? form.equipment : ''}
+            value={ADDON_PRESETS.some(p => p.name === form.equipment) ? form.equipment : ''}
             onChange={e => {
               if (e.target.value === '__custom__') { setCustomEquipment(true); set('equipment', '') }
-              else set('equipment', e.target.value)
+              else {
+                const preset = ADDON_PRESETS.find(p => p.name === e.target.value)
+                set('equipment', e.target.value)
+                // Presets with a standard day rate prefill it (still editable).
+                if (preset?.rate != null) setCosting('dayRate', String(preset.rate))
+              }
             }}
           >
             <option value="" disabled>Select an add-on…</option>
-            {ADDON_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
+            {ADDON_PRESETS.map(p => (
+              <option key={p.name} value={p.name}>
+                {p.name}{p.rate != null ? ` — $${p.rate}/day` : ''}
+              </option>
+            ))}
             <option value="__custom__">Custom…</option>
           </select>
         )}

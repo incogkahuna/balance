@@ -70,8 +70,11 @@ export function DashboardPage() {
 
   const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
-  // Production-bound tasks only — freestanding to-dos have their own section.
-  const myTasks        = tasks.filter(t => t.productionId && t.assigneeId === currentUser?.id && t.status !== TASK_STATUS.VERIFIED)
+  // Everything assigned to me (production-bound AND internal) — must match
+  // the /tasks?filter=mine list this stat links to, or the count reads 0
+  // while the page shows tasks (Danny's report). isMe covers the dual-id
+  // reality (legacy id vs profile UUID).
+  const myTasks        = tasks.filter(t => isMe(t.assigneeId) && t.status !== TASK_STATUS.VERIFIED)
   // Sort by urgency: overdue first, then today/tomorrow, then by due date asc, undated last.
   // Surfaces the next thing to do at the top of the crew's mobile dashboard.
   const myPendingTasks = myTasks
@@ -91,7 +94,7 @@ export function DashboardPage() {
 
   const totalActive   = productions.filter(p => p.status === PRODUCTION_STATUS.ACTIVE).length
   const totalIncoming = productions.filter(p => p.status === PRODUCTION_STATUS.INCOMING).length
-  const overdueScope  = isAdminOrSup ? tasks : tasks.filter(t => t.assigneeId === currentUser?.id)
+  const overdueScope  = isAdminOrSup ? tasks : tasks.filter(t => isMe(t.assigneeId))
   const totalOverdue  = overdueScope.filter(t =>
     t.dueDate && isPast(parseISO(t.dueDate)) && t.status !== TASK_STATUS.VERIFIED
   ).length

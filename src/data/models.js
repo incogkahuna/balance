@@ -428,16 +428,22 @@ export function createTask(overrides = {}) {
 
 // Selectable add-on items (M4 / #6). Names only — day rates vary per client
 // deal, so the form asks for the rate and computes cost = rate × days × qty.
+// Presets carry a default day rate (null = priced per job) so picking one
+// prefills the rate. Danny's most-common on-the-day rentals lead the list.
 export const ADDON_PRESETS = [
-  'Camera Tracking',
-  'Additional LED Panels',
-  'Extra Brain Bar Operator',
-  'Motion Capture',
-  'DMX Lighting Integration',
-  'Playback Server',
-  'Green Screen Package',
-  'Additional Crew Day',
+  { name: 'Scissor Lift',             rate: 250 },
+  { name: 'Forklift',                 rate: 350 },
+  { name: 'SDI Cables',               rate: 20  },
+  { name: 'Camera Tracking',          rate: null },
+  { name: 'Additional LED Panels',    rate: null },
+  { name: 'Extra Brain Bar Operator', rate: null },
+  { name: 'Motion Capture',           rate: null },
+  { name: 'DMX Lighting Integration', rate: null },
+  { name: 'Playback Server',          rate: null },
+  { name: 'Green Screen Package',     rate: null },
+  { name: 'Additional Crew Day',      rate: null },
 ]
+export const ADDON_PRESET_NAMES = ADDON_PRESETS.map(p => p.name)
 
 export function createAddon(overrides = {}) {
   return {
