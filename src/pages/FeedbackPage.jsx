@@ -182,7 +182,8 @@ export function FeedbackPage() {
                     key={k.id}
                     onClick={() => setKindFilter(k.id)}
                     className={clsx(
-                      'inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium transition-colors',
+                      // py bump below lg = HIG-tappable chips on touch
+                      'inline-flex items-center gap-1.5 px-2.5 py-2 min-h-[44px] lg:min-h-0 lg:px-2 lg:py-0.5 text-xs font-medium transition-colors',
                       active
                         ? 'bg-blue-500/15 text-blue-300 border border-blue-500/40'
                         : 'text-orbital-subtle hover:text-orbital-text border border-orbital-border hover:bg-orbital-muted'
@@ -206,7 +207,7 @@ export function FeedbackPage() {
                   <button
                     key={s}
                     onClick={() => setStatusFilter(s)}
-                    className="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium transition-colors border"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-2 min-h-[44px] lg:min-h-0 lg:px-2 lg:py-0.5 text-xs font-medium transition-colors border"
                     style={{
                       color:      active ? accent : 'var(--orbital-subtle)',
                       background: active ? `${accent}22` : 'transparent',

@@ -202,14 +202,14 @@ function WallCard({ wall, productions, isAdmin, onEdit, onAssign }) {
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={onEdit}
-              className="p-1.5 rounded hover:bg-orbital-muted text-orbital-subtle hover:text-orbital-text transition-colors"
+              className="p-3 lg:p-1.5 rounded hover:bg-orbital-muted text-orbital-subtle hover:text-orbital-text transition-colors"
               title="Edit wall"
             >
               <Edit2 size={13} />
             </button>
             <button
               onClick={handleDelete}
-              className="p-1.5 rounded hover:bg-red-500/10 text-orbital-subtle hover:text-red-400 transition-colors"
+              className="p-3 lg:p-1.5 rounded hover:bg-red-500/10 text-orbital-subtle hover:text-red-400 transition-colors"
               title="Delete wall"
             >
               <Trash2 size={13} />

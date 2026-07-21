@@ -233,10 +233,10 @@ function PlayerCard({ player, onEdit, onDelete, onCopy }) {
         </div>
 
         <div className="flex gap-1 flex-shrink-0">
-          <button onClick={onEdit} className="p-1.5 rounded hover:bg-orbital-muted text-orbital-subtle hover:text-orbital-text transition-colors">
+          <button onClick={onEdit} className="p-3 lg:p-1.5 rounded hover:bg-orbital-muted text-orbital-subtle hover:text-orbital-text transition-colors">
             <Edit2 size={14} />
           </button>
-          <button onClick={onDelete} className="p-1.5 rounded hover:bg-red-500/10 text-orbital-subtle hover:text-red-400 transition-colors">
+          <button onClick={onDelete} className="p-3 lg:p-1.5 rounded hover:bg-red-500/10 text-orbital-subtle hover:text-red-400 transition-colors">
             <Trash2 size={14} />
           </button>
         </div>

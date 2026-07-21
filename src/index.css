@@ -171,6 +171,23 @@
     }
   }
 
+  /* ── Apple HIG touch targets (Danny's mobile-size pass) ────────────────────
+     HIG minimum tappable area is 44×44pt. Below the desktop breakpoint the
+     shared control primitives guarantee that height; text/paddings stay as
+     designed, the boxes just can't collapse below tappable. */
+  @media (max-width: 1023px) {
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger,
+    .btn-ghost {
+      min-height: 44px;
+    }
+    .input,
+    .select {
+      min-height: 44px;
+    }
+  }
+
   #root { position: relative; }
 
   /* Scrollbar — thin and minimal */
