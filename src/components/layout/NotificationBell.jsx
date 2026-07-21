@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { formatDistanceToNowStrict, parseISO } from 'date-fns'
-import { Bell, Check } from 'lucide-react'
+import { Bell, Check, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import {
   listNotificationsFor,
@@ -83,7 +83,8 @@ export function NotificationBell({ layout = 'compact' }) {
     }
   }, [recipientId])
 
-  // Close on outside click
+  // Close on outside click + Escape (Escape matters on mobile where the
+  // full-screen sheet leaves no "outside" to click).
   useEffect(() => {
     if (!open) return
     const handler = (e) => {
@@ -91,8 +92,13 @@ export function NotificationBell({ layout = 'compact' }) {
       if (buttonRef.current?.contains(e.target)) return
       setOpen(false)
     }
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', handler)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open])
 
   const unreadCount = items.filter(i => !i.readAt).length
@@ -157,12 +163,11 @@ export function NotificationBell({ layout = 'compact' }) {
             layout === 'labeled'
               // Desktop sidebar — drop up from the bottom-anchored bell
               ? 'absolute bottom-full left-0 mb-2 z-50 w-[340px] max-h-[480px] flex flex-col rounded-lg'
-              // Compact (TopBar). On mobile we sit as a full-width sheet
-              // just under the TopBar — anchoring to the bell's right edge
-              // with a fixed 320px width pushed the left edge off-screen
-              // (the bell sits ~120px from the screen's right side on a
-              // 375px phone). At sm+ we revert to the anchored dropdown.
-              : 'fixed inset-x-2 top-12 max-h-[70vh] sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[340px] sm:max-h-[480px] z-50 flex flex-col rounded-lg'
+              // Compact (TopBar). On mobile the panel is a FULL-SCREEN sheet
+              // so notifications are actually readable (Danny: the small
+              // dropdown was too small to read). At sm+ we revert to the
+              // anchored 340px dropdown.
+              : 'fixed inset-0 sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[340px] sm:max-h-[480px] z-50 flex flex-col sm:rounded-lg'
           }
           style={{
             background: 'var(--orbital-surface)',
@@ -170,24 +175,39 @@ export function NotificationBell({ layout = 'compact' }) {
             boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
           }}
         >
-          {/* Header */}
+          {/* Header — taller on mobile, with an explicit close (the sheet
+              covers the whole screen there, so outside-click can't close). */}
           <div
-            className="flex items-center justify-between px-3 py-2 flex-shrink-0"
-            style={{ borderBottom: '1px solid var(--orbital-border)' }}
+            className="flex items-center justify-between px-4 sm:px-3 py-3 sm:py-2 flex-shrink-0"
+            style={{
+              borderBottom: '1px solid var(--orbital-border)',
+              paddingTop: layout === 'labeled' ? undefined : 'max(env(safe-area-inset-top), 12px)',
+            }}
           >
-            <p className="font-telemetry text-[10px] tracking-wider text-orbital-subtle">
+            <p className="font-telemetry text-[11px] sm:text-[10px] tracking-wider text-orbital-subtle">
               NOTIFICATIONS · {items.length}
             </p>
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllRead}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 font-telemetry text-[9px] tracking-wider text-orbital-subtle hover:text-orbital-text transition-colors"
-                title="Mark all as read"
-              >
-                <Check size={9} />
-                MARK ALL READ
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="inline-flex items-center gap-1 px-1.5 py-1 font-telemetry text-[10px] sm:text-[9px] tracking-wider text-orbital-subtle hover:text-orbital-text transition-colors"
+                  title="Mark all as read"
+                >
+                  <Check size={10} />
+                  MARK ALL READ
+                </button>
+              )}
+              {layout !== 'labeled' && (
+                <button
+                  onClick={() => setOpen(false)}
+                  className="sm:hidden p-2 -mr-2 text-orbital-subtle hover:text-orbital-text"
+                  aria-label="Close notifications"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* List */}
@@ -206,7 +226,7 @@ export function NotificationBell({ layout = 'compact' }) {
                   <li key={n.id}>
                     <button
                       onClick={() => handleClick(n)}
-                      className="w-full text-left px-3 py-2.5 hover:bg-orbital-panel transition-colors flex items-start gap-2.5"
+                      className="w-full text-left px-4 sm:px-3 py-3.5 sm:py-2.5 hover:bg-orbital-panel transition-colors flex items-start gap-2.5"
                       style={{ background: unread ? 'rgba(59,130,246,0.06)' : 'transparent' }}
                     >
                       <span
@@ -216,20 +236,21 @@ export function NotificationBell({ layout = 'compact' }) {
                           boxShadow: unread ? '0 0 4px rgba(96,165,250,0.6)' : 'none',
                         }}
                       />
+                      {/* Mobile: full text, wrapping. Desktop dropdown: truncated. */}
                       <div className="min-w-0 flex-1">
                         <p
                           className={
                             unread
-                              ? 'text-xs text-orbital-text font-medium truncate'
-                              : 'text-xs text-orbital-subtle truncate'
+                              ? 'text-sm sm:text-xs text-orbital-text font-medium sm:truncate'
+                              : 'text-sm sm:text-xs text-orbital-subtle sm:truncate'
                           }
                         >
                           {n.title}
                         </p>
                         {n.body && (
-                          <p className="text-[11px] text-orbital-dim truncate mt-0.5">{n.body}</p>
+                          <p className="text-xs sm:text-[11px] text-orbital-dim sm:truncate mt-0.5">{n.body}</p>
                         )}
-                        <p className="font-telemetry text-[9px] tracking-wider text-orbital-dim mt-1">
+                        <p className="font-telemetry text-[10px] sm:text-[9px] tracking-wider text-orbital-dim mt-1">
                           {formatDistanceToNowStrict(parseISO(n.createdAt), { addSuffix: true }).toUpperCase()}
                         </p>
                       </div>
