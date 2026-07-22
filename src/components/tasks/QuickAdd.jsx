@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { format } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import { Plus, Users as UsersIcon, Lock } from 'lucide-react'
 import { TASK_VISIBILITY } from '../../data/models.js'
 import clsx from 'clsx'

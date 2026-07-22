@@ -1,11 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  eachDayOfInterval, format, parseISO, isWithinInterval,
-  addWeeks, subWeeks, addMonths, subMonths, isSameDay,
-  differenceInDays, max, min,
-} from 'date-fns'
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, isWithinInterval, addWeeks, subWeeks, addMonths, subMonths, isSameDay, differenceInDays, max, min } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import { ChevronLeft, ChevronRight, Users, MapPin } from 'lucide-react'
 import { MiniCalendar } from '../components/ui/MiniCalendar.jsx'
 import { useApp } from '../context/AppContext.jsx'

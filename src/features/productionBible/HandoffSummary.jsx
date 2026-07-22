@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { format, parseISO, isFuture } from 'date-fns'
+import { parseISO, isFuture } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import { ClipboardCopy, Printer, RefreshCw, FileText, Check, UserCheck } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ROLES } from '../../data/models.js'

@@ -1,4 +1,4 @@
-import { format } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import { Check, Loader2, AlertCircle } from 'lucide-react'
 
 /**

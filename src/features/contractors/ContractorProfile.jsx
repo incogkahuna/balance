@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import {
   Star, AlertTriangle, Phone, Mail, MapPin,
   Briefcase, Calendar, Edit, Trash2, ExternalLink,

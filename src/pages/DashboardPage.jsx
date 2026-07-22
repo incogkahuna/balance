@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { format, isValid, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
+import { isValid, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import { Film, CheckSquare, AlertTriangle, Clock, ChevronRight } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'

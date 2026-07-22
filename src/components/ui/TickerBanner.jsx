@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, isValid, isToday, isTomorrow, isPast, addDays } from 'date-fns'
+import { parseISO, isValid, isToday, isTomorrow, isPast, addDays } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import { Settings, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocalStorage } from '../../hooks/useLocalStorage.js'

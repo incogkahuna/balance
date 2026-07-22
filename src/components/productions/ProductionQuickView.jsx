@@ -1,4 +1,5 @@
-import { format, parseISO, isValid, differenceInCalendarDays } from 'date-fns'
+import { parseISO, isValid, differenceInCalendarDays } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import {
   Calendar, MapPin, Package, AlertCircle, AlertTriangle, ArrowRight, Users,
 } from 'lucide-react'

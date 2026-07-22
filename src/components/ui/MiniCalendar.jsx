@@ -1,9 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import {
-  startOfWeek, endOfWeek, startOfMonth, endOfMonth,
-  eachDayOfInterval, format, isSameMonth, isSameDay,
-  addMonths, subMonths,
-} from 'date-fns'
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import clsx from 'clsx'
 

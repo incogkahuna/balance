@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef, createContext, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, addDays } from 'date-fns'
+import { addDays } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import { Minus, Plus, Maximize2, Crosshair } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { ProductionQuickView } from '../../components/productions/ProductionQuickView.jsx'

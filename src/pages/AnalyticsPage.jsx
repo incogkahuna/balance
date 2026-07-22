@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTheme } from '../context/ThemeContext.jsx'
-import {
-  format, parseISO, subMonths, startOfMonth, endOfMonth, isWithinInterval,
-  subDays, startOfWeek, formatDistanceToNow,
-} from 'date-fns'
+import { parseISO, subMonths, startOfMonth, endOfMonth, isWithinInterval, subDays, startOfWeek, formatDistanceToNow } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line,

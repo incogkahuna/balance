@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { format, parseISO, differenceInCalendarDays } from 'date-fns'
+import { parseISO, differenceInCalendarDays } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, Clapperboard, Bus, Wrench } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'

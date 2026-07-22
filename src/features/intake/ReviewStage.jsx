@@ -4,7 +4,8 @@ import {
   AlertTriangle, FileText, CheckCircle, Edit3, Check,
   X, ChevronDown, ChevronUp, Sparkles, Image, Plus, Trash2, ScanLine, Loader,
 } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import clsx from 'clsx'
 import {
   LOCATION_TYPE, TASK_PRIORITY, MILESTONE_TYPE, MILESTONE_STATUS, createMilestone,

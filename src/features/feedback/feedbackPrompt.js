@@ -1,5 +1,5 @@
-import { format, parseISO } from 'date-fns'
-
+import { parseISO } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 // ─────────────────────────────────────────────────────────────────────────────
 // Feedback → prompt export. Formats Bugs & Ideas reports into paste-ready
 // prompts for a coding agent (Claude Code). One item = one self-contained

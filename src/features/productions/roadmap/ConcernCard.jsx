@@ -1,4 +1,5 @@
-import { format, parseISO, isPast } from 'date-fns'
+import { parseISO, isPast } from 'date-fns'
+import { format } from '../../../lib/safeFormat.js'
 import { Edit2, Trash2, AlertTriangle, CheckCircle } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { CONCERN_STATUS } from '../../../data/models.js'

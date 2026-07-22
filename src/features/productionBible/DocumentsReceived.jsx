@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { FileText, Image, Upload, Trash2, Eye, Plus, Calendar, Sparkles, Loader } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import { Modal } from '../../components/ui/Modal.jsx'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx'
 import { EmptyState } from '../../components/ui/EmptyState.jsx'

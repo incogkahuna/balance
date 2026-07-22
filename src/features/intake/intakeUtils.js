@@ -6,8 +6,8 @@ import {
   MILESTONE_TYPE, MILESTONE_STATUS,
   USERS,
 } from '../../data/models.js'
-import { addDays, subDays, format, isValid } from 'date-fns'
-
+import { addDays, subDays, isValid } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 // ─── Crew name index ──────────────────────────────────────────────────────────
 // Built once from the salary roster so we can fast-scan incoming text for
 // references to known team members. Includes first name, last name, full

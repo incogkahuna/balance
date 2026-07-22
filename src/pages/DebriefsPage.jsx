@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import { FileText, Printer, X, Star, Briefcase } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { usePipeline } from '../features/pipeline/PipelineContext.jsx'

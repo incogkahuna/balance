@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { formatDistanceToNowStrict, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { formatDistanceToNowStrict } from '../../lib/safeFormat.js'
 import { Bell, Check, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import {

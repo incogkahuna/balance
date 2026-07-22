@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect, useLayoutEffect, Fragment, createContext, useContext } from 'react'
-import { format } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import { AlertTriangle, RotateCcw, Home, ArrowLeft, Filter } from 'lucide-react'
 import { usePrototypeData } from './dataSource.js'
 

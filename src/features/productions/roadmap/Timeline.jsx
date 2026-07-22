@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { format, parseISO, isToday, isPast, isSameDay } from 'date-fns'
+import { parseISO, isToday, isPast, isSameDay } from 'date-fns'
+import { format } from '../../../lib/safeFormat.js'
 import { Plus } from 'lucide-react'
 import { MILESTONE_TYPE_CONFIG } from './roadmapUtils.js'
 import { MilestoneCard } from './MilestoneCard.jsx'

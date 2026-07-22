@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../../lib/safeFormat.js'
 import {
   ChevronDown, ChevronUp, Trash2, Edit,
   Camera, X, Send, CheckCheck, RotateCcw,

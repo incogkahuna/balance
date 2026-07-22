@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
-import { format, parseISO, differenceInCalendarDays } from 'date-fns'
+import { parseISO, differenceInCalendarDays } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import {
   Mail, MapPin, Briefcase, CheckCircle2, Activity, Film,
   Clock, Target, AlertOctagon, Zap, ArrowRight, Plus, X, Loader2,

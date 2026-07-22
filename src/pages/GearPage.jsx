@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import {
   Plus, Monitor, AlertTriangle, X, Edit2, Trash2,
 } from 'lucide-react'

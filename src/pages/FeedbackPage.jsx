@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import {
   Bug, Lightbulb, StickyNote, Plus, X, Send, Filter, MessageSquare, Trash2,
   CheckCircle2, Circle, AlertCircle, Ban, ClipboardCopy, CheckSquare, Square,

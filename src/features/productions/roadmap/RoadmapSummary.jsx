@@ -1,4 +1,5 @@
-import { format, parseISO, isFuture, isPast, isToday } from 'date-fns'
+import { parseISO, isFuture, isPast, isToday } from 'date-fns'
+import { format } from '../../../lib/safeFormat.js'
 import { AlertTriangle, Calendar, ChevronRight, Clock, Map, Users, User, Package, Film, MapPin } from 'lucide-react'
 import { useApp } from '../../../context/AppContext.jsx'
 import { MILESTONE_STATUS, CONCERN_STATUS, CONCERN_IMPACT } from '../../../data/models.js'

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, isValid, addDays, isToday, isTomorrow } from 'date-fns'
+import { parseISO, isValid, addDays, isToday, isTomorrow } from 'date-fns'
+import { format } from '../../../lib/safeFormat.js'
 import { useApp } from '../../../context/AppContext.jsx'
 import { PRODUCTION_STATUS } from '../../../data/models.js'
 import { MILESTONE_TYPE_CONFIG } from './roadmapUtils.js'

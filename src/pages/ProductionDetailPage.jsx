@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import {
   ArrowLeft, Edit, Trash2, Plus, MapPin, Calendar,
   Film, Users, Package, AlertTriangle, Star, ChevronRight,

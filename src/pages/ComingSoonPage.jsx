@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { format, parseISO } from 'date-fns'
+import { parseISO } from 'date-fns'
+import { format } from '../lib/safeFormat.js'
 import { Plus, Trash2, Check, Loader2, Hash, MessageSquare } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES } from '../data/models.js'
