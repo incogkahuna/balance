@@ -1,4 +1,4 @@
-import { format, parseISO, differenceInCalendarDays } from 'date-fns'
+import { format, parseISO, isValid, differenceInCalendarDays } from 'date-fns'
 import {
   Calendar, MapPin, Package, AlertCircle, AlertTriangle, ArrowRight, Users,
 } from 'lucide-react'
@@ -148,8 +148,8 @@ export function ProductionQuickView({ production, onClose, onOpenFull, conflicts
           {prod.startDate && (
             <span className="flex items-center gap-1.5 text-orbital-subtle font-mono text-xs">
               <Calendar size={12} className="flex-shrink-0" />
-              {format(parseISO(prod.startDate), 'MMM d, yyyy')}
-              {prod.endDate && ` – ${format(parseISO(prod.endDate), 'MMM d, yyyy')}`}
+              {isValid(parseISO(prod.startDate)) ? format(parseISO(prod.startDate), 'MMM d, yyyy') : prod.startDate}
+              {prod.endDate && isValid(parseISO(prod.endDate)) && ` – ${format(parseISO(prod.endDate), 'MMM d, yyyy')}`}
             </span>
           )}
         </div>
@@ -203,7 +203,7 @@ export function ProductionQuickView({ production, onClose, onOpenFull, conflicts
               <p className="text-orbital-text text-sm truncate">{nextMile.title}</p>
               {nextMile.date && (
                 <span className="font-mono text-orbital-subtle whitespace-nowrap text-xs">
-                  {format(parseISO(nextMile.date), 'MMM d')}
+                  {isValid(parseISO(nextMile.date)) ? format(parseISO(nextMile.date), 'MMM d') : ''}
                 </span>
               )}
             </div>

@@ -71,6 +71,12 @@ export const ROLE_LABELS = {
 const nowIso = () => new Date().toISOString()
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`)
 
+// Only ever hand productions a parseable YYYY-MM-DD (or ''). A malformed deal
+// date must not propagate — an unparseable production.startDate crashed the
+// dashboard ticker (RangeError: Invalid time value).
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const safeDate = (v) => (typeof v === 'string' && DATE_RE.test(v) ? v : '')
+
 export function PipelineProvider({ children }) {
   const { profile } = useAuth()
   const { currentUser, addProduction, updateProduction, logActivity } = useApp()
@@ -408,7 +414,8 @@ export function PipelineProvider({ children }) {
 
     // The linked production is a REAL Balance production: draft (= pending)
     // until green light, so it shows for Mark's planning without noise.
-    const endDate = deal.endDate || impliedEndDate(deal.startDate, deal.days)
+    const startDate = safeDate(deal.startDate)
+    const endDate = safeDate(deal.endDate) || safeDate(impliedEndDate(startDate, deal.days))
     const production = createProductionFactory({
       name: deal.projectName,
       client: deal.clientCompany,
@@ -417,8 +424,8 @@ export function PipelineProvider({ children }) {
       locationAddress: deal.venue === 'mobile' ? (deal.mobileLocation || '') : '',
       productionType: techSpec.wallConfig?.[0] || (deal.venue === 'mobile' ? 'Orbital Hercules' : 'Big Dipper'),
       status: 'Incoming',
-      startDate: deal.startDate || '',
-      endDate: endDate || '',
+      startDate,
+      endDate,
       published: false,
       createdBy: profile?.id || '',
       instructionPackage: { files: [], voiceMemos: [], notes: summary },
@@ -473,12 +480,13 @@ export function PipelineProvider({ children }) {
     const blocks = buildCalendarBlocks(deal)
     patchHandoff(handoff.id, { state: 'active', schedule: blocks })
     if (handoff.productionId) {
-      const endDate = deal.endDate || impliedEndDate(deal.startDate, deal.days)
+      const startDate = safeDate(deal.startDate)
+      const endDate = safeDate(deal.endDate) || safeDate(impliedEndDate(startDate, deal.days))
       updateProduction(handoff.productionId, {
         published: true,
-        startDate: deal.startDate || '',
-        endDate: endDate || '',
-        dateRanges: deal.startDate && endDate ? [{ start: deal.startDate, end: endDate }] : [],
+        startDate,
+        endDate,
+        dateRanges: startDate && endDate ? [{ start: startDate, end: endDate }] : [],
       })
     }
   }, [patchHandoff, updateProduction])

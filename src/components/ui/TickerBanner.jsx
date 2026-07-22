@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, isToday, isTomorrow, isPast, addDays } from 'date-fns'
+import { format, parseISO, isValid, isToday, isTomorrow, isPast, addDays } from 'date-fns'
 import { Settings, X } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useLocalStorage } from '../../hooks/useLocalStorage.js'
@@ -101,6 +101,7 @@ function TaskStatusEntry({ task, productionName, onClick }) {
 
 function DueDateEntry({ task, productionName, onClick }) {
   const d = parseISO(task.dueDate)
+  if (!isValid(d)) return null   // bad date on a row must never crash the page
   let label, color
   if (isPast(d) && task.status !== TASK_STATUS.VERIFIED) {
     label = 'OVERDUE'; color = '#ef4444'
@@ -120,6 +121,7 @@ function DueDateEntry({ task, productionName, onClick }) {
 
 function MilestoneEntry({ milestone, productionName, onClick }) {
   const d = parseISO(milestone.date)
+  if (!isValid(d)) return null
   const dateStr = isToday(d) ? 'TODAY' : isTomorrow(d) ? 'TOMORROW' : format(d, 'MMM d').toUpperCase()
   return (
     <EntryBtn onClick={onClick}>
@@ -145,7 +147,7 @@ function ProductionEntry({ production, onClick }) {
       <Tag label={label} color={color} />
       <span className="text-xs text-orbital-text font-medium">{production.name}</span>
       <span className="text-[11px] text-orbital-subtle">· {production.client}</span>
-      {production.startDate && (
+      {production.startDate && isValid(parseISO(production.startDate)) && (
         <span className="text-[10px] font-mono text-orbital-dim flex-shrink-0">
           {format(parseISO(production.startDate), 'MMM d')}
         </span>

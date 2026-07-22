@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, addDays, isToday, isTomorrow } from 'date-fns'
+import { format, parseISO, isValid, addDays, isToday, isTomorrow } from 'date-fns'
 import { useApp } from '../../../context/AppContext.jsx'
 import { PRODUCTION_STATUS } from '../../../data/models.js'
 import { MILESTONE_TYPE_CONFIG } from './roadmapUtils.js'
@@ -23,6 +23,7 @@ export function UpcomingMilestones() {
         ;(p.roadmap?.milestones || []).forEach(m => {
           if (!m.date) return
           const d = parseISO(m.date)
+          if (!isValid(d)) return false
           if (d >= now && d <= horizon && m.status !== 'Complete') {
             results.push({ ...m, productionId: p.id, productionName: p.name })
           }

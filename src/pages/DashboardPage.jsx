@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { format, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
+import { format, isValid, isToday, isTomorrow, isPast, parseISO } from 'date-fns'
 import { Film, CheckSquare, AlertTriangle, Clock, ChevronRight } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { ROLES, PRODUCTION_STATUS, TASK_STATUS } from '../data/models.js'
@@ -23,6 +23,7 @@ const TASK_STATUS_COLOR = {
 function DueLabel({ date }) {
   if (!date) return null
   const d = parseISO(date)
+  if (!isValid(d)) return null
   if (isToday(d))    return <span className="text-amber-400 text-xs">Today</span>
   if (isTomorrow(d)) return <span className="text-blue-400  text-xs">Tomorrow</span>
   if (isPast(d))     return <span className="text-red-400   text-xs font-medium">Overdue</span>
@@ -297,7 +298,7 @@ export function DashboardPage() {
                         <p className="text-sm text-orbital-text truncate">{todo.title}</p>
                         <div className="flex items-center gap-2 mt-0.5 text-[11px] text-orbital-subtle">
                           {isOverdue
-                            ? <span className="text-red-400 font-mono">overdue · {format(parseISO(todo.dueDate), 'MMM d')}</span>
+                            ? <span className="text-red-400 font-mono">overdue{isValid(parseISO(todo.dueDate)) ? ` · ${format(parseISO(todo.dueDate), 'MMM d')}` : ''}</span>
                             : <span className="font-mono">today</span>}
                           {creatorName && (
                             <span className="text-orbital-dim">· from {creatorName}</span>
