@@ -1,7 +1,79 @@
 # Balance — Session Handoff
 
-*Updated 2026-07-19/20 (job-pipeline build session). Read this first, then
-`docs/IMPROVEMENTS.md` (the working plan), then go.*
+*Updated 2026-07-22 (crash-hotfix session, DEMO DAY). Read this first, then
+`docs/IMPROVEMENTS.md`, then go.*
+
+## 🔴 START HERE — DEMO DAY: the SYSTEM FAULT and where it stands
+
+**Danny is demoing the site TODAY.** He was hitting `SYSTEM FAULT`
+(RangeError: Invalid time value) on multiple pages (dashboard, productions),
+surviving reloads.
+
+**Status: FIXED app-wide and pushed** (`a82e725`, plus targeted guards in
+`74bda02`). Root mechanism: `format(parseISO(x))` in render with a truthy
+but unparseable date kills the whole page behind PageBoundary. Two call
+sites were symbolicated from the deployed bundle (TickerBanner
+ProductionEntry, then ProductionCard on /productions) — after the second, we
+stopped whack-a-moling: **`src/lib/safeFormat.js` is now the app's `format`**
+(and `formatDistanceToNowStrict`), swapped into all 32 importing files.
+Identical output for valid dates; `''` instead of a throw for garbage. All 9
+main pages verified rendering in dev.
+
+**First actions for the next session / for Danny pre-demo:**
+1. Wait for Vercel (~2 min after `a82e725`), then **hard-refresh**
+   (Ctrl/Cmd+Shift+R) — the old bundle is cached and will keep crashing
+   until the new `index-*.js` loads. Verify the asset hash changed from
+   `index-CB8MG5wj.js`.
+2. Click through: Dashboard, Productions, Tasks, Pipeline, Debriefs. All
+   should render. A row with the dirty date will simply show a BLANK date —
+   that row is the evidence for step 3.
+3. **Open root-cause thread:** the dirty value survives reloads, so it's in
+   hydrated data. `productions.start_date/end_date` and `tasks.due_date`
+   are Postgres `date` columns (cannot hold garbage) — prime suspects are
+   jsonb fields: `productions.roadmap` milestone `date`s, `date_ranges`,
+   `bible` document dates. Diagnostic to paste in Supabase SQL editor:
+   ```sql
+   select id, name,
+          jsonb_path_query_array(roadmap, '$.milestones[*].date') as milestone_dates,
+          date_ranges
+   from public.productions
+   order by updated_at desc limit 20;
+   ```
+   Look for anything not `YYYY-MM-DD` (empty strings, 'Invalid Date',
+   partial dates from the intake parser). Fix the row in the UI or SQL.
+   Suspect #1: the production spawned/updated by the pipeline status change
+   Danny made right before the first crash.
+
+## STILL ON DANNY (SQL, all idempotent, Supabase → SQL Editor)
+1. **led_walls block** (top of `docs/RUN-THIS-SQL.md`) — console shows 404s
+   on `rest/v1/led_walls`: NOT yet run. Until then gear stays per-browser.
+2. **Pipeline block** (same doc) — unknown if run; verify query included.
+   If an EARLY version was run, also run the "lock to 3" snippet.
+3. Feedback context/screenshot columns — Danny says RUN ✓.
+4. Two edge-function deploys (`transcribe`, `parse-intake`) — mics hidden
+   behind `VITE_VOICE_ENABLED` until then.
+
+## Recent state (2026-07-20→22, all pushed & live)
+Job pipeline #18 complete (see section below + ARCHITECTURE-NOTES).
+Feedback→prompt loop live (screenshots, where-context, curated list, batch
+status, inline status pill). Three 12-report batches processed. Big items:
+To-Dos merged into Tasks (scope chips + QuickAdd; /todos redirects);
+customizable scrollable mobile bar + More sheet; backdrop image library +
+per-page backgrounds; debrief Submit → /debriefs folder (add-on totals for
+collection, deal link, print=PDF); LED walls Supabase migration (code ready,
+SQL pending); iOS-proof Modal (visualViewport, scroll-lock counter, overlay
+dismiss guard); notification bell full-screen on mobile; HIG 44pt pass;
+emblem home-screen icons; pipeline locked to Danny/Wilder/AJ (explicit
+grants; next unlock = Nitzkin admin_finance + Mark production); access
+restricted to @orbitalvs.com OR role_assignments grant.
+
+**Pending live checks (need a signed-in session):** wall-table hydrate after
+SQL; debrief Submit on a real production; Modal keyboard behavior on a real
+phone; tasks "Mine" dual-id fix sanity.
+
+**Hard rule going forward:** NEVER import `format` straight from date-fns
+in render code — use `src/lib/safeFormat.js`. One bad date must never take
+down a page.
 
 ## ⭑⭑ NEWEST — JOB PIPELINE (#18 Nitzkin) IS BUILT (2026-07-19/20)
 
