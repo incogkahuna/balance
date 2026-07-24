@@ -14,8 +14,8 @@
 > **STATUS: ⬜ NOT YET RUN.** One paste, fully idempotent (safe to re-run).
 > Creates the pipeline tables (deals / quotes / money / handoffs / rate
 > cards), the pipeline_role axis on profiles (CURRENT UNLOCK: Danny, Wilder,
-> AJ = admin_exec, explicit grants only — Brian Nitzkin and Mark come in the
-> next unlock), RLS enforcing the money-separation rule at the data layer,
+> AJ = admin_exec + Brian Nitzkin = admin_finance, explicit grants only —
+> Mark comes in the next unlock), RLS enforcing money separation,
 > and the analytics aggregate function. Until this runs, the live app
 > quietly falls back to per-browser local storage for pipeline data —
 > nothing breaks, nothing is shared.
@@ -61,14 +61,14 @@ create table if not exists public.pipeline_role_assignments (
   created_at     timestamptz not null default now()
 );
 
--- CURRENT UNLOCK: Danny, Wilder, AJ only (per Danny 2026-07-20). The next
--- unlock adds Brian Nitzkin (brian@ → admin_finance; brodriguez@ is a
--- different Brian, crew, no role) and Mark (mark@ → production) — insert
--- their rows when Danny says go.
+-- CURRENT UNLOCK: Danny, Wilder, AJ, Brian Nitzkin (unlocked 2026-07-22 —
+-- full access per Danny; brodriguez@ is a different Brian, crew, no role).
+-- Still pending: Mark (mark@ → production) when Danny says go.
 insert into public.pipeline_role_assignments (email, pipeline_role) values
   ('aj@orbitalvs.com',         'admin_exec'),     -- AJ — CEO
   ('dhorgan@orbitalvs.com',    'admin_exec'),     -- Danny — owner
-  ('wilder@orbitalvs.com',     'admin_exec')      -- Wilder — Head of AI (dev team: full access)
+  ('wilder@orbitalvs.com',     'admin_exec'),     -- Wilder — Head of AI (dev team: full access)
+  ('brian@orbitalvs.com',      'admin_finance')   -- Brian Nitzkin — Business Manager (full access)
 on conflict (email) do nothing;
 
 -- Resolve the caller's pipeline role. EXPLICIT GRANTS ONLY:
@@ -402,14 +402,15 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 ```
 
-**Lock to 3 (only needed if you ran the earlier pipeline block):**
+**Lock (only needed if you ran the EARLIEST pipeline block, before 2026-07-22):**
+Brian Nitzkin is now UNLOCKED (admin_finance) — this snippet only removes
+Mark's pre-grant, which stays pending.
 
 ```sql
--- Remove the Brian/Mark pre-grants until the next unlock
 delete from public.pipeline_role_assignments
-where email in ('brian@orbitalvs.com', 'mark@orbitalvs.com');
+where email in ('mark@orbitalvs.com');
 update public.profiles set pipeline_role = null
-where email in ('brian@orbitalvs.com', 'mark@orbitalvs.com');
+where email in ('mark@orbitalvs.com');
 -- Re-paste the pipeline block above (idempotent) to install the
 -- explicit-grants-only pipeline_role() function.
 ```

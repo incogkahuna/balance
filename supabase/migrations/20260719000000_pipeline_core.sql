@@ -34,14 +34,14 @@ create table if not exists public.pipeline_role_assignments (
   created_at     timestamptz not null default now()
 );
 
--- CURRENT UNLOCK: Danny, Wilder, AJ only (per Danny 2026-07-20). The next
--- unlock adds Brian Nitzkin (brian@ → admin_finance; brodriguez@ is a
--- different Brian, crew, no role) and Mark (mark@ → production) — insert
--- their rows when Danny says go.
+-- CURRENT UNLOCK: Danny, Wilder, AJ, Brian Nitzkin (unlocked 2026-07-22 —
+-- full access per Danny; brodriguez@ is a different Brian, crew, no role).
+-- Still pending: Mark (mark@ → production) when Danny says go.
 insert into public.pipeline_role_assignments (email, pipeline_role) values
   ('aj@orbitalvs.com',         'admin_exec'),     -- AJ — CEO
   ('dhorgan@orbitalvs.com',    'admin_exec'),     -- Danny — owner
-  ('wilder@orbitalvs.com',     'admin_exec')      -- Wilder — Head of AI (dev team: full access)
+  ('wilder@orbitalvs.com',     'admin_exec'),     -- Wilder — Head of AI (dev team: full access)
+  ('brian@orbitalvs.com',      'admin_finance')   -- Brian Nitzkin — Business Manager (full access)
 on conflict (email) do nothing;
 
 -- Resolve the caller's pipeline role. EXPLICIT GRANTS ONLY:
