@@ -43,6 +43,12 @@ export const paths = {
 
   voiceMemo: (productionId: string, filename: string) =>
     `${productionId}/${safeName(filename)}`,
+
+  // Deal documents (COI, agreements, invoices, completion files) live in the
+  // instruction-packages bucket under a deal-files/ prefix — no new bucket
+  // (and no new SQL) required.
+  dealFile: (dealId: string, filename: string) =>
+    `deal-files/${dealId}/${safeName(filename)}`,
 }
 
 // ─── Upload ────────────────────────────────────────────────────────────────

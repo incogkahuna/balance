@@ -187,6 +187,16 @@ export function DealDetailPage() {
             )}
           </div>
 
+          {/* Deal documents — COI, agreements, invoices, completion files.
+              Uploading a gate-relevant doc auto-checks its handoff gate. */}
+          <DealFilesCard
+            deal={deal}
+            patchDeal={patchDeal}
+            handoff={handoff}
+            patchHandoff={patchHandoff}
+            isAdmin={isAdmin}
+          />
+
           <div className="card-elevated p-4">
             <p className="hud-label mb-2.5">CLIENT HISTORY — {deal.clientCompany.toUpperCase()}</p>
             <ClientHistoryList company={deal.clientCompany} excludeDealId={deal.id} />
@@ -196,16 +206,15 @@ export function DealDetailPage() {
           </div>
         </div>
 
-        {/* ── Right: numbers + quotes (admin) + handoff (all roles) ── */}
+        {/* ── Right: quotes + numbers merged (admin) + handoff (all roles) ── */}
         <div className="lg:col-span-2 space-y-4">
-          {canSeeMoney && (
-            <NumbersCard deal={deal} money={dealMoney} setDealMoney={setDealMoney} />
-          )}
-
+          {/* One card, not two — Danny: the separate NUMBERS card repeated
+              what the quote rows already say. Quote history scrolls above;
+              the agreed/actual/paid strip lives underneath it. */}
           {isAdmin && (
             <div className="card-elevated p-4">
               <div className="flex items-center justify-between mb-2.5">
-                <p className="hud-label flex items-center gap-1.5"><FileText size={11} /> QUOTES</p>
+                <p className="hud-label flex items-center gap-1.5"><FileText size={11} /> QUOTES & NUMBERS</p>
                 <button onClick={handleNewQuote} className="btn-secondary text-xs">
                   <Plus size={13} /> {deal.intakeMode === 'comparison_bid' ? 'New variant' : 'New quote'}
                 </button>
@@ -217,7 +226,7 @@ export function DealDetailPage() {
                     : 'create one to start building from the rate card.'}
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-72 overflow-y-auto">
                   {dealQuotes.map((q) => (
                     <QuoteRow key={q.id} quote={q}
                       card={rateCardByVersion(q.rateCardVersion)}
@@ -227,6 +236,9 @@ export function DealDetailPage() {
                       onDelete={() => removeQuote(q.id)} />
                   ))}
                 </div>
+              )}
+              {canSeeMoney && (
+                <NumbersStrip deal={deal} money={dealMoney} setDealMoney={setDealMoney} />
               )}
             </div>
           )}
@@ -271,6 +283,103 @@ export function DealDetailPage() {
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+// ── Deal files — upload, categorize, reference (Danny 2026-07-24) ────────────
+// One home for every document a deal accumulates: COI, executed agreement,
+// invoices, W9, deposit confirmation, completion files. Stored in the
+// instruction-packages bucket under deal-files/<dealId>/; referenced from
+// deal.files. Uploading a gate-relevant category auto-checks that gate on
+// the handoff (the gates strip stays the at-a-glance truth).
+const FILE_CATEGORIES = ['COI', 'Agreement', 'Invoice', 'W9', 'Deposit', 'Creative', 'Completion', 'Other']
+const CATEGORY_GATE = {
+  COI: 'coi',
+  Deposit: 'deposit',
+  Agreement: 'agreementSent',
+  Invoice: 'firstInvoiceSent',
+  W9: 'w9Sent',
+}
+
+function DealFilesCard({ deal, patchDeal, handoff, patchHandoff, isAdmin }) {
+  const [category, setCategory] = useState('COI')
+  const files = deal.files || []
+
+  const addFile = (result) => {
+    const entry = {
+      id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+      name: result.name,
+      category,
+      bucket: result.bucket,
+      path: result.path,
+      at: new Date().toISOString(),
+      by: '',
+    }
+    patchDeal(deal.id, { files: [...files, entry] })
+    // Gate-relevant upload → check the matching handoff gate.
+    const gateKey = CATEGORY_GATE[category]
+    if (gateKey && handoff && !handoff.gates?.[gateKey]) {
+      patchHandoff(handoff.id, { gates: { ...(handoff.gates || {}), [gateKey]: true } })
+    }
+  }
+
+  const removeFile = (fileId) => {
+    patchDeal(deal.id, { files: files.filter((f) => f.id !== fileId) })
+  }
+
+  return (
+    <div className="card-elevated p-4">
+      <p className="hud-label mb-2.5 flex items-center gap-1.5"><FileText size={11} /> FILES</p>
+
+      {files.length === 0 ? (
+        <p className="text-xs text-orbital-dim mb-2">
+          No documents yet — COI, executed agreement, invoices, completion files all live here.
+        </p>
+      ) : (
+        <div className="space-y-1.5 mb-3 max-h-60 overflow-y-auto">
+          {files.map((f) => (
+            <div key={f.id} className="flex items-center gap-2 text-[12px]">
+              <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-telemetry tracking-wider uppercase rounded-sm"
+                style={{ color: 'var(--orbital-subtle)', border: '1px solid var(--orbital-border)' }}>
+                {f.category}
+              </span>
+              <span className="min-w-0 flex-1 truncate">
+                <StoredFileLink bucket={f.bucket} path={f.path} label={f.name} />
+              </span>
+              <span className="text-[10px] text-orbital-dim flex-shrink-0">{fmtDate(f.at)}</span>
+              {isAdmin && (
+                <button onClick={() => removeFile(f.id)}
+                  className="text-orbital-dim hover:text-red-400 flex-shrink-0" title="Remove from list">
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="flex items-center gap-1.5">
+          <select className="input text-[12px] py-1 w-32 flex-shrink-0" value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            title="What kind of document is this?">
+            {FILE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <FileUploadButton
+            bucket={BUCKETS.instructionPackages}
+            pathFor={(file) => paths.dealFile(deal.id, file.name)}
+            accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx"
+            className="btn-secondary text-xs"
+            onUploaded={addFile}
+          >
+            Upload
+          </FileUploadButton>
+          {CATEGORY_GATE[category] && handoff && (
+            <span className="text-[10px] text-orbital-dim">checks its gate ✓</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -323,9 +432,10 @@ function DaysEditor({ deal, patchDeal }) {
   )
 }
 
-// The three number states — quoted / agreed / actual. The sent quote and the
-// real deal diverge immediately; this is where the real numbers live.
-function NumbersCard({ deal, money, setDealMoney }) {
+// The three number states — quoted / agreed / actual. Rendered as a footer
+// strip INSIDE the quotes card (the standalone NUMBERS card was redundant —
+// the quote rows above already show quoted amounts and statuses).
+function NumbersStrip({ deal, money, setDealMoney }) {
   const m = money || {}
   const [agreed, setAgreed] = useState(null)   // null = not editing
   const [actual, setActual] = useState(null)
@@ -351,8 +461,7 @@ function NumbersCard({ deal, money, setDealMoney }) {
     : null
 
   return (
-    <div className="card-elevated p-4">
-      <p className="hud-label mb-2.5">NUMBERS — QUOTED / AGREED / ACTUAL</p>
+    <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--orbital-border)' }}>
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="label">Quoted</label>

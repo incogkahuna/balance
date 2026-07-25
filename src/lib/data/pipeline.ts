@@ -40,10 +40,23 @@ export interface Deal {
   days: DealDays
   notes: DealNote[]
   statusHistory: Array<{ status: DealStatus; at: string }>
+  files: DealFile[]
   productionId: string | null
   createdBy: string | null
   createdAt: string
   updatedAt: string
+}
+
+// Deal-attached document — COI, executed agreement, invoice, completion
+// material… uploaded to storage, referenced from the deal row.
+export interface DealFile {
+  id: string
+  name: string
+  category: string
+  bucket: string
+  path: string
+  at: string
+  by: string
 }
 
 export interface DealMoney {
@@ -71,6 +84,8 @@ export interface Quote {
   days: DealDays
   lines: Record<string, { x: number; qty: number; rateOverride?: number | null; spec?: { value: string } | null; note?: string }>
   discount: QuoteDiscount | null
+  // Free-form "I wanna do it" items outside the rate card: rate × qty.
+  customLines: Array<{ id: string; name: string; rate: number; qty: number; unit?: string }>
   status: QuoteStatus
   issuedAt: string
   sentAt: string | null
@@ -172,6 +187,7 @@ function rowToDeal(r: any): Deal {
     days: r.days ?? { travel: 0, build: 0, shoot: 0, strike: 0 },
     notes: r.notes ?? [],
     statusHistory: r.status_history ?? [],
+    files: r.files ?? [],
     productionId: r.production_id ?? null,
     createdBy: r.created_by ?? null,
     createdAt: r.created_at,
@@ -198,6 +214,7 @@ function dealToRow(d: Partial<Deal>): Record<string, unknown> {
   if (d.days !== undefined) row.days = d.days
   if (d.notes !== undefined) row.notes = d.notes
   if (d.statusHistory !== undefined) row.status_history = d.statusHistory
+  if (d.files !== undefined) row.files = d.files
   if (d.productionId !== undefined) row.production_id = d.productionId
   if (d.createdBy !== undefined) row.created_by = d.createdBy
   return row
@@ -209,6 +226,7 @@ function rowToQuote(r: any): Quote {
     rateCardVersion: r.rate_card_version, venue: r.venue,
     days: r.days ?? { travel: 0, build: 0, shoot: 0, strike: 0 },
     lines: r.lines ?? {}, discount: r.discount ?? null,
+    customLines: r.custom_lines ?? [],
     status: r.status ?? 'draft', issuedAt: r.issued_at,
     sentAt: r.sent_at ?? null, createdAt: r.created_at, updatedAt: r.updated_at,
   }
@@ -224,6 +242,7 @@ function quoteToRow(q: Partial<Quote>): Record<string, unknown> {
   if (q.days !== undefined) row.days = q.days
   if (q.lines !== undefined) row.lines = q.lines
   if (q.discount !== undefined) row.discount = q.discount
+  if (q.customLines !== undefined) row.custom_lines = q.customLines
   if (q.status !== undefined) row.status = q.status
   if (q.issuedAt !== undefined) row.issued_at = q.issuedAt
   if (q.sentAt !== undefined) row.sent_at = q.sentAt

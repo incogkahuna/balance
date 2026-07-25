@@ -4,6 +4,7 @@ import { ArrowLeft, Printer } from 'lucide-react'
 import { usePipeline } from './PipelineContext.jsx'
 import {
   resolveRate, lineSubtotal, computeTotals, fmtMoney, quoteExpiryDate,
+  customLineSubtotal,
 } from './quoteMath.js'
 import { fmtDate, PipelineNoAccess } from './components.jsx'
 
@@ -189,6 +190,37 @@ export function QuotePdfPage() {
                 </tbody>
               )
             })}
+            {/* Custom items — free-form deal lines outside the rate card */}
+            {(quote.customLines || []).length > 0 && (
+              <tbody className="pdf-section">
+                <tr>
+                  <td colSpan={7} className="px-2 py-1.5 font-bold uppercase tracking-wide text-[11px]"
+                    style={{ background: '#e8f1f8', color: '#1c5a8a', borderTop: '1px solid #b9d2e4' }}>
+                    Custom Items
+                  </td>
+                </tr>
+                {quote.customLines.map((cl) => (
+                  <tr key={cl.id} style={{ borderTop: '1px solid #eef3f8' }}>
+                    <td className="px-2 py-1 font-medium">{cl.name}</td>
+                    <td className="px-2 py-1 text-neutral-500" />
+                    <td className="px-2 py-1 text-center">{cl.qty}</td>
+                    <td className="px-2 py-1 text-center">{cl.unit || 'Days'}</td>
+                    <td className="px-2 py-1 text-center">✓</td>
+                    <td className="px-2 py-1 text-right">{fmtMoney(Number(cl.rate) || 0)}</td>
+                    <td className="px-2 py-1 text-right font-semibold">{fmtMoney(customLineSubtotal(cl))}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={6} className="px-2 py-1 text-right font-semibold text-neutral-600"
+                    style={{ borderTop: '1px solid #d7e4ee' }}>
+                    Custom Items subtotal
+                  </td>
+                  <td className="px-2 py-1 text-right font-semibold" style={{ borderTop: '1px solid #d7e4ee' }}>
+                    {fmtMoney(totals.sections.find((s) => s.id === '_custom')?.subtotal ?? 0)}
+                  </td>
+                </tr>
+              </tbody>
+            )}
             <tbody className="pdf-section">
               {/* Discount + total block */}
               {discount?.value > 0 && !showValueAdd && (

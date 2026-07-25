@@ -154,11 +154,14 @@ create table if not exists public.pipeline_deals (
   notes           jsonb not null default '[]'::jsonb,
   -- [{status, at}] appended on every status change — feeds cycle analytics.
   status_history  jsonb not null default '[]'::jsonb,
+  -- Deal documents: [{id, name, category, bucket, path, at, by}]
+  files           jsonb not null default '[]'::jsonb,
   production_id   uuid references public.productions(id) on delete set null,
   created_by      uuid references public.profiles(id) on delete set null,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
+alter table public.pipeline_deals add column if not exists files jsonb not null default '[]'::jsonb;
 
 comment on table public.pipeline_deals is
   'Job pipeline deals — the top-level object. Money lives in pipeline_deal_money (RLS-scoped).';
@@ -193,6 +196,8 @@ create table if not exists public.pipeline_quotes (
   lines              jsonb not null default '{}'::jsonb,
   -- {mode: 'fixed'|'percent', value, label, reason, display: 'subtract'|'value_add'}
   discount           jsonb,
+  -- Free-form "custom deal" items: [{id, name, rate, qty, unit}]
+  custom_lines       jsonb not null default '[]'::jsonb,
   status             text not null default 'draft'
                        check (status in ('draft', 'sent', 'accepted', 'superseded')),
   issued_at          date not null default current_date,
@@ -200,6 +205,7 @@ create table if not exists public.pipeline_quotes (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
+alter table public.pipeline_quotes add column if not exists custom_lines jsonb not null default '[]'::jsonb;
 
 comment on table public.pipeline_quotes is
   'Quote variants per deal (comparison-bid = siblings). Line items + rates + discounts → admin-only RLS.';

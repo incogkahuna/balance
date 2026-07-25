@@ -50,6 +50,13 @@ export function lineSubtotal(line, venue, quoteLine) {
   return (Number(qty) || 0) * (Number(quoteLine.x) || 0) * (Number(rate) || 0)
 }
 
+// ── Custom lines — "I wanna do it" deals ─────────────────────────────────────
+// Free-form items outside the rate card: a name, a per-unit rate, a qty
+// (usually days). Live on quote.customLines, flow into totals + the PDF.
+export function customLineSubtotal(cl) {
+  return (Number(cl.rate) || 0) * (Number(cl.qty) || 0)
+}
+
 // ── Section + grand totals ───────────────────────────────────────────────────
 export function computeTotals(card, quote) {
   const template = card.templates[quote.venue]
@@ -63,6 +70,12 @@ export function computeTotals(card, quote) {
       sec += lineSubtotal(line, quote.venue, quote.lines[lineId])
     }
     sections.push({ id: section.id, title: section.title, subtotal: sec })
+    subtotal += sec
+  }
+  const customLines = quote.customLines || []
+  if (customLines.length > 0) {
+    const sec = customLines.reduce((s, cl) => s + customLineSubtotal(cl), 0)
+    sections.push({ id: '_custom', title: 'Custom Items', subtotal: sec })
     subtotal += sec
   }
   const discountAmount = computeDiscount(quote.discount, subtotal)

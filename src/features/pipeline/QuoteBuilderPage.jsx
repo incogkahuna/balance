@@ -6,7 +6,7 @@ import { fmtDate, PipelineNoAccess } from './components.jsx'
 import {
   resolveRate, proposedQty, lineSubtotal, computeTotals, resolveDependencies,
   dependencyViolations, activeFlags, internalFloor, fmtMoney,
-  quoteExpiryDate, discountIsValid,
+  quoteExpiryDate, discountIsValid, customLineSubtotal,
 } from './quoteMath.js'
 import { useToast } from '../../context/ToastContext.jsx'
 import { Modal } from '../../components/ui/Modal.jsx'
@@ -34,6 +34,7 @@ export function QuoteBuilderPage() {
 
   const [assetPrompt, setAssetPrompt] = useState(null) // lineId pending asset count
   const [trackingPrompt, setTrackingPrompt] = useState(false)
+  const [customPrompt, setCustomPrompt] = useState(false) // "I wanna do it" custom-item modal
 
   const totals = useMemo(() => (card && quote ? computeTotals(card, quote) : null), [card, quote])
   const violations = useMemo(() => (card && quote ? dependencyViolations(card, quote) : []), [card, quote])
@@ -210,10 +211,18 @@ export function QuoteBuilderPage() {
           </label>
         ))}
         <span className="text-[11px] text-orbital-dim">Counts flow into day-based lines; edit any qty to override.</span>
-        {quote.venue === 'tvc' && !locked && (
-          <button onClick={applyBigDipper} className="btn-secondary text-xs ml-auto">
-            <Sparkles size={13} /> Big Dipper preset
-          </button>
+        {!locked && (
+          <div className="flex items-center gap-2 ml-auto">
+            {quote.venue === 'tvc' && (
+              <button onClick={applyBigDipper} className="btn-secondary text-xs">
+                <Sparkles size={13} /> TVC preset deal
+              </button>
+            )}
+            {/* "I wanna do it" — name a day price, set days, done. */}
+            <button onClick={() => setCustomPrompt(true)} className="btn-secondary text-xs">
+              <Plus size={13} /> Custom deal
+            </button>
+          </div>
         )}
       </div>
 
@@ -231,6 +240,55 @@ export function QuoteBuilderPage() {
             else activateLine(lineId)
           }}
         />
+      )}
+
+      {/* ── Custom items ("I wanna do it" deals) ── */}
+      {(quote.customLines || []).length > 0 && (
+        <div className="card-elevated overflow-hidden mb-4">
+          <div className="flex items-center justify-between px-4 py-2"
+            style={{ background: 'rgba(85,201,239,0.06)', borderBottom: '1px solid var(--orbital-border)' }}>
+            <p className="text-[12px] font-semibold text-orbital-text uppercase tracking-wider">Custom Items</p>
+            <p className="font-telemetry text-[12px] text-orbital-subtle">
+              {fmtMoney(totals.sections.find((s) => s.id === '_custom')?.subtotal ?? 0)}
+            </p>
+          </div>
+          <div className="divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
+            {quote.customLines.map((cl) => (
+              <div key={cl.id} className="px-4 py-2 flex items-center gap-3">
+                <input className="input flex-1 min-w-0 py-1 text-[13px]" disabled={locked}
+                  value={cl.name}
+                  onChange={(e) => patchQuote(quote.id, (q) => ({
+                    customLines: q.customLines.map((c) => c.id === cl.id ? { ...c, name: e.target.value } : c),
+                  }))} />
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <input type="number" min="0" className="input w-16 text-center py-1 text-[12px]" disabled={locked}
+                    value={cl.qty}
+                    onChange={(e) => patchQuote(quote.id, (q) => ({
+                      customLines: q.customLines.map((c) => c.id === cl.id ? { ...c, qty: Math.max(0, Number(e.target.value) || 0) } : c),
+                    }))} />
+                  <span className="text-[10px] text-orbital-dim w-12">{cl.unit || 'Days'}</span>
+                </div>
+                <input type="number" min="0" className="input w-24 text-right py-1 text-[12px] font-telemetry" disabled={locked}
+                  value={cl.rate}
+                  onChange={(e) => patchQuote(quote.id, (q) => ({
+                    customLines: q.customLines.map((c) => c.id === cl.id ? { ...c, rate: Math.max(0, Number(e.target.value) || 0) } : c),
+                  }))} />
+                <p className="w-24 text-right font-telemetry text-[12px] text-orbital-text flex-shrink-0">
+                  {fmtMoney(customLineSubtotal(cl))}
+                </p>
+                {!locked && (
+                  <button
+                    onClick={() => patchQuote(quote.id, (q) => ({
+                      customLines: q.customLines.filter((c) => c.id !== cl.id),
+                    }))}
+                    className="text-orbital-dim hover:text-red-400 flex-shrink-0" title="Remove">
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* ── Master menu ── */}
@@ -337,6 +395,21 @@ export function QuoteBuilderPage() {
             toast.success(`${card.lines[assetPrompt]?.name}: allow ${n} additional optimization day${n === 1 ? '' : 's'} (1 per asset).`)
           }}
           onCancel={() => setAssetPrompt(null)}
+        />
+      </Modal>
+
+      {/* ── Custom deal prompt — price per day × days ── */}
+      <Modal open={customPrompt} onClose={() => setCustomPrompt(false)} title="Custom deal item" size="sm">
+        <CustomItemForm
+          days={quote.days}
+          onSubmit={(item) => {
+            patchQuote(quote.id, (q) => ({
+              customLines: [...(q.customLines || []), item],
+            }))
+            setCustomPrompt(false)
+            toast.success(`${item.name} added — ${fmtMoney(item.rate)}/day × ${item.qty}`)
+          }}
+          onCancel={() => setCustomPrompt(false)}
         />
       </Modal>
 
@@ -454,6 +527,60 @@ function Center({ children }) {
   return (
     <div className="max-w-4xl mx-auto px-4 py-10 text-center">
       <p className="font-telemetry text-[9px] tracking-[0.2em] text-orbital-subtle">{children}</p>
+    </div>
+  )
+}
+
+// "I wanna do it" — cut a deal fast: name it, set a per-day price and the
+// day count. Lands as an editable Custom Item on the quote; more rate-card
+// lines can then be layered on via the quick-add search.
+function CustomItemForm({ days, onSubmit, onCancel }) {
+  const defaultDays =
+    (Number(days?.shoot) || 0) + (Number(days?.build) || 0) +
+    (Number(days?.strike) || 0) + (Number(days?.travel) || 0)
+  const [name, setName] = useState('Custom day rate')
+  const [rate, setRate] = useState('')
+  const [qty, setQty] = useState(defaultDays || 1)
+  const valid = name.trim() && Number(rate) > 0 && Number(qty) > 0
+  const submit = () => {
+    if (!valid) return
+    onSubmit({
+      id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+      name: name.trim(),
+      rate: Number(rate),
+      qty: Number(qty),
+      unit: 'Days',
+    })
+  }
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="label">Item name</label>
+        <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Price per day</label>
+          <input type="number" min="0" className="input text-right font-telemetry" placeholder="0"
+            value={rate} onChange={(e) => setRate(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submit()} />
+        </div>
+        <div>
+          <label className="label">Days</label>
+          <input type="number" min="1" className="input text-center" value={qty}
+            onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+            onKeyDown={(e) => e.key === 'Enter' && submit()} />
+        </div>
+      </div>
+      {Number(rate) > 0 && Number(qty) > 0 && (
+        <p className="text-[12px] text-orbital-subtle text-right font-telemetry">
+          = {fmtMoney(Number(rate) * Number(qty))}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <button className="btn-secondary" onClick={onCancel}>Cancel</button>
+        <button className="btn-primary" disabled={!valid} onClick={submit}>Add to quote</button>
+      </div>
     </div>
   )
 }
