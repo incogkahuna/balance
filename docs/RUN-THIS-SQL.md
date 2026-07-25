@@ -719,13 +719,18 @@ create table if not exists public.feedback_items (
   title              text not null,
   description        text not null default '',
   status             text not null default 'New'
-                       check (status in ('New', 'Acknowledged', 'In Progress', 'Shipped', 'Won''t Fix')),
+                       check (status in ('New', 'Acknowledged', 'In Progress', 'Revisit', 'Shipped', 'Won''t Fix')),
   submitted_by       uuid references public.profiles(id) on delete set null,
   submitted_by_name  text not null default '',
   resolution_note    text not null default '',
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
+
+-- 'Revisit' status added 2026-07-25 — re-state the check for existing DBs.
+alter table public.feedback_items drop constraint if exists feedback_items_status_check;
+alter table public.feedback_items add constraint feedback_items_status_check
+  check (status in ('New', 'Acknowledged', 'In Progress', 'Revisit', 'Shipped', 'Won''t Fix'));
 
 create index if not exists feedback_items_created_at_idx on public.feedback_items (created_at desc);
 create index if not exists feedback_items_status_idx     on public.feedback_items (status);

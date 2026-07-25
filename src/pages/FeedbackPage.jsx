@@ -4,7 +4,7 @@ import { format } from '../lib/safeFormat.js'
 import {
   Bug, Lightbulb, StickyNote, Plus, X, Send, Filter, MessageSquare, Trash2,
   CheckCircle2, Circle, AlertCircle, Ban, ClipboardCopy, CheckSquare, Square,
-  ChevronDown, Pencil,
+  ChevronDown, Pencil, RotateCcw,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -31,6 +31,7 @@ const STATUS_META = {
   [FEEDBACK_STATUS.NEW]:          { color: '#60a5fa', bg: 'rgba(96,165,250,0.12)',  border: 'rgba(96,165,250,0.4)',  icon: Circle        },
   [FEEDBACK_STATUS.ACKNOWLEDGED]: { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.4)', icon: AlertCircle   },
   [FEEDBACK_STATUS.IN_PROGRESS]:  { color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  border: 'rgba(251,191,36,0.4)',  icon: AlertCircle   },
+  [FEEDBACK_STATUS.REVISIT]:      { color: '#fb7185', bg: 'rgba(251,113,133,0.12)', border: 'rgba(251,113,133,0.4)', icon: RotateCcw     },
   [FEEDBACK_STATUS.SHIPPED]:      { color: '#22c55e', bg: 'rgba(34,197,94,0.12)',   border: 'rgba(34,197,94,0.4)',   icon: CheckCircle2  },
   [FEEDBACK_STATUS.WONT_FIX]:     { color: '#71717a', bg: 'rgba(113,113,122,0.12)', border: 'rgba(113,113,122,0.4)', icon: Ban           },
 }

@@ -600,6 +600,7 @@ export const FEEDBACK_STATUS = {
   NEW:         'New',
   ACKNOWLEDGED:'Acknowledged',
   IN_PROGRESS: 'In Progress',
+  REVISIT:     'Revisit',      // parked deliberately — come back to it
   SHIPPED:     'Shipped',
   WONT_FIX:    "Won't Fix",
 }
