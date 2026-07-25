@@ -36,15 +36,16 @@ const PipelineContext = createContext(null)
 
 // Mirrors pipeline_role_assignments in the migration — used for dev
 // impersonation and as a client-side hint before the profiles column exists.
-// CURRENT UNLOCK: Danny, Wilder, AJ + Brian Nitzkin (unlocked 2026-07-22,
-// full access per Danny — admin_finance sees everything money included).
-// Still pending: Mark (mark@ → production) when Danny says go.
+// CURRENT UNLOCK: Danny, Wilder, AJ, Brian Nitzkin + Mark (unlocked
+// 2026-07-24, full access per Danny — was planned as 'production', upgraded
+// to admin_exec on his report).
 // brian@ = NITZKIN; brodriguez@ is a different Brian (crew, no role).
 const EMAIL_ROLES = {
   'aj@orbitalvs.com': 'admin_exec',
   'dhorgan@orbitalvs.com': 'admin_exec',
   'wilder@orbitalvs.com': 'admin_exec', // dev team — full access, money included
   'brian@orbitalvs.com': 'admin_finance', // Brian Nitzkin — Business Manager, full access
+  'mark@orbitalvs.com': 'admin_exec', // Mark — full access per Danny 2026-07-24
 }
 
 export const STATUS_ORDER = ['new', 'quote_sent', 'agreement', 'green_light']
@@ -65,8 +66,8 @@ export const STATUS_COLORS = {
 
 export const ROLE_LABELS = {
   admin_finance: 'Brian — Business Manager',
-  admin_exec: 'AJ / Danny — Exec',
-  production: 'Mark — Production',
+  admin_exec: 'AJ / Danny / Mark — Exec',
+  production: 'Production (restricted)',
   pipeline: 'Wilder — Pipeline',
 }
 
@@ -101,8 +102,7 @@ export function PipelineProvider({ children }) {
     const email = (currentUser?.email || profile?.email || '').toLowerCase()
     if (EMAIL_ROLES[email]) return EMAIL_ROLES[email]
     if (currentUser?.isDevImpersonation) {
-      // Next unlock: mark → production.
-      const byId = { aj: 'admin_exec', danny: 'admin_exec', wilder: 'admin_exec', nitz: 'admin_finance' }
+      const byId = { aj: 'admin_exec', danny: 'admin_exec', wilder: 'admin_exec', nitz: 'admin_finance', mark: 'admin_exec' }
       return byId[currentUser.id] ?? null
     }
     return null

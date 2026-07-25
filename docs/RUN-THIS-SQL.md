@@ -61,14 +61,15 @@ create table if not exists public.pipeline_role_assignments (
   created_at     timestamptz not null default now()
 );
 
--- CURRENT UNLOCK: Danny, Wilder, AJ, Brian Nitzkin (unlocked 2026-07-22 —
--- full access per Danny; brodriguez@ is a different Brian, crew, no role).
--- Still pending: Mark (mark@ → production) when Danny says go.
+-- CURRENT UNLOCK: everyone — Danny, Wilder, AJ, Brian Nitzkin (2026-07-22),
+-- Mark (2026-07-24, full access per Danny — upgraded from the planned
+-- 'production' role). brodriguez@ is a different Brian: crew, no role.
 insert into public.pipeline_role_assignments (email, pipeline_role) values
   ('aj@orbitalvs.com',         'admin_exec'),     -- AJ — CEO
   ('dhorgan@orbitalvs.com',    'admin_exec'),     -- Danny — owner
   ('wilder@orbitalvs.com',     'admin_exec'),     -- Wilder — Head of AI (dev team: full access)
-  ('brian@orbitalvs.com',      'admin_finance')   -- Brian Nitzkin — Business Manager (full access)
+  ('brian@orbitalvs.com',      'admin_finance'),  -- Brian Nitzkin — Business Manager (full access)
+  ('mark@orbitalvs.com',       'admin_exec')      -- Mark — full access (Danny 2026-07-24)
 on conflict (email) do nothing;
 
 -- Resolve the caller's pipeline role. EXPLICIT GRANTS ONLY:
@@ -402,17 +403,22 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 ```
 
-**Lock (only needed if you ran the EARLIEST pipeline block, before 2026-07-22):**
-Brian Nitzkin is now UNLOCKED (admin_finance) — this snippet only removes
-Mark's pre-grant, which stays pending.
+**Mark unlock (2026-07-24 — run this if the pipeline block was already run
+before this date; new pastes of the block above already include him):**
 
 ```sql
-delete from public.pipeline_role_assignments
-where email in ('mark@orbitalvs.com');
-update public.profiles set pipeline_role = null
-where email in ('mark@orbitalvs.com');
--- Re-paste the pipeline block above (idempotent) to install the
--- explicit-grants-only pipeline_role() function.
+-- Mark → full pipeline access (idempotent, safe to re-run)
+insert into public.pipeline_role_assignments (email, pipeline_role)
+values ('mark@orbitalvs.com', 'admin_exec')
+on conflict (email) do update set pipeline_role = excluded.pipeline_role;
+update public.profiles set pipeline_role = 'admin_exec'
+where email = 'mark@orbitalvs.com';
+-- Balance-side: ensure Mark is admin (usually already true)
+insert into public.role_assignments (email, role, display_name, display_color)
+values ('mark@orbitalvs.com', 'admin', 'Mark', '#6366f1')
+on conflict (email) do update set role = 'admin';
+update public.profiles set role = 'admin'
+where email = 'mark@orbitalvs.com';
 ```
 
 **Verify after running** (should return 6 rows of `true`):
