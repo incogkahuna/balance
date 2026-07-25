@@ -574,3 +574,9 @@ export function usePipeline() {
   if (!ctx) throw new Error('usePipeline must be used within PipelineProvider')
   return ctx
 }
+
+// Non-throwing variant for chrome that renders with or without the provider
+// (e.g. Breadcrumbs resolving deal/quote ids to names). Returns null outside.
+export function usePipelineOptional() {
+  return useContext(PipelineContext)
+}

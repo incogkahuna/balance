@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ChevronRight, Home } from 'lucide-react'
 import { useNavHistory } from '../../context/NavHistoryContext.jsx'
 import { useApp } from '../../context/AppContext.jsx'
+import { usePipelineOptional } from '../../features/pipeline/PipelineContext.jsx'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Breadcrumbs — page-path strip rendered above every page's content.
@@ -28,13 +29,21 @@ const STATIC_LABELS = {
   '/feedback':        'Bugs & Ideas',
   '/resources':       'Resources',
   '/gear':            'Gear',
+  '/debriefs':        'Debriefs',
+  '/account':         'Account',
+  '/pipeline':           'Deals',
+  '/pipeline/clients':   'Clients',
+  '/pipeline/analytics': 'Pipeline Analytics',
+  '/pipeline/ratecard':  'Rate Card',
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function titleCase(s) {
   return s.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function deriveLabel(path, { productions }) {
+function deriveLabel(path, { productions, pipeline }) {
   // Exact match on static map first.
   if (STATIC_LABELS[path]) return STATIC_LABELS[path]
 
@@ -45,14 +54,33 @@ function deriveLabel(path, { productions }) {
     return prod?.name || 'Production'
   }
 
-  // Generic fallback — last segment, prettified.
+  // Pipeline detail pages — resolve ids to real names, never raw UUIDs
+  // (Danny's "tab names are sketchy" screenshot was this trail).
+  const dealMatch = path.match(/^\/pipeline\/deals\/([0-9a-f-]{8,})$/i)
+  if (dealMatch) {
+    const deal = pipeline?.deals?.find?.((d) => d.id === dealMatch[1])
+    return deal?.projectName || 'Deal'
+  }
+  const quoteMatch = path.match(/^\/pipeline\/quotes\/([0-9a-f-]{8,})(\/pdf)?$/i)
+  if (quoteMatch) {
+    if (quoteMatch[2]) return 'Client PDF'
+    const quote = pipeline?.quotes?.find?.((q) => q.id === quoteMatch[1])
+    if (!quote) return 'Quote'
+    const deal = pipeline?.deals?.find?.((d) => d.id === quote.dealId)
+    return deal ? `Quote — ${deal.projectName}` : (quote.title || 'Quote')
+  }
+
+  // Generic fallback — last segment, prettified. A bare UUID segment never
+  // renders raw: fall back to a neutral noun.
   const last = path.split('/').filter(Boolean).pop() || 'Home'
+  if (UUID_RE.test(last)) return 'Detail'
   return titleCase(last)
 }
 
 export function Breadcrumbs() {
   const { trail } = useNavHistory()
   const { productions } = useApp()
+  const pipeline = usePipelineOptional()
 
   // Single-entry trail = just the current page, no crumb to show
   if (!trail || trail.length < 2) return null
@@ -68,7 +96,7 @@ export function Breadcrumbs() {
     >
       {trail.map((path, i) => {
         const isLast = i === trail.length - 1
-        const label  = deriveLabel(path, { productions })
+        const label  = deriveLabel(path, { productions, pipeline })
         const isHome = path === '/dashboard'
 
         return (
