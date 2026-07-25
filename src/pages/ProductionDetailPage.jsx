@@ -835,8 +835,10 @@ function DebriefTab({ production, canDebrief, onEdit }) {
             </div>
             {canDebrief && (
               <div className="flex gap-2">
-                <button onClick={() => setShowDoc(true)} className="btn-secondary text-xs">
-                  <FileText size={13} /> Generate Document
+                {/* Was "Generate Document" — Danny couldn't find how to file a
+                    debrief; the submit lives inside, so name it that. */}
+                <button onClick={() => setShowDoc(true)} className="btn-primary text-xs">
+                  <FileText size={13} /> Submit Debrief
                 </button>
                 <button onClick={onEdit} className="btn-ghost">
                   <Edit size={14} /> Edit
@@ -869,7 +871,7 @@ function DebriefTab({ production, canDebrief, onEdit }) {
         </>
       )}
 
-      <Modal open={showDoc} onClose={() => setShowDoc(false)} title="Debrief Document" size="lg">
+      <Modal open={showDoc} onClose={() => setShowDoc(false)} title="Review & Submit Debrief" size="lg">
         <DebriefDocument production={production} onClose={() => setShowDoc(false)} />
       </Modal>
     </div>
