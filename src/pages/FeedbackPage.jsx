@@ -4,7 +4,7 @@ import { format } from '../lib/safeFormat.js'
 import {
   Bug, Lightbulb, StickyNote, Plus, X, Send, Filter, MessageSquare, Trash2,
   CheckCircle2, Circle, AlertCircle, Ban, ClipboardCopy, CheckSquare, Square,
-  ChevronDown,
+  ChevronDown, Pencil,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -256,12 +256,14 @@ export function FeedbackPage() {
                 key={item.id}
                 item={item}
                 isAdmin={isAdmin}
+                canEdit={isAdmin || (!!currentUser?.id && item.submittedBy === currentUser.id)}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={() => toggleSelect(item.id)}
                 isExpanded={expandedId === item.id}
                 onToggleExpand={() => setExpandedId(id => id === item.id ? null : item.id)}
                 onUpdateStatus={(status) => handleSetStatus(item, status)}
                 onUpdateResolution={(resolutionNote) => updateFeedbackItem(item.id, { resolutionNote })}
+                onUpdateItem={(patch) => updateFeedbackItem(item.id, patch)}
                 onDelete={() => setDeleteTarget(item)}
               />
             ))}
@@ -360,7 +362,7 @@ function StatusPillSelect({ status, onChange }) {
 }
 
 // ── FeedbackRow ─────────────────────────────────────────────────────────────
-function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, onToggleExpand, onUpdateStatus, onUpdateResolution, onDelete }) {
+function FeedbackRow({ item, isAdmin, canEdit, isSelected, onToggleSelect, isExpanded, onToggleExpand, onUpdateStatus, onUpdateResolution, onUpdateItem, onDelete }) {
   const toast = useToast()
   const kindMeta   = KIND_META[item.kind] || KIND_META[FEEDBACK_KIND.IDEA]
   const statusMeta = STATUS_META[item.status] || STATUS_META[FEEDBACK_STATUS.NEW]
@@ -376,6 +378,32 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
   // Admin resolution-note editor state. Draft is local; Save persists.
   const [editingNote, setEditingNote] = useState(false)
   const [noteDraft, setNoteDraft] = useState(item.resolutionNote || '')
+
+  // Author/admin post-submit editing — Danny: "need to be able to add photos
+  // and make edits to bugs and features after they have been sent".
+  const [editingItem, setEditingItem] = useState(false)
+  const [draft, setDraft] = useState(null)
+  const editFormRef = useRef(null)
+  const startEdit = () => {
+    setDraft({
+      title: item.title || '',
+      description: item.description || '',
+      context: item.context || '',
+      screenshot: item.screenshot || '',
+    })
+    setEditingItem(true)
+  }
+  const saveEdit = () => {
+    if (!draft.title.trim()) { toast.error('A report needs a title.'); return }
+    onUpdateItem({
+      title: draft.title.trim(),
+      description: draft.description.trim(),
+      context: draft.context.trim(),
+      screenshot: draft.screenshot,
+    })
+    setEditingItem(false)
+    toast.success('Report updated')
+  }
 
   const submittedDate = item.submittedAt
     ? format(parseISO(item.submittedAt), 'MMM d, yyyy')
@@ -444,6 +472,39 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
       {/* Expanded body */}
       {isExpanded && (
         <div className="px-4 pb-4 pt-1" style={{ borderTop: '1px solid var(--orbital-border)' }}>
+          {editingItem && draft ? (
+            /* Post-submit edit — author or admin. Screenshot attach included. */
+            <div className="space-y-3 mt-3" ref={editFormRef}>
+              <div>
+                <label className="label">Title</label>
+                <input className="input" value={draft.title}
+                  onChange={e => setDraft(d => ({ ...d, title: e.target.value }))} autoFocus />
+              </div>
+              <div>
+                <label className="label">Details</label>
+                <textarea className="input min-h-[80px] resize-y" value={draft.description}
+                  onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Where in the app?</label>
+                <input className="input" value={draft.context}
+                  onChange={e => setDraft(d => ({ ...d, context: e.target.value }))} />
+              </div>
+              <div>
+                <label className="label">Screenshot</label>
+                <ScreenshotAttach
+                  value={draft.screenshot}
+                  onChange={(s) => setDraft(d => ({ ...d, screenshot: s }))}
+                  pasteScope={editFormRef}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button onClick={saveEdit} className="btn-primary text-xs px-3 py-1.5">Save changes</button>
+                <button onClick={() => setEditingItem(false)} className="btn-ghost text-xs px-3 py-1.5">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <>
           {item.context && (
             <p className="text-xs mt-3">
               <span className="text-orbital-dim font-telemetry tracking-wider">WHERE / EXPECTED · </span>
@@ -474,8 +535,8 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
             </div>
           )}
 
-          {/* Copy this one report as a standalone prompt — everyone */}
-          <div className="mt-3">
+          {/* Copy as prompt (everyone) + Edit (author or admin) */}
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
             <button
               onClick={handleCopyOne}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
@@ -484,6 +545,16 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
               <ClipboardCopy size={11} />
               Copy as prompt
             </button>
+            {canEdit && (
+              <button
+                onClick={startEdit}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-orbital-subtle hover:text-orbital-text transition-colors"
+                title="Edit this report — text and screenshot"
+              >
+                <Pencil size={11} />
+                Edit report
+              </button>
+            )}
           </div>
 
           {/* Admin controls */}
@@ -540,6 +611,8 @@ function FeedbackRow({ item, isAdmin, isSelected, onToggleSelect, isExpanded, on
                   </div>
                 </div>
               )}
+            </>
+          )}
             </>
           )}
         </div>
