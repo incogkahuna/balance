@@ -35,6 +35,7 @@ export function QuoteBuilderPage() {
   const [assetPrompt, setAssetPrompt] = useState(null) // lineId pending asset count
   const [trackingPrompt, setTrackingPrompt] = useState(false)
   const [customPrompt, setCustomPrompt] = useState(false) // "I wanna do it" custom-item modal
+  const [customOpen, setCustomOpen] = useState(false)     // keep the custom section visible while building
 
   const totals = useMemo(() => (card && quote ? computeTotals(card, quote) : null), [card, quote])
   const violations = useMemo(() => (card && quote ? dependencyViolations(card, quote) : []), [card, quote])
@@ -218,8 +219,9 @@ export function QuoteBuilderPage() {
                 <Sparkles size={13} /> TVC preset deal
               </button>
             )}
-            {/* "I wanna do it" — name a day price, set days, done. */}
-            <button onClick={() => setCustomPrompt(true)} className="btn-secondary text-xs">
+            {/* "I wanna do it" — name a day price, set days, then keep
+                pulling rate-card items in via the section's own search. */}
+            <button onClick={() => { setCustomOpen(true); setCustomPrompt(true) }} className="btn-secondary text-xs">
               <Plus size={13} /> Custom deal
             </button>
           </div>
@@ -228,22 +230,29 @@ export function QuoteBuilderPage() {
 
       {/* ── Quick-add search — type a few letters, click to add (Danny) ── */}
       {!locked && (
-        <QuickAddSearch
-          template={template}
-          card={card}
-          quote={quote}
-          onAdd={(lineId) => {
-            const line = card.lines[lineId]
-            // Same activation path as the X toggle — per-asset lines still
-            // ask for their count, dependency rules still fire.
-            if (line.perAsset && !quote.lines[lineId]?.qty) setAssetPrompt(lineId)
-            else activateLine(lineId)
-          }}
-        />
+        <div className="card-elevated p-3 mb-4">
+          <RateSearch
+            template={template}
+            card={card}
+            quote={quote}
+            placeholder="Search line items — type a couple of letters, click to add…"
+            isPicked={(lineId) => !!quote.lines[lineId]?.x}
+            onPick={(r) => {
+              const line = card.lines[r.lineId]
+              // Same activation path as the X toggle — per-asset lines still
+              // ask for their count, dependency rules still fire.
+              if (line.perAsset && !quote.lines[r.lineId]?.qty) setAssetPrompt(r.lineId)
+              else activateLine(r.lineId)
+              toast.success(`${line.name} added to the quote`)
+            }}
+          />
+        </div>
       )}
 
-      {/* ── Custom items ("I wanna do it" deals) ── */}
-      {(quote.customLines || []).length > 0 && (
+      {/* ── Custom items ("I wanna do it" deals) — a fast general invoice.
+             Its own search pulls REAL rate-card costs in as freely editable
+             lines, so a loose deal still references the real numbers. ── */}
+      {((quote.customLines || []).length > 0 || (customOpen && !locked)) && (
         <div className="card-elevated overflow-hidden mb-4">
           <div className="flex items-center justify-between px-4 py-2"
             style={{ background: 'rgba(85,201,239,0.06)', borderBottom: '1px solid var(--orbital-border)' }}>
@@ -252,6 +261,11 @@ export function QuoteBuilderPage() {
               {fmtMoney(totals.sections.find((s) => s.id === '_custom')?.subtotal ?? 0)}
             </p>
           </div>
+          {(quote.customLines || []).length === 0 && (
+            <p className="px-4 pt-2.5 text-[11px] text-orbital-dim">
+              Nothing here yet — set a day rate or search the rate card below; every line stays fully editable.
+            </p>
+          )}
           <div className="divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
             {quote.customLines.map((cl) => (
               <div key={cl.id} className="px-4 py-2 flex items-center gap-3">
@@ -288,6 +302,38 @@ export function QuoteBuilderPage() {
               </div>
             ))}
           </div>
+
+          {/* Build controls — search real costs in, or drop a day rate. */}
+          {!locked && (
+            <div className="px-4 py-3 space-y-2" style={{ borderTop: '1px solid var(--orbital-border)' }}>
+              <RateSearch
+                template={template}
+                card={card}
+                quote={quote}
+                placeholder="Add from rate card — real costs, fully editable once added…"
+                onPick={(r) => {
+                  const line = r.line
+                  const rate = line.priceMode === 'manual'
+                    ? 0
+                    : line.range
+                      ? line.range[0]
+                      : resolveRate(line, quote.venue, null)
+                  const item = {
+                    id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+                    name: line.name,
+                    rate,
+                    qty: proposedQty(line, quote.days) ?? 1,
+                    unit: line.unit || 'Days',
+                  }
+                  patchQuote(quote.id, (q) => ({ customLines: [...(q.customLines || []), item] }))
+                  toast.success(`${line.name} added${line.range ? ` — rate defaulted to ${fmtMoney(rate)}, edit freely` : ''}`)
+                }}
+              />
+              <button onClick={() => setCustomPrompt(true)} className="btn-ghost text-xs">
+                <Plus size={13} /> Day rate item
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -429,8 +475,11 @@ export function QuoteBuilderPage() {
 
 // Anticipating search over the venue template's line items. Ranking:
 // name-starts-with > word-starts-with > substring anywhere (name, then
-// description/crew role). Click (or Enter for the top hit) adds the line.
-function QuickAddSearch({ template, card, quote, onAdd }) {
+// description/crew role). Click (or Enter for the top hit) picks the line.
+// Two consumers: the master-menu quick-add (isPicked marks lines already on
+// the quote) and the Custom Items builder (no isPicked — duplicates allowed,
+// each pick becomes an independent editable line).
+function RateSearch({ template, card, quote, placeholder, onPick, isPicked }) {
   const [text, setText] = useState('')
 
   const index = useMemo(() => {
@@ -463,22 +512,26 @@ function QuickAddSearch({ template, card, quote, onAdd }) {
     return scored.slice(0, 8)
   }, [text, index])
 
-  const add = (r) => {
-    onAdd(r.lineId)
+  const pick = (r) => {
+    onPick(r)
     setText('')
   }
 
   return (
-    <div className="card-elevated p-3 mb-4">
+    <div>
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-orbital-dim" />
         <input
           className="input pl-9"
-          placeholder="Search line items — type a couple of letters, click to add…"
+          placeholder={placeholder}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && results.length > 0) { e.preventDefault(); add(results[0]) }
+            if (e.key === 'Enter' && results.length > 0) {
+              e.preventDefault()
+              const first = results.find((r) => !(isPicked && isPicked(r.lineId))) || results[0]
+              pick(first)
+            }
             if (e.key === 'Escape') setText('')
           }}
         />
@@ -486,16 +539,16 @@ function QuickAddSearch({ template, card, quote, onAdd }) {
       {results.length > 0 && (
         <div className="mt-2 divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
           {results.map((r) => {
-            const active = !!quote.lines[r.lineId]?.x
+            const picked = isPicked ? isPicked(r.lineId) : false
             return (
               <button
                 key={r.lineId}
                 type="button"
-                onClick={() => add(r)}
-                disabled={active}
+                onClick={() => pick(r)}
+                disabled={picked}
                 className="w-full flex items-center gap-2.5 px-2 py-1.5 text-left hover:bg-white/5 disabled:opacity-50"
               >
-                {active
+                {picked
                   ? <Check size={14} className="flex-shrink-0 text-green-500" />
                   : <Plus size={14} className="flex-shrink-0 text-orbital-subtle" />}
                 <span className="min-w-0 flex-1">
@@ -503,7 +556,7 @@ function QuickAddSearch({ template, card, quote, onAdd }) {
                   <span className="block text-[10px] text-orbital-dim uppercase tracking-wider">{r.sectionTitle}</span>
                 </span>
                 <span className="font-telemetry text-[12px] text-orbital-subtle flex-shrink-0">
-                  {active
+                  {picked
                     ? 'on quote'
                     : r.line.priceMode === 'manual'
                       ? 'manual'
