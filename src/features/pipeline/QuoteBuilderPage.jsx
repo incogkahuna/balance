@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, AlertTriangle, Eye, Send, Lock, Sparkles } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Eye, Send, Lock, Sparkles, Search, Plus, Check } from 'lucide-react'
 import { usePipeline } from './PipelineContext.jsx'
 import { fmtDate, PipelineNoAccess } from './components.jsx'
 import {
@@ -217,6 +217,22 @@ export function QuoteBuilderPage() {
         )}
       </div>
 
+      {/* ── Quick-add search — type a few letters, click to add (Danny) ── */}
+      {!locked && (
+        <QuickAddSearch
+          template={template}
+          card={card}
+          quote={quote}
+          onAdd={(lineId) => {
+            const line = card.lines[lineId]
+            // Same activation path as the X toggle — per-asset lines still
+            // ask for their count, dependency rules still fire.
+            if (line.perAsset && !quote.lines[lineId]?.qty) setAssetPrompt(lineId)
+            else activateLine(lineId)
+          }}
+        />
+      )}
+
       {/* ── Master menu ── */}
       <div className="space-y-4">
         {template.sections.map((section) => (
@@ -334,6 +350,102 @@ export function QuoteBuilderPage() {
           </button>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+// Anticipating search over the venue template's line items. Ranking:
+// name-starts-with > word-starts-with > substring anywhere (name, then
+// description/crew role). Click (or Enter for the top hit) adds the line.
+function QuickAddSearch({ template, card, quote, onAdd }) {
+  const [text, setText] = useState('')
+
+  const index = useMemo(() => {
+    const out = []
+    for (const section of template.sections) {
+      for (const lineId of section.lines) {
+        const line = card.lines[lineId]
+        if (!line || line.unit === 'Incl') continue
+        out.push({ lineId, line, sectionTitle: section.title })
+      }
+    }
+    return out
+  }, [template, card])
+
+  const results = useMemo(() => {
+    const needle = text.trim().toLowerCase()
+    if (needle.length < 2) return []
+    const scored = []
+    for (const item of index) {
+      const name = item.line.name.toLowerCase()
+      const extra = `${item.line.description || ''} ${item.line.crewRole || ''}`.toLowerCase()
+      let score = -1
+      if (name.startsWith(needle)) score = 0
+      else if (name.split(/\s+/).some((w) => w.startsWith(needle))) score = 1
+      else if (name.includes(needle)) score = 2
+      else if (extra.includes(needle)) score = 3
+      if (score >= 0) scored.push({ ...item, score })
+    }
+    scored.sort((a, b) => a.score - b.score || a.line.name.localeCompare(b.line.name))
+    return scored.slice(0, 8)
+  }, [text, index])
+
+  const add = (r) => {
+    onAdd(r.lineId)
+    setText('')
+  }
+
+  return (
+    <div className="card-elevated p-3 mb-4">
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-orbital-dim" />
+        <input
+          className="input pl-9"
+          placeholder="Search line items — type a couple of letters, click to add…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && results.length > 0) { e.preventDefault(); add(results[0]) }
+            if (e.key === 'Escape') setText('')
+          }}
+        />
+      </div>
+      {results.length > 0 && (
+        <div className="mt-2 divide-y" style={{ borderColor: 'var(--orbital-border)' }}>
+          {results.map((r) => {
+            const active = !!quote.lines[r.lineId]?.x
+            return (
+              <button
+                key={r.lineId}
+                type="button"
+                onClick={() => add(r)}
+                disabled={active}
+                className="w-full flex items-center gap-2.5 px-2 py-1.5 text-left hover:bg-white/5 disabled:opacity-50"
+              >
+                {active
+                  ? <Check size={14} className="flex-shrink-0 text-green-500" />
+                  : <Plus size={14} className="flex-shrink-0 text-orbital-subtle" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] text-orbital-text truncate">{r.line.name}</span>
+                  <span className="block text-[10px] text-orbital-dim uppercase tracking-wider">{r.sectionTitle}</span>
+                </span>
+                <span className="font-telemetry text-[12px] text-orbital-subtle flex-shrink-0">
+                  {active
+                    ? 'on quote'
+                    : r.line.priceMode === 'manual'
+                      ? 'manual'
+                      : r.line.range
+                        ? `${fmtMoney(r.line.range[0])}–${fmtMoney(r.line.range[1])}`
+                        : fmtMoney(resolveRate(r.line, quote.venue, null))}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {text.trim().length >= 2 && results.length === 0 && (
+        <p className="mt-2 px-2 text-[11px] text-orbital-dim">No line items match "{text.trim()}".</p>
+      )}
     </div>
   )
 }

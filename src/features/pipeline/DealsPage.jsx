@@ -15,7 +15,7 @@ import { seedDemoData } from './demoSeed.js'
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function DealsPage() {
-  const { ready, deals, money, handoffs, canSeeMoney, isAdmin, pipelineRole, refresh } = usePipeline()
+  const { ready, deals, money, handoffs, canSeeMoney, isAdmin, pipelineRole, refresh, setDealStatus } = usePipeline()
   const toast = useToast()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
@@ -128,6 +128,14 @@ export function DealsPage() {
                         money={canSeeMoney ? money[d.id] : null}
                         handoff={handoffs.find((h) => h.dealId === d.id)}
                         onOpen={() => navigate(`/pipeline/deals/${d.id}`)}
+                        onMarkAgreed={
+                          isAdmin && d.status === 'quote_sent'
+                            ? async () => {
+                                await setDealStatus(d.id, 'agreement')
+                                toast.success(`${d.projectName} marked agreed — production handoff pending`)
+                              }
+                            : null
+                        }
                       />
                     ))}
                   </div>
@@ -143,15 +151,35 @@ export function DealsPage() {
   )
 }
 
-function DealCard({ deal, money, handoff, onOpen }) {
+function DealCard({ deal, money, handoff, onOpen, onMarkAgreed }) {
+  // div-with-role instead of <button>: the card hosts a real inner button
+  // (Mark agreed) and nested buttons are invalid HTML.
   return (
-    <button onClick={onOpen} className="card text-left p-3 w-full">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
+      className="card text-left p-3 w-full cursor-pointer"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[14px] font-semibold text-orbital-text truncate">{deal.projectName}</p>
           <p className="text-[12px] text-orbital-subtle truncate">{deal.clientCompany}</p>
         </div>
-        <DealStatusBadge status={deal.status} className="flex-shrink-0" />
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <DealStatusBadge status={deal.status} />
+          {onMarkAgreed && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMarkAgreed() }}
+              className="btn-secondary text-[11px] px-2 py-1"
+              title="Advance this deal to Agreement"
+            >
+              Mark agreed
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <VenueChip venue={deal.venue} location={deal.mobileLocation} />
@@ -169,7 +197,7 @@ function DealCard({ deal, money, handoff, onOpen }) {
           Production {handoff.state === 'active' ? 'ACTIVE' : 'PENDING'}
         </p>
       )}
-    </button>
+    </div>
   )
 }
 
@@ -188,6 +216,16 @@ function DealCreateModal({ onClose }) {
 
   const knownClients = useMemo(() => {
     const names = [...new Set(deals.map((d) => d.clientCompany))]
+    return names.sort((a, b) => a.localeCompare(b))
+  }, [deals])
+  // Autocomplete from history — typing a couple of letters surfaces the
+  // project / location if it already exists (Danny's New Deal notes).
+  const knownProjects = useMemo(() => {
+    const names = [...new Set(deals.map((d) => d.projectName).filter(Boolean))]
+    return names.sort((a, b) => a.localeCompare(b))
+  }, [deals])
+  const knownLocations = useMemo(() => {
+    const names = [...new Set(deals.map((d) => d.mobileLocation).filter(Boolean))]
     return names.sort((a, b) => a.localeCompare(b))
   }, [deals])
   const isKnownClient = knownClients.some(
@@ -217,10 +255,13 @@ function DealCreateModal({ onClose }) {
       <div className="space-y-3">
         <div>
           <label className="label">Project name *</label>
-          <input className="input" autoFocus value={form.projectName}
+          <input className="input" autoFocus list="pipeline-projects" value={form.projectName}
             onChange={(e) => set('projectName', e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSave()}
             placeholder="Desert Spot" />
+          <datalist id="pipeline-projects">
+            {knownProjects.map((p) => <option key={p} value={p} />)}
+          </datalist>
         </div>
         <div>
           <label className="label">Client company *</label>
@@ -273,15 +314,27 @@ function DealCreateModal({ onClose }) {
               <option value="budget_first">Budget-First</option>
               <option value="comparison_bid">Comparison-Bid</option>
             </select>
+            {/* One-line definition of the selected mode — Danny: "the intake
+                modes need to be made more clear to user at first". */}
+            <p className="text-[11px] text-orbital-dim mt-1 leading-snug">
+              {{
+                standard: 'Normal flow — build the quote line by line from the rate card, send it.',
+                budget_first: 'Client leads with a number — fit scope to their budget; can jump straight to Agreement with no quote.',
+                comparison_bid: 'Client has a competing bid — build quote variants against it and mark the one that wins.',
+              }[form.intakeMode]}
+            </p>
           </div>
         </div>
 
         {form.venue === 'mobile' && (
           <div>
             <label className="label">Location</label>
-            <input className="input" value={form.mobileLocation}
+            <input className="input" list="pipeline-locations" value={form.mobileLocation}
               onChange={(e) => set('mobileLocation', e.target.value)}
               placeholder="Cinespace Chicago" />
+            <datalist id="pipeline-locations">
+              {knownLocations.map((l) => <option key={l} value={l} />)}
+            </datalist>
           </div>
         )}
 
