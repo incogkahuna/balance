@@ -444,18 +444,23 @@ export function QuoteBuilderPage() {
         />
       </Modal>
 
-      {/* ── Custom deal prompt — price per day × days ── */}
-      <Modal open={customPrompt} onClose={() => setCustomPrompt(false)} title="Custom deal item" size="sm">
-        <CustomItemForm
-          days={quote.days}
-          onSubmit={(item) => {
-            patchQuote(quote.id, (q) => ({
-              customLines: [...(q.customLines || []), item],
-            }))
-            setCustomPrompt(false)
-            toast.success(`${item.name} added — ${fmtMoney(item.rate)}/day × ${item.qty}`)
-          }}
-          onCancel={() => setCustomPrompt(false)}
+      {/* ── Custom deal builder — search the rate card AND drop day rates,
+             all in one place, with the running list right there. ── */}
+      <Modal open={customPrompt} onClose={() => setCustomPrompt(false)} title="Build custom deal" size="lg">
+        <CustomDealBuilder
+          template={template}
+          card={card}
+          quote={quote}
+          onAdd={(item) => patchQuote(quote.id, (q) => ({
+            customLines: [...(q.customLines || []), item],
+          }))}
+          onPatchLine={(lineId, patch) => patchQuote(quote.id, (q) => ({
+            customLines: q.customLines.map((c) => c.id === lineId ? { ...c, ...patch } : c),
+          }))}
+          onRemove={(lineId) => patchQuote(quote.id, (q) => ({
+            customLines: q.customLines.filter((c) => c.id !== lineId),
+          }))}
+          onDone={() => setCustomPrompt(false)}
         />
       </Modal>
 
@@ -584,55 +589,132 @@ function Center({ children }) {
   )
 }
 
-// "I wanna do it" — cut a deal fast: name it, set a per-day price and the
-// day count. Lands as an editable Custom Item on the quote; more rate-card
-// lines can then be layered on via the quick-add search.
-function CustomItemForm({ days, onSubmit, onCancel }) {
-  const defaultDays =
-    (Number(days?.shoot) || 0) + (Number(days?.build) || 0) +
-    (Number(days?.strike) || 0) + (Number(days?.travel) || 0)
+// ── Custom deal builder ──────────────────────────────────────────────────────
+// One surface for cutting a loose deal fast while still quoting real numbers:
+// search the rate card and click items in (prefilled with their true rate), or
+// drop a flat price/day line. Everything lands in the same running list, fully
+// editable, with a live total. Adds are immediate — the list IS the quote's
+// custom section, so nothing is lost if the modal is closed.
+function CustomDealBuilder({ template, card, quote, onAdd, onPatchLine, onRemove, onDone }) {
+  const lines = quote.customLines || []
+  const dayTotal =
+    (Number(quote.days?.shoot) || 0) + (Number(quote.days?.build) || 0) +
+    (Number(quote.days?.strike) || 0) + (Number(quote.days?.travel) || 0)
+
   const [name, setName] = useState('Custom day rate')
   const [rate, setRate] = useState('')
-  const [qty, setQty] = useState(defaultDays || 1)
-  const valid = name.trim() && Number(rate) > 0 && Number(qty) > 0
-  const submit = () => {
-    if (!valid) return
-    onSubmit({
-      id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
-      name: name.trim(),
-      rate: Number(rate),
-      qty: Number(qty),
-      unit: 'Days',
+  const [qty, setQty] = useState(dayTotal || 1)
+  const dayRateValid = name.trim() && Number(rate) > 0 && Number(qty) > 0
+
+  const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${lines.length}`)
+
+  const addDayRate = () => {
+    if (!dayRateValid) return
+    onAdd({ id: newId(), name: name.trim(), rate: Number(rate), qty: Number(qty), unit: 'Days' })
+    setName('Custom day rate')
+    setRate('')
+    setQty(dayTotal || 1)
+  }
+
+  const addFromCard = (r) => {
+    const line = r.line
+    const resolved = line.priceMode === 'manual'
+      ? 0
+      : line.range
+        ? line.range[0]
+        : resolveRate(line, quote.venue, null)
+    onAdd({
+      id: newId(),
+      name: line.name,
+      rate: resolved,
+      qty: proposedQty(line, quote.days) ?? 1,
+      unit: line.unit || 'Days',
     })
   }
+
+  const runningTotal = lines.reduce((s, cl) => s + customLineSubtotal(cl), 0)
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* 1 — pull real costs in */}
       <div>
-        <label className="label">Item name</label>
-        <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+        <p className="hud-label mb-1.5">ADD FROM RATE CARD — REAL COSTS</p>
+        <RateSearch
+          template={template}
+          card={card}
+          quote={quote}
+          placeholder="Type a couple of letters — scissor, forklift, crew…"
+          onPick={addFromCard}
+        />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="label">Price per day</label>
-          <input type="number" min="0" className="input text-right font-telemetry" placeholder="0"
-            value={rate} onChange={(e) => setRate(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submit()} />
+
+      {/* 2 — or name your own price */}
+      <div className="pt-3" style={{ borderTop: '1px solid var(--orbital-border)' }}>
+        <p className="hud-label mb-1.5">OR SET YOUR OWN PRICE</p>
+        <div className="flex items-end gap-2 flex-wrap">
+          <div className="flex-1 min-w-[140px]">
+            <label className="label">Item name</label>
+            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="w-28">
+            <label className="label">Price per day</label>
+            <input type="number" min="0" className="input text-right font-telemetry" placeholder="0"
+              value={rate} onChange={(e) => setRate(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addDayRate()} />
+          </div>
+          <div className="w-20">
+            <label className="label">Days</label>
+            <input type="number" min="1" className="input text-center" value={qty}
+              onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+              onKeyDown={(e) => e.key === 'Enter' && addDayRate()} />
+          </div>
+          <button className="btn-secondary" disabled={!dayRateValid} onClick={addDayRate}>
+            <Plus size={14} /> Add
+          </button>
         </div>
-        <div>
-          <label className="label">Days</label>
-          <input type="number" min="1" className="input text-center" value={qty}
-            onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
-            onKeyDown={(e) => e.key === 'Enter' && submit()} />
-        </div>
+        {Number(rate) > 0 && Number(qty) > 0 && (
+          <p className="text-[11px] text-orbital-subtle text-right font-telemetry mt-1">
+            = {fmtMoney(Number(rate) * Number(qty))}
+          </p>
+        )}
       </div>
-      {Number(rate) > 0 && Number(qty) > 0 && (
-        <p className="text-[12px] text-orbital-subtle text-right font-telemetry">
-          = {fmtMoney(Number(rate) * Number(qty))}
-        </p>
-      )}
-      <div className="flex justify-end gap-2">
-        <button className="btn-secondary" onClick={onCancel}>Cancel</button>
-        <button className="btn-primary" disabled={!valid} onClick={submit}>Add to quote</button>
+
+      {/* 3 — the running deal, editable in place */}
+      <div className="pt-3" style={{ borderTop: '1px solid var(--orbital-border)' }}>
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="hud-label">ON THIS DEAL</p>
+          <p className="font-telemetry text-[13px] text-orbital-text">{fmtMoney(runningTotal)}</p>
+        </div>
+        {lines.length === 0 ? (
+          <p className="text-[12px] text-orbital-dim">
+            Nothing yet — search above, or set a price per day. Items stay editable after they're added.
+          </p>
+        ) : (
+          <div className="divide-y max-h-56 overflow-y-auto" style={{ borderColor: 'var(--orbital-border)' }}>
+            {lines.map((cl) => (
+              <div key={cl.id} className="py-1.5 flex items-center gap-2">
+                <input className="input flex-1 min-w-0 py-1 text-[13px]" value={cl.name}
+                  onChange={(e) => onPatchLine(cl.id, { name: e.target.value })} />
+                <input type="number" min="0" className="input w-14 text-center py-1 text-[12px]" value={cl.qty}
+                  onChange={(e) => onPatchLine(cl.id, { qty: Math.max(0, Number(e.target.value) || 0) })} />
+                <span className="text-[10px] text-orbital-dim w-10 flex-shrink-0">{cl.unit || 'Days'}</span>
+                <input type="number" min="0" className="input w-24 text-right py-1 text-[12px] font-telemetry" value={cl.rate}
+                  onChange={(e) => onPatchLine(cl.id, { rate: Math.max(0, Number(e.target.value) || 0) })} />
+                <p className="w-24 text-right font-telemetry text-[12px] text-orbital-text flex-shrink-0">
+                  {fmtMoney(customLineSubtotal(cl))}
+                </p>
+                <button onClick={() => onRemove(cl.id)}
+                  className="text-orbital-dim hover:text-red-400 flex-shrink-0" title="Remove">
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end">
+        <button className="btn-primary" onClick={onDone}>Done</button>
       </div>
     </div>
   )
