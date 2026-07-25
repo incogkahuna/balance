@@ -69,27 +69,56 @@ const ACCESS_DENIED_MSG =
 
 async function fetchProfile(userId: string): Promise<Profile | null> {
   log('fetchProfile starting for', userId)
+  // Two attempts: a transient network blip (mobile tab resume, token refresh
+  // mid-request) must not read as "no profile" — that's what caused roles to
+  // flicker down to crew until a manual refresh.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const query = supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+      const { data, error } = await withTimeout(query, 5000, `fetchProfile query (attempt ${attempt})`)
+      if (error) {
+        warn('fetchProfile error:', error.message, error.code, error.details)
+        continue
+      }
+      if (!data) {
+        // A clean "no row" answer is authoritative — don't retry.
+        warn('fetchProfile returned no row — profile not yet created for', userId)
+        return null
+      }
+      log('fetchProfile got', data.email, data.role)
+      return data as Profile
+    } catch (e) {
+      warn(`fetchProfile attempt ${attempt} threw:`, e instanceof Error ? e.message : e)
+    }
+  }
+  return null
+}
+
+// ─── Last-known-profile cache ────────────────────────────────────────────────
+// Display-only resilience: when the profiles query fails transiently we fall
+// back to the last profile the SERVER gave us for this exact user id, instead
+// of synthesizing a crew-role placeholder (the cause of Danny's admin↔crew
+// flicker). RLS still enforces real permissions server-side — this cache can
+// never grant more than the DB allows, it only stops the UI lying low.
+function profileCacheKey(userId: string) {
+  return `balance_profile_cache_${userId}`
+}
+function readCachedProfile(userId: string): Profile | null {
   try {
-    const query = supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle()
-    const { data, error } = await withTimeout(query, 5000, 'fetchProfile query')
-    if (error) {
-      warn('fetchProfile error:', error.message, error.code, error.details)
-      return null
-    }
-    if (!data) {
-      warn('fetchProfile returned no row — profile not yet created for', userId)
-      return null
-    }
-    log('fetchProfile got', data.email, data.role)
-    return data as Profile
-  } catch (e) {
-    warn('fetchProfile threw:', e instanceof Error ? e.message : e)
+    const raw = localStorage.getItem(profileCacheKey(userId))
+    if (!raw) return null
+    const p = JSON.parse(raw) as Profile
+    return p && p.id === userId && p.role ? p : null
+  } catch {
     return null
   }
+}
+function writeCachedProfile(p: Profile) {
+  try { localStorage.setItem(profileCacheKey(p.id), JSON.stringify(p)) } catch { /* full/blocked storage is fine */ }
 }
 
 // Synthesize a Profile from the session user when the profiles table can't be
@@ -203,17 +232,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const allowedDomain = isAllowedEmail(initialSession.user.email)
           const p = await fetchProfile(initialSession.user.id)
           if (cancelled) return
+          const cached = p ? null : readCachedProfile(initialSession.user.id)
           // Outside-domain sessions are admitted ONLY when their profile row
           // exists — that row is the server's proof the account was granted
-          // (fail closed: no profile → no access, no synthetic fallback).
-          if (!allowedDomain && !p) {
+          // (fail closed). A cached copy of a previously-fetched row counts:
+          // it only ever exists because the server approved the account once.
+          if (!allowedDomain && !p && !cached) {
             await blockDisallowed(initialSession.user.email)
             return
           }
           setSession(initialSession)
-          // Orbital accounts keep the synthetic-profile fallback so a flaky
-          // profiles query never locks staff out while we debug.
-          setProfile(p || profileFromSession(initialSession.user))
+          if (p) writeCachedProfile(p)
+          // Fetch failed? Prefer the last server-confirmed profile over a
+          // synthetic crew-role placeholder — never downgrade on a blip.
+          setProfile(p || cached || profileFromSession(initialSession.user))
         } else {
           setSession(null)
         }
@@ -240,13 +272,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // account completes Google OAuth. Outside domains need their
           // server-provisioned profile row to exist; no row → signed out.
           const allowedDomain = isAllowedEmail(nextSession.user.email)
-          const p = await fetchProfile(nextSession.user.id)
-          if (!allowedDomain && !p) {
-            await blockDisallowed(nextSession.user.email)
+          const user = nextSession.user
+          const p = await fetchProfile(user.id)
+          const cached = p ? null : readCachedProfile(user.id)
+          if (!allowedDomain && !p && !cached) {
+            await blockDisallowed(user.email)
             return
           }
           setSession(nextSession)
-          setProfile(p || profileFromSession(nextSession.user))
+          if (p) writeCachedProfile(p)
+          // TOKEN_REFRESHED fires constantly (and often right as a mobile
+          // tab resumes, when the network is flakiest). On a failed fetch,
+          // keep whatever real profile we already hold for this same user —
+          // NEVER swap an admin's profile for the synthetic crew fallback.
+          setProfile((prev) =>
+            p ||
+            (prev && prev.id === user.id ? prev : null) ||
+            cached ||
+            profileFromSession(user),
+          )
         } else {
           setSession(nextSession)
           setProfile(null)
@@ -294,6 +338,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .single()
     if (error) throw error
     setProfile(data as Profile)
+    writeCachedProfile(data as Profile)
   }
 
   return (
