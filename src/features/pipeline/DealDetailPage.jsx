@@ -146,8 +146,10 @@ export function DealDetailPage() {
               <Row k="Phone" v={deal.clientPhone || '—'} />
               <Row k="Dates" v={`${fmtDate(deal.startDate)}${deal.endDate ? ` → ${fmtDate(deal.endDate)}` : ''}`} />
               <Row k="Days" v={
+                // Full-length labels per Danny — "1S" was ambiguous
+                // (Shoot vs Strike both abbreviate to S).
                 ['travel', 'build', 'shoot', 'strike']
-                  .map((k) => `${deal.days?.[k] ?? 0}${k[0].toUpperCase()}`)
+                  .map((k) => `${deal.days?.[k] ?? 0} ${k[0].toUpperCase()}${k.slice(1)}`)
                   .join(' · ')
               } />
               <Row k="Created" v={fmtDate(deal.createdAt)} />
