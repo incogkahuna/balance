@@ -283,7 +283,6 @@ export function AddonForm({ productionId, initial, onClose }) {
               type="file"
               ref={fileRef}
               accept="image/*"
-              capture="environment"
               multiple
               className="hidden"
               onChange={handlePhotoUpload}

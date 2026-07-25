@@ -430,12 +430,12 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                 />
 
                 {/* ── Photo upload ─────────────────────────────────────── */}
-                {/* Hidden input — capture="environment" opens rear camera on mobile */}
+                {/* Hidden input — no `capture` attr: mobile shows the native
+                    Take Photo / Photo Library chooser instead of camera-only */}
                 <input
                   ref={completionPhotoRef}
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   className="hidden"
                   onChange={handleCompletionPhotoSelect}
                 />
@@ -624,12 +624,11 @@ export function TaskCard({ task, productionId, showProduction = false }) {
                   </button>
                 </div>
 
-                {/* Hidden comment photo input */}
+                {/* Hidden comment photo input — no `capture`: album allowed */}
                 <input
                   ref={commentPhotoRef}
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   className="hidden"
                   onChange={handleCommentPhotoSelect}
                 />

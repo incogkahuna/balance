@@ -181,7 +181,6 @@ export function ContractorForm({ initial, onClose }) {
           ref={photoInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           className="hidden"
           onChange={handlePhoto}
         />
