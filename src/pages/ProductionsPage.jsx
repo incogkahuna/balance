@@ -10,7 +10,7 @@ import {
   SHEET_ASSET_CLASSES, SHEET_CONTENT_OPTIONS, SHEET_HOURS, SHEET_SPACES,
   DEFAULT_SHEET, sheetIs3D,
 } from '../data/models.js'
-import { useCoreCrew, memberRole } from '../features/productions/team/CoreCrewSlots.jsx'
+import { useCoreCrew, memberRole, CrewSlotSelect } from '../features/productions/team/CoreCrewSlots.jsx'
 import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { computeRoadmapHealth, HEALTH_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
@@ -470,12 +470,6 @@ function ProductionCard({
   const sheet = { ...DEFAULT_SHEET, ...(prod.sheet || {}) }
   const setSheet = (patch) => updateProduction(prod.id, { sheet: { ...sheet, ...patch } })
   const crew = useCoreCrew(prod)
-  const staffOptions = (crew.users || [])
-    .slice().sort((a, b) => a.name.localeCompare(b.name))
-    .map((u) => ({ value: u.id, label: u.name }))
-  const contractorOptions = (crew.contractors || [])
-    .slice().sort((a, b) => a.name.localeCompare(b.name))
-    .map((c) => ({ value: c.id, label: c.name }))
   // Extra operator-ish assignments (e.g. a custom "2nd Operator") shown
   // beside the slot — display only, they live in the Team lists.
   const OP_DISPLAY_RE = /operator|technician|tech support/i
@@ -714,23 +708,27 @@ function ProductionCard({
               <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">CONTENT</p>
               {sheetSelect(sheet.content, contentOptions, (v) => setSheet({ content: v }))}
             </div>
+            <CrewSlotSelect
+              label="SUPERVISOR" value={crew.supervisorId} options={crew.peopleOptions}
+              onChange={crew.setSupervisor} onCreatePerson={(n) => crew.createPerson(n, 'Supervisor')}
+              disabled={!canCustomize} compact
+            />
             <div className="min-w-0">
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">SUPERVISOR</p>
-              {sheetSelect(crew.supervisorId, staffOptions, crew.setSupervisor)}
-            </div>
-            <div className="min-w-0">
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">
-                OPERATOR{extraOperatorNames.length > 0 ? `S +${extraOperatorNames.length}` : ''}
-              </p>
-              {sheetSelect(crew.operatorId, staffOptions, crew.setOperator)}
+              <CrewSlotSelect
+                label={`OPERATOR${extraOperatorNames.length > 0 ? `S +${extraOperatorNames.length}` : ''}`}
+                value={crew.operatorId} options={crew.peopleOptions}
+                onChange={crew.setOperator} onCreatePerson={(n) => crew.createPerson(n, 'Operator')}
+                disabled={!canCustomize} compact
+              />
               {extraOperatorNames.length > 0 && (
                 <p className="text-[10px] text-orbital-subtle truncate">+ {extraOperatorNames.join(', ')}</p>
               )}
             </div>
-            <div className="min-w-0">
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">STAGE MGR</p>
-              {sheetSelect(crew.stageManagerId, contractorOptions, crew.setSM)}
-            </div>
+            <CrewSlotSelect
+              label="STAGE MGR" value={crew.stageManagerId} options={crew.peopleOptions}
+              onChange={crew.setSM} onCreatePerson={(n) => crew.createPerson(n, 'Stage Manager')}
+              disabled={!canCustomize} compact
+            />
             <div>
               <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">HOURS</p>
               {sheetSelect(
