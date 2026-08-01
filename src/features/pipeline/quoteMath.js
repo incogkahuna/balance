@@ -57,20 +57,28 @@ export function customLineSubtotal(cl) {
   return (Number(cl.rate) || 0) * (Number(cl.qty) || 0)
 }
 
+// A custom quote IS its custom line list — the rate-card menu is a lookup
+// tool at that point, not part of the quote (Danny 2026-07-25).
+export function isCustomQuote(quote) {
+  return quote?.mode === 'custom'
+}
+
 // ── Section + grand totals ───────────────────────────────────────────────────
 export function computeTotals(card, quote) {
   const template = card.templates[quote.venue]
   const sections = []
   let subtotal = 0
-  for (const section of template.sections) {
-    let sec = 0
-    for (const lineId of section.lines) {
-      const line = card.lines[lineId]
-      if (!line) continue
-      sec += lineSubtotal(line, quote.venue, quote.lines[lineId])
+  if (!isCustomQuote(quote)) {
+    for (const section of template.sections) {
+      let sec = 0
+      for (const lineId of section.lines) {
+        const line = card.lines[lineId]
+        if (!line) continue
+        sec += lineSubtotal(line, quote.venue, quote.lines[lineId])
+      }
+      sections.push({ id: section.id, title: section.title, subtotal: sec })
+      subtotal += sec
     }
-    sections.push({ id: section.id, title: section.title, subtotal: sec })
-    subtotal += sec
   }
   const customLines = quote.customLines || []
   if (customLines.length > 0) {
@@ -124,6 +132,9 @@ export function resolveDependencies(card, quote, lineId) {
 // after auto-activation). A quote with violations cannot be saved as sent.
 export function dependencyViolations(card, quote) {
   const out = []
+  // Custom quotes don't run rate-card dependency rules — the whole point is
+  // that they're hand-built and flexible ("easy to get in and out of").
+  if (isCustomQuote(quote)) return out
   for (const [id, ql] of Object.entries(quote.lines || {})) {
     if (!ql || !ql.x) continue
     const line = card.lines[id]
@@ -148,6 +159,7 @@ export function dependencyViolations(card, quote) {
 // Soft flags we can't auto-resolve — rendered as inline warnings.
 export function activeFlags(card, quote) {
   const out = []
+  if (isCustomQuote(quote)) return out
   for (const [id, ql] of Object.entries(quote.lines || {})) {
     if (!ql || !ql.x) continue
     const line = card.lines[id]
@@ -170,6 +182,7 @@ export function activeFlags(card, quote) {
 // ── Internal floor (build view only — never on the client PDF) ───────────────
 export function internalFloor(card, quote) {
   const out = []
+  if (isCustomQuote(quote)) return out
   for (const [id, ql] of Object.entries(quote.lines || {})) {
     if (!ql || !ql.x) continue
     const line = card.lines[id]

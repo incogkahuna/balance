@@ -86,6 +86,12 @@ export interface Quote {
   discount: QuoteDiscount | null
   // Free-form "I wanna do it" items outside the rate card: rate × qty.
   customLines: Array<{ id: string; name: string; rate: number; qty: number; unit?: string }>
+  // 'standard' = full rate-card menu drives the quote and the PDF.
+  // 'custom'   = the custom line list IS the quote; only those items are
+  //              totalled and only they print. Explicit (not inferred from
+  //              customLines) so adding one custom item to a standard quote
+  //              can never silently drop everything else off the PDF.
+  mode: 'standard' | 'custom'
   status: QuoteStatus
   issuedAt: string
   sentAt: string | null
@@ -227,6 +233,7 @@ function rowToQuote(r: any): Quote {
     days: r.days ?? { travel: 0, build: 0, shoot: 0, strike: 0 },
     lines: r.lines ?? {}, discount: r.discount ?? null,
     customLines: r.custom_lines ?? [],
+    mode: r.mode === 'custom' ? 'custom' : 'standard',
     status: r.status ?? 'draft', issuedAt: r.issued_at,
     sentAt: r.sent_at ?? null, createdAt: r.created_at, updatedAt: r.updated_at,
   }
@@ -243,6 +250,7 @@ function quoteToRow(q: Partial<Quote>): Record<string, unknown> {
   if (q.lines !== undefined) row.lines = q.lines
   if (q.discount !== undefined) row.discount = q.discount
   if (q.customLines !== undefined) row.custom_lines = q.customLines
+  if (q.mode        !== undefined) row.mode         = q.mode
   if (q.status !== undefined) row.status = q.status
   if (q.issuedAt !== undefined) row.issued_at = q.issuedAt
   if (q.sentAt !== undefined) row.sent_at = q.sentAt
@@ -423,6 +431,7 @@ export async function createQuote(q: Partial<Quote>): Promise<Quote> {
       rateCardVersion: q.rateCardVersion || 1, venue: (q.venue as Venue) || 'tvc',
       days: q.days || { travel: 0, build: 0, shoot: 0, strike: 0 },
       lines: q.lines || {}, discount: q.discount ?? null,
+      customLines: q.customLines || [], mode: q.mode || 'standard',
       status: q.status || 'draft',
       issuedAt: q.issuedAt || nowIso().slice(0, 10), sentAt: q.sentAt ?? null,
       createdAt: nowIso(), updatedAt: nowIso(),
@@ -431,8 +440,17 @@ export async function createQuote(q: Partial<Quote>): Promise<Quote> {
     writeLocal(store)
     return quote
   }
-  const { data, error } = await supabase
-    .from('pipeline_quotes').insert(quoteToRow(q)).select('*').single()
+  const insertRow = quoteToRow(q)
+  let { data, error } = await supabase
+    .from('pipeline_quotes').insert(insertRow).select('*').single()
+  // Pre-ALTER safety: a new quote defaults to mode 'standard' anyway, so
+  // dropping the field keeps quote creation working before the SQL is run.
+  if (error && (error.code === '42703' || error.code === 'PGRST204') && /\bmode\b/.test(error.message || '')) {
+    console.warn('[pipeline] quotes.mode column missing — run the ALTER in RUN-THIS-SQL.md')
+    delete insertRow.mode
+    ;({ data, error } = await supabase
+      .from('pipeline_quotes').insert(insertRow).select('*').single())
+  }
   if (error) throw error
   return rowToQuote(data)
 }
@@ -446,8 +464,21 @@ export async function updateQuote(id: string, patch: Partial<Quote>): Promise<Qu
     writeLocal(store)
     return store.quotes[i]
   }
-  const { data, error } = await supabase
-    .from('pipeline_quotes').update(quoteToRow(patch)).eq('id', id).select('*').single()
+  const row = quoteToRow(patch)
+  let { data, error } = await supabase
+    .from('pipeline_quotes').update(row).eq('id', id).select('*').single()
+  // `mode` shipped 2026-07-25; before its ALTER runs, drop it rather than
+  // failing the whole write (the quote still saves, it just won't remember
+  // custom mode across reloads until the SQL is run).
+  const missingMode = error
+    && (error.code === '42703' || error.code === 'PGRST204')
+    && /\bmode\b/.test(error.message || '')
+  if (missingMode && Object.keys(row).length > 1) {
+    console.warn('[pipeline] quotes.mode column missing — run the ALTER in RUN-THIS-SQL.md')
+    delete row.mode
+    ;({ data, error } = await supabase
+      .from('pipeline_quotes').update(row).eq('id', id).select('*').single())
+  }
   if (error) throw error
   return rowToQuote(data)
 }

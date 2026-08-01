@@ -4,7 +4,7 @@ import { ArrowLeft, Printer } from 'lucide-react'
 import { usePipeline } from './PipelineContext.jsx'
 import {
   resolveRate, lineSubtotal, computeTotals, fmtMoney, quoteExpiryDate,
-  customLineSubtotal,
+  customLineSubtotal, isCustomQuote,
 } from './quoteMath.js'
 import { fmtDate, PipelineNoAccess } from './components.jsx'
 
@@ -152,7 +152,9 @@ export function QuotePdfPage() {
                 <th className="px-2 py-1.5 text-right font-semibold w-24">SubTotal</th>
               </tr>
             </thead>
-            {template.sections.map((section) => {
+            {/* Custom quotes print ONLY their custom items — the rate-card
+                menu is a lookup tool for them, not the document (Danny). */}
+            {(isCustomQuote(quote) ? [] : template.sections).map((section) => {
               const secTotal = totals.sections.find((s) => s.id === section.id)?.subtotal ?? 0
               return (
                 <tbody key={section.id} className="pdf-section">

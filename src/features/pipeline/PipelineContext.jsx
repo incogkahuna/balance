@@ -300,6 +300,8 @@ export function PipelineProvider({ children }) {
       days: { ...(deal.days || { travel: 0, build: 0, shoot: 0, strike: 0 }) },
       lines: {},
       discount: null,
+      customLines: [],
+      mode: 'standard',
       status: 'draft',
       issuedAt: nowIso().slice(0, 10),
       sentAt: null,

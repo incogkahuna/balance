@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { parseISO, differenceInCalendarDays } from 'date-fns'
 import { format } from '../lib/safeFormat.js'
-import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, Clapperboard, Bus, Wrench } from 'lucide-react'
+import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, Clapperboard, Bus, Wrench, Image as ImageIcon, ImageOff } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import {
@@ -11,6 +11,9 @@ import {
   DEFAULT_SHEET, sheetIs3D,
 } from '../data/models.js'
 import { useCoreCrew, memberRole, CrewSlotSelect } from '../features/productions/team/CoreCrewSlots.jsx'
+import { StoredImage } from '../components/files/StoredImage.tsx'
+import { FileUploadButton } from '../components/files/FileUploadButton.tsx'
+import { BUCKETS, paths } from '../lib/storage.ts'
 import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { computeRoadmapHealth, HEALTH_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
@@ -547,6 +550,46 @@ function ProductionCard({
           in the card's top-right corner on phones. */}
       <div className="hidden sm:flex absolute top-2 right-2 z-20 items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         {canCustomize && (
+          // Wrapper swallows the click so picking an image never also opens
+          // the production, and carries the chrome styling (FileUploadButton
+          // takes a className but no style prop).
+          <span
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--orbital-surface)',
+              border: '1px solid var(--orbital-border)',
+              color: 'var(--orbital-subtle)',
+            }}
+            title={prod.cardImage ? 'Replace card image' : 'Add card image / brand logo'}
+          >
+            <FileUploadButton
+              bucket={BUCKETS.instructionPackages}
+              pathFor={(file) => paths.productionCard(prod.id, file.name)}
+              accept="image/*"
+              className="p-1 flex items-center justify-center transition-colors"
+              onUploaded={(result) => updateProduction(prod.id, {
+                cardImage: { bucket: result.bucket, path: result.path },
+              })}
+            >
+              <ImageIcon size={11} />
+            </FileUploadButton>
+          </span>
+        )}
+        {canCustomize && prod.cardImage && (
+          <button
+            onClick={(e) => { e.stopPropagation(); updateProduction(prod.id, { cardImage: null }) }}
+            className="p-1 transition-colors"
+            style={{
+              background: 'var(--orbital-surface)',
+              border: '1px solid var(--orbital-border)',
+              color: 'var(--orbital-subtle)',
+            }}
+            title="Remove card image"
+          >
+            <ImageOff size={11} />
+          </button>
+        )}
+        {canCustomize && (
           <div className="relative">
             <button
               onClick={(e) => { e.stopPropagation(); setPickerOpen(o => !o) }}
@@ -597,11 +640,29 @@ function ProductionCard({
         className="card text-left w-full h-full flex flex-col hover:bg-orbital-panel transition-colors overflow-hidden cursor-pointer"
         style={{ borderLeft: `3px solid ${borderColor}` }}
       >
+        {/* Card image / brand logo — visual differentiation (Danny). Sits
+            above the title as a banner; the scrim keeps the hover controls
+            readable over bright artwork. */}
+        {prod.cardImage?.path && (
+          <div className="relative w-full h-24 flex-shrink-0 overflow-hidden bg-black/20">
+            <StoredImage
+              bucket={prod.cardImage.bucket || BUCKETS.instructionPackages}
+              path={prod.cardImage.path}
+              alt={`${prod.name} artwork`}
+              className="w-full h-full object-cover"
+            />
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 45%, var(--orbital-panel) 100%)' }}
+            />
+          </div>
+        )}
+
         {/* Row 1: name + status badge */}
         {/* pr-12 on sm+ reserves room for the absolute-positioned palette +
             grip controls that only show on desktop; on mobile those are
             hidden so the title can use the full width. */}
-        <div className={clsx('flex items-start justify-between gap-3 pb-0', 'px-4 sm:px-5', 'pt-4')}>
+        <div className={clsx('flex items-start justify-between gap-3 pb-0', 'px-4 sm:px-5', prod.cardImage?.path ? 'pt-3' : 'pt-4')}>
           <div className="flex-1 min-w-0 sm:pr-12">
             <p className={clsx('font-semibold text-orbital-text leading-tight truncate', 'text-lg')}>{prod.name}</p>
             <p className={clsx('text-orbital-subtle truncate mt-1', 'text-sm')}>{prod.client}</p>

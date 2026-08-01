@@ -49,6 +49,10 @@ export const paths = {
   // (and no new SQL) required.
   dealFile: (dealId: string, filename: string) =>
     `deal-files/${dealId}/${safeName(filename)}`,
+
+  // Production card image / brand logo — same bucket, own prefix.
+  productionCard: (productionId: string, filename: string) =>
+    `card-images/${productionId}/${safeName(filename)}`,
 }
 
 // ─── Upload ────────────────────────────────────────────────────────────────

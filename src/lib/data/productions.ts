@@ -69,6 +69,8 @@ export interface Production {
   // Cheat-sheet facts that live nowhere else on the record (asset class,
   // content, day length, rented spaces). Editable straight on the card.
   sheet: { assetClass: string; content: string; hoursPerDay: number; spaces: string[] }
+  // Card image / brand logo for visual differentiation on the card.
+  cardImage: { bucket: string; path: string } | null
   // false = draft (only admin/sup can see), true = visible to all salary roster.
   // Drives visibility at the RLS layer; UI shows a DRAFT chip on unpublished
   // productions. New productions default to draft so admin can iron things
@@ -113,6 +115,7 @@ interface ProductionRow {
   bible: Production['bible']
   roadmap: Production['roadmap']
   sheet: Production['sheet']
+  card_image: Production['cardImage']
   published: boolean
   led_wall_id: string | null
   created_by: string | null
@@ -146,6 +149,7 @@ function rowToProduction(r: ProductionRow): Production {
     roadmap:             r.roadmap ?? { milestones: [], logisticalConcerns: [] },
     // Rows created before the sheet column existed come back without it.
     sheet:               r.sheet ?? { assetClass: '', content: '', hoursPerDay: 10, spaces: [] },
+    cardImage:           r.card_image ?? null,
     // Existing rows ship without `published` because the column was added
     // in a later migration with default true. Treat undefined as true so
     // old/cached rows render normally rather than appearing as drafts.
@@ -194,6 +198,7 @@ function productionToRow(p: NewProduction): Partial<ProductionRow> {
   if (p.bible               !== undefined) row.bible                = p.bible
   if (p.roadmap             !== undefined) row.roadmap              = p.roadmap
   if (p.sheet               !== undefined) row.sheet                = p.sheet
+  if (p.cardImage           !== undefined) row.card_image           = p.cardImage
   if (p.published           !== undefined) row.published            = p.published
   if (p.ledWallId           !== undefined) row.led_wall_id          = p.ledWallId || null
   if (p.createdBy           !== undefined) row.created_by           = asUuidOrNull(p.createdBy)
@@ -221,15 +226,21 @@ export async function getProduction(id: string): Promise<Production | null> {
   return data ? rowToProduction(data) : null
 }
 
-// The sheet column shipped 2026-07-25 — until its ALTER runs on the live DB,
-// any write carrying `sheet` would 42703. Rather than bricking every
-// production create/update in that window, retry once without the field
-// (sheet-only edits still surface the error so the missing SQL is noticed).
-function isMissingSheetColumn(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false
-  // Postgres reports 42703 (undefined column); PostgREST reports PGRST204
-  // ("Could not find the 'sheet' column ... in the schema cache").
-  return (error.code === '42703' || error.code === 'PGRST204') && /\bsheet\b/.test(error.message || '')
+// Columns added after the original schema (sheet 2026-07-25, card_image
+// 2026-07-25). Until their ALTERs run on the live DB, a write carrying them
+// errors. Rather than bricking every production create/update in that
+// window, we retry once without the offending field — edits that were ONLY
+// that field still surface the error so the missing SQL gets noticed.
+const LATE_COLUMNS = ['sheet', 'card_image'] as const
+
+// Postgres reports 42703 (undefined column); PostgREST reports PGRST204
+// ("Could not find the 'x' column ... in the schema cache").
+function missingLateColumn(
+  error: { code?: string; message?: string } | null,
+): string | null {
+  if (!error) return null
+  if (error.code !== '42703' && error.code !== 'PGRST204') return null
+  return LATE_COLUMNS.find((c) => new RegExp(`\\b${c}\\b`).test(error.message || '')) || null
 }
 
 export async function createProduction(p: NewProduction): Promise<Production> {
@@ -240,9 +251,10 @@ export async function createProduction(p: NewProduction): Promise<Production> {
     .insert(row)
     .select('*')
     .single()
-  if (isMissingSheetColumn(error)) {
-    console.warn('[productions] sheet column missing — run the ALTER in RUN-THIS-SQL.md; inserting without it')
-    delete row.sheet
+  // Strip late columns one at a time until the insert lands.
+  for (let missing = missingLateColumn(error); missing; missing = missingLateColumn(error)) {
+    console.warn(`[productions] ${missing} column missing — run the ALTER in RUN-THIS-SQL.md; inserting without it`)
+    delete row[missing]
     ;({ data, error } = await supabase.from('productions').insert(row).select('*').single())
   }
   if (error) throw error
@@ -260,11 +272,15 @@ export async function updateProduction(
     .eq('id', id)
     .select('*')
     .single()
-  // Only sacrifice the sheet on MIXED patches — a sheet-only patch would
-  // become an empty update; let it fail loudly instead.
-  if (isMissingSheetColumn(error) && Object.keys(row).length > 1) {
-    console.warn('[productions] sheet column missing — run the ALTER in RUN-THIS-SQL.md; updating without it')
-    delete row.sheet
+  // Only sacrifice a late column on MIXED patches — a patch that was ONLY
+  // that column would become an empty update; let it fail loudly instead.
+  for (
+    let missing = missingLateColumn(error);
+    missing && Object.keys(row).length > 1;
+    missing = missingLateColumn(error)
+  ) {
+    console.warn(`[productions] ${missing} column missing — run the ALTER in RUN-THIS-SQL.md; updating without it`)
+    delete row[missing]
     ;({ data, error } = await supabase.from('productions').update(row).eq('id', id).select('*').single())
   }
   if (error) throw error

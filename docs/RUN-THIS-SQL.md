@@ -1,12 +1,26 @@
 # Danny: run this SQL (one paste, Supabase dashboard → SQL Editor)
 
-## ⭑ NEWEST 2026-07-25 — production cheat sheet — RUN THIS ONE
+## ⭑ NEWEST 2026-07-25 (b) — card images + custom quotes — RUN THIS ONE
 
-> **STATUS: ⬜ NOT YET RUN.** One column on productions for the day-of cheat
-> sheet on production cards (type / content / hours / rented spaces —
-> everything else on the card is derived from existing fields). Idempotent.
-> Until this runs, sheet edits on the card are rejected server-side (other
-> production edits are unaffected).
+> **STATUS: ⬜ NOT YET RUN.** Two columns: artwork on production cards, and
+> the standard/custom flag on quotes. Idempotent. Until this runs, card
+> images won't save and a custom quote won't stay custom after a reload
+> (everything else keeps working).
+
+```sql
+alter table public.productions
+  add column if not exists card_image jsonb;
+
+alter table public.pipeline_quotes
+  add column if not exists mode text not null default 'standard';
+
+do $$ begin
+  alter table public.pipeline_quotes
+    add constraint pipeline_quotes_mode_check check (mode in ('standard', 'custom'));
+exception when duplicate_object then null; end $$;
+```
+
+## 2026-07-25 (a) — production cheat sheet — ✅ RUN (verified live)
 
 ```sql
 alter table public.productions add column if not exists sheet jsonb not null

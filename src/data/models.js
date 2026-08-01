@@ -318,6 +318,9 @@ export function createProduction(overrides = {}) {
     // Cheat-sheet facts (see SHEET_* above) — populated at creation
     // (pipeline handoff / intake), editable straight on the card.
     sheet: { ...DEFAULT_SHEET },
+    // Card image / brand logo — { bucket, path } into Supabase storage.
+    // Purely visual differentiation on the production card.
+    cardImage: null,
     // Optional working-window list: [{ start, end }] in YYYY-MM-DD. For
     // projects that span weeks but only run on certain days. Empty = single
     // window, use startDate/endDate directly.

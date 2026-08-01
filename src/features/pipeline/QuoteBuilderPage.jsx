@@ -6,7 +6,7 @@ import { fmtDate, PipelineNoAccess } from './components.jsx'
 import {
   resolveRate, proposedQty, lineSubtotal, computeTotals, resolveDependencies,
   dependencyViolations, activeFlags, internalFloor, fmtMoney,
-  quoteExpiryDate, discountIsValid, customLineSubtotal,
+  quoteExpiryDate, discountIsValid, customLineSubtotal, isCustomQuote,
 } from './quoteMath.js'
 import { useToast } from '../../context/ToastContext.jsx'
 import { Modal } from '../../components/ui/Modal.jsx'
@@ -36,6 +36,7 @@ export function QuoteBuilderPage() {
   const [trackingPrompt, setTrackingPrompt] = useState(false)
   const [customPrompt, setCustomPrompt] = useState(false) // "I wanna do it" custom-item modal
   const [customOpen, setCustomOpen] = useState(false)     // keep the custom section visible while building
+  const [menuOpen, setMenuOpen] = useState(false)         // rate-card menu as reference inside a custom quote
 
   const totals = useMemo(() => (card && quote ? computeTotals(card, quote) : null), [card, quote])
   const violations = useMemo(() => (card && quote ? dependencyViolations(card, quote) : []), [card, quote])
@@ -56,6 +57,13 @@ export function QuoteBuilderPage() {
 
   const template = card.templates[quote.venue]
   const locked = quote.status === 'accepted' || quote.status === 'superseded'
+  // Custom quote: the custom list IS the quote. The rate-card menu becomes a
+  // lookup tool (searchable, collapsed) rather than the document.
+  const custom = isCustomQuote(quote)
+  const activeStandardLines = Object.entries(quote.lines || {})
+    .filter(([, ql]) => ql?.x)
+    .map(([id]) => card.lines[id]?.name)
+    .filter(Boolean)
 
   // ── line mutation helpers — deltas only, persisted through patchQuote ──────
   // All of these use the FUNCTIONAL patch form so consecutive toggles compose
@@ -211,25 +219,61 @@ export function QuoteBuilderPage() {
               onChange={(e) => setDays(k, e.target.value)} />
           </label>
         ))}
-        <span className="text-[11px] text-orbital-dim">Counts flow into day-based lines; edit any qty to override.</span>
+        <span className="text-[11px] text-orbital-dim">
+          {custom
+            ? 'These day counts print on the client PDF.'
+            : 'Counts flow into day-based lines; edit any qty to override.'}
+        </span>
         {!locked && (
           <div className="flex items-center gap-2 ml-auto">
-            {quote.venue === 'tvc' && (
+            {quote.venue === 'tvc' && !custom && (
               <button onClick={applyBigDipper} className="btn-secondary text-xs">
                 <Sparkles size={13} /> TVC preset deal
               </button>
             )}
-            {/* "I wanna do it" — name a day price, set days, then keep
-                pulling rate-card items in via the section's own search. */}
-            <button onClick={() => { setCustomOpen(true); setCustomPrompt(true) }} className="btn-secondary text-xs">
-              <Plus size={13} /> Custom deal
-            </button>
+            {/* Custom deal turns this quote INTO the custom sheet — days
+                stay, search stays, everything else gets out of the way. */}
+            {!custom && (
+              <button
+                onClick={() => {
+                  patchQuote(quote.id, { mode: 'custom' })
+                  setCustomOpen(true)
+                  setCustomPrompt(true)
+                }}
+                className="btn-secondary text-xs"
+              >
+                <Plus size={13} /> Custom deal
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* ── Quick-add search — type a few letters, click to add (Danny) ── */}
-      {!locked && (
+      {/* ── Custom-quote banner — says plainly what prints ── */}
+      {custom && (
+        <div className="card-elevated p-3 mb-4 flex items-center gap-3 flex-wrap"
+          style={{ borderLeft: '3px solid #55c9ef' }}>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12px] font-semibold text-orbital-text">CUSTOM QUOTE</p>
+            <p className="text-[11px] text-orbital-dim">
+              Only the items below are totalled and printed on the client PDF.
+              Search the rate card to pull in real costs; every line stays editable.
+            </p>
+          </div>
+          {!locked && (
+            <button
+              onClick={() => patchQuote(quote.id, { mode: 'standard' })}
+              className="btn-ghost text-xs flex-shrink-0"
+              title="Go back to the full rate-card menu"
+            >
+              Back to full quote
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Standard quotes get the quick-add search over the master menu. */}
+      {!locked && !custom && (
         <div className="card-elevated p-3 mb-4">
           <RateSearch
             template={template}
@@ -252,7 +296,7 @@ export function QuoteBuilderPage() {
       {/* ── Custom items ("I wanna do it" deals) — a fast general invoice.
              Its own search pulls REAL rate-card costs in as freely editable
              lines, so a loose deal still references the real numbers. ── */}
-      {((quote.customLines || []).length > 0 || (customOpen && !locked)) && (
+      {(custom || (quote.customLines || []).length > 0 || (customOpen && !locked)) && (
         <div className="card-elevated overflow-hidden mb-4">
           <div className="flex items-center justify-between px-4 py-2"
             style={{ background: 'rgba(85,201,239,0.06)', borderBottom: '1px solid var(--orbital-border)' }}>
@@ -337,15 +381,49 @@ export function QuoteBuilderPage() {
         </div>
       )}
 
-      {/* ── Master menu ── */}
-      <div className="space-y-4">
-        {template.sections.map((section) => (
-          <SectionBlock key={section.id}
-            section={section} card={card} quote={quote} locked={locked}
-            onToggle={toggleLine} onSetLine={setLine}
-            sectionTotal={totals.sections.find((s) => s.id === section.id)?.subtotal ?? 0} />
-        ))}
-      </div>
+      {/* ── Master menu — the document for standard quotes; for custom
+             quotes it's collapsed to a reference (nothing here prints). ── */}
+      {custom ? (
+        <div className="card-elevated p-3">
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <span className="text-[12px] font-semibold text-orbital-text uppercase tracking-wider">
+              Full rate-card menu
+            </span>
+            <span className="text-[11px] text-orbital-dim">
+              {menuOpen ? 'Hide' : 'Reference only — does not print'}
+            </span>
+          </button>
+          {activeStandardLines.length > 0 && (
+            <p className="text-[11px] text-amber-500 mt-1.5">
+              {activeStandardLines.length} rate-card line{activeStandardLines.length === 1 ? ' is' : 's are'} still
+              switched on from before ({activeStandardLines.slice(0, 3).join(', ')}
+              {activeStandardLines.length > 3 ? '…' : ''}) — they are excluded from this custom quote and its PDF.
+            </p>
+          )}
+          {menuOpen && (
+            <div className="space-y-4 mt-3">
+              {template.sections.map((section) => (
+                <SectionBlock key={section.id}
+                  section={section} card={card} quote={quote} locked={locked}
+                  onToggle={toggleLine} onSetLine={setLine}
+                  sectionTotal={0} />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {template.sections.map((section) => (
+            <SectionBlock key={section.id}
+              section={section} card={card} quote={quote} locked={locked}
+              onToggle={toggleLine} onSetLine={setLine}
+              sectionTotal={totals.sections.find((s) => s.id === section.id)?.subtotal ?? 0} />
+          ))}
+        </div>
+      )}
 
       {/* ── Discount block ── */}
       <div className="card-elevated p-4 mt-4">
@@ -451,9 +529,20 @@ export function QuoteBuilderPage() {
           template={template}
           card={card}
           quote={quote}
-          onAdd={(item) => patchQuote(quote.id, (q) => ({
-            customLines: [...(q.customLines || []), item],
-          }))}
+          onAdd={(item) => patchQuote(quote.id, (q) => {
+            const patch = { customLines: [...(q.customLines || []), item] }
+            // The day count typed here is what the client sees on the PDF's
+            // DAYS box. If the quote carries no day breakdown yet, seed the
+            // shoot days from this item so the printed sheet isn't 0/0/0/0
+            // (Danny: "the day count on the pdf did not reflect the custom
+            // input day count"). Never overwrites days already entered.
+            const d = q.days || {}
+            const noDays = !['travel', 'build', 'shoot', 'strike'].some((k) => Number(d[k]) > 0)
+            if (noDays && (item.unit || 'Days') === 'Days' && Number(item.qty) > 0) {
+              patch.days = { travel: 0, build: 0, strike: 0, ...d, shoot: Number(item.qty) }
+            }
+            return patch
+          })}
           onPatchLine={(lineId, patch) => patchQuote(quote.id, (q) => ({
             customLines: q.customLines.map((c) => c.id === lineId ? { ...c, ...patch } : c),
           }))}
