@@ -1,5 +1,18 @@
 # Danny: run this SQL (one paste, Supabase dashboard → SQL Editor)
 
+## ⭑ NEWEST 2026-07-25 — production cheat sheet — RUN THIS ONE
+
+> **STATUS: ⬜ NOT YET RUN.** One column on productions for the day-of cheat
+> sheet on production cards (type / content / hours / rented spaces —
+> everything else on the card is derived from existing fields). Idempotent.
+> Until this runs, sheet edits on the card are rejected server-side (other
+> production edits are unaffected).
+
+```sql
+alter table public.productions add column if not exists sheet jsonb not null
+  default '{"assetClass":"","content":"","hoursPerDay":10,"spaces":[]}'::jsonb;
+```
+
 > **STATUS 2026-07-17: ✅ ALL SQL BELOW HAS BEEN RUN AND VERIFIED.** Danny
 > pasted the migration block and the 5-way diagnostic returned all `true`.
 > The profile-duplicates section is **superseded** — the DB was clean (3

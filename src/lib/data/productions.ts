@@ -66,6 +66,9 @@ export interface Production {
     milestones: Array<Record<string, unknown>>
     logisticalConcerns: Array<Record<string, unknown>>
   }
+  // Cheat-sheet facts that live nowhere else on the record (asset class,
+  // content, day length, rented spaces). Editable straight on the card.
+  sheet: { assetClass: string; content: string; hoursPerDay: number; spaces: string[] }
   // false = draft (only admin/sup can see), true = visible to all salary roster.
   // Drives visibility at the RLS layer; UI shows a DRAFT chip on unpublished
   // productions. New productions default to draft so admin can iron things
@@ -109,6 +112,7 @@ interface ProductionRow {
   instruction_package: Production['instructionPackage']
   bible: Production['bible']
   roadmap: Production['roadmap']
+  sheet: Production['sheet']
   published: boolean
   led_wall_id: string | null
   created_by: string | null
@@ -140,6 +144,8 @@ function rowToProduction(r: ProductionRow): Production {
     instructionPackage:  r.instruction_package ?? { files: [], voiceMemos: [], notes: '' },
     bible:               r.bible ?? { keyPlayers: [], documents: [], concerns: [], frictionAndFlow: [] },
     roadmap:             r.roadmap ?? { milestones: [], logisticalConcerns: [] },
+    // Rows created before the sheet column existed come back without it.
+    sheet:               r.sheet ?? { assetClass: '', content: '', hoursPerDay: 10, spaces: [] },
     // Existing rows ship without `published` because the column was added
     // in a later migration with default true. Treat undefined as true so
     // old/cached rows render normally rather than appearing as drafts.
@@ -187,6 +193,7 @@ function productionToRow(p: NewProduction): Partial<ProductionRow> {
   if (p.instructionPackage  !== undefined) row.instruction_package  = p.instructionPackage
   if (p.bible               !== undefined) row.bible                = p.bible
   if (p.roadmap             !== undefined) row.roadmap              = p.roadmap
+  if (p.sheet               !== undefined) row.sheet                = p.sheet
   if (p.published           !== undefined) row.published            = p.published
   if (p.ledWallId           !== undefined) row.led_wall_id          = p.ledWallId || null
   if (p.createdBy           !== undefined) row.created_by           = asUuidOrNull(p.createdBy)
@@ -214,14 +221,30 @@ export async function getProduction(id: string): Promise<Production | null> {
   return data ? rowToProduction(data) : null
 }
 
+// The sheet column shipped 2026-07-25 — until its ALTER runs on the live DB,
+// any write carrying `sheet` would 42703. Rather than bricking every
+// production create/update in that window, retry once without the field
+// (sheet-only edits still surface the error so the missing SQL is noticed).
+function isMissingSheetColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  // Postgres reports 42703 (undefined column); PostgREST reports PGRST204
+  // ("Could not find the 'sheet' column ... in the schema cache").
+  return (error.code === '42703' || error.code === 'PGRST204') && /\bsheet\b/.test(error.message || '')
+}
+
 export async function createProduction(p: NewProduction): Promise<Production> {
   const row = productionToRow(p)
   if (!row.name) throw new Error('Production name is required')
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('productions')
     .insert(row)
     .select('*')
     .single()
+  if (isMissingSheetColumn(error)) {
+    console.warn('[productions] sheet column missing — run the ALTER in RUN-THIS-SQL.md; inserting without it')
+    delete row.sheet
+    ;({ data, error } = await supabase.from('productions').insert(row).select('*').single())
+  }
   if (error) throw error
   return rowToProduction(data)
 }
@@ -231,12 +254,19 @@ export async function updateProduction(
   patch: NewProduction,
 ): Promise<Production> {
   const row = productionToRow(patch)
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('productions')
     .update(row)
     .eq('id', id)
     .select('*')
     .single()
+  // Only sacrifice the sheet on MIXED patches — a sheet-only patch would
+  // become an empty update; let it fail loudly instead.
+  if (isMissingSheetColumn(error) && Object.keys(row).length > 1) {
+    console.warn('[productions] sheet column missing — run the ALTER in RUN-THIS-SQL.md; updating without it')
+    delete row.sheet
+    ;({ data, error } = await supabase.from('productions').update(row).eq('id', id).select('*').single())
+  }
   if (error) throw error
   return rowToProduction(data)
 }

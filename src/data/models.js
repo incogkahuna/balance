@@ -286,6 +286,23 @@ export function buildRoster(profiles = []) {
 }
 
 // ─── Factory functions ────────────────────────────────────────────────────────
+// ─── Production cheat sheet ──────────────────────────────────────────────────
+// Danny's day-of "cheat sheet" (modelled on the old orbitalvs.com/schedule
+// cards). ONLY the facts that live nowhere else on the record: asset class,
+// content, day length, rented spaces. Supervisor / operators / SM / volume /
+// dates are DERIVED from existing fields — never duplicated here.
+export const SHEET_ASSET_CLASSES = ['2D', '2.5D', '3D', '3D+tracking']
+export const SHEET_CONTENT_OPTIONS = {
+  // Non-3D shoots are plate/photo work; 3D is engine content.
+  flat: ['Video', 'Stills', 'Photos / Video', 'Driving Plates'],
+  threeD: ['Unreal Project'],
+}
+export const SHEET_HOURS = [10, 12]
+// Rentable spaces, straight from the cheat-sheet reference card.
+export const SHEET_SPACES = ['LD', 'BD', 'Loading Dock', 'Talent Holding', 'Makeup', 'Mezz', 'Conference Room']
+export const DEFAULT_SHEET = { assetClass: '', content: '', hoursPerDay: 10, spaces: [] }
+export const sheetIs3D = (assetClass) => String(assetClass || '').startsWith('3D')
+
 export function createProduction(overrides = {}) {
   return {
     id: crypto.randomUUID(),
@@ -298,6 +315,9 @@ export function createProduction(overrides = {}) {
     status: PRODUCTION_STATUS.INCOMING,
     startDate: '',
     endDate: '',
+    // Cheat-sheet facts (see SHEET_* above) — populated at creation
+    // (pipeline handoff / intake), editable straight on the card.
+    sheet: { ...DEFAULT_SHEET },
     // Optional working-window list: [{ start, end }] in YYYY-MM-DD. For
     // projects that span weeks but only run on certain days. Empty = single
     // window, use startDate/endDate directly.

@@ -5,7 +5,11 @@ import { format } from '../lib/safeFormat.js'
 import { Plus, Search, Film, MapPin, Calendar, GripVertical, Palette, Check, RotateCcw, Clapperboard, Bus, Wrench } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useLocalStorage } from '../hooks/useLocalStorage.js'
-import { ROLES, PRODUCTION_STATUS, TASK_STATUS, PROJECT_KIND, PROJECT_KIND_LABEL } from '../data/models.js'
+import {
+  ROLES, PRODUCTION_STATUS, TASK_STATUS, PROJECT_KIND, PROJECT_KIND_LABEL,
+  SHEET_ASSET_CLASSES, SHEET_CONTENT_OPTIONS, SHEET_HOURS, SHEET_SPACES,
+  DEFAULT_SHEET, sheetIs3D, normalizeAssignedMember,
+} from '../data/models.js'
 import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { computeRoadmapHealth, HEALTH_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
@@ -430,7 +434,7 @@ function ProductionCard({
   onDrop,
   onDragEnd,
 }) {
-  const { tasks, getContractor, currentUser, updateProduction } = useApp()
+  const { tasks, getContractor, currentUser, updateProduction, resolveUserName } = useApp()
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const prodTasks      = tasks.filter(t => t.productionId === prod.id)
@@ -456,6 +460,56 @@ function ProductionCard({
   const locationLabel = prod.locationType === 'In-House (Orbital Studios)'
     ? 'Orbital Studios'
     : prod.locationAddress || 'Mobile'
+
+  // ── Cheat sheet (Danny's day-of card) ──────────────────────────────────────
+  // sheet.* holds the four facts that live nowhere else (type / content /
+  // hours / spaces) — editable right here, single source of truth, so card
+  // edits ARE production edits and vice versa. Supervisor + operators are
+  // DERIVED from the existing team assignments (edit them on the Team tab
+  // and the card follows).
+  const sheet = { ...DEFAULT_SHEET, ...(prod.sheet || {}) }
+  const setSheet = (patch) => updateProduction(prod.id, { sheet: { ...sheet, ...patch } })
+  const SUP_RE = /supervis|lead/i
+  const OP_RE  = /operator|technician|tech support/i
+  const memberNamesByRole = (re) => prod.assignedMembers
+    .filter((m) => {
+      const n = normalizeAssignedMember(m)
+      return n && Object.values(n.roles || {}).some((r) => re.test(r || ''))
+    })
+    .map((m) => resolveUserName?.(m.userId))
+  const contractorNamesByRole = (re) => (prod.assignedContractors || [])
+    .filter((c) => re.test(c.role || ''))
+    .map((c) => getContractor(c.contractorId)?.name)
+  const supervisorNames = [...memberNamesByRole(SUP_RE), ...contractorNamesByRole(SUP_RE)].filter(Boolean)
+  const operatorNames   = [...memberNamesByRole(OP_RE),  ...contractorNamesByRole(OP_RE)].filter(Boolean)
+
+  const contentOptions = sheetIs3D(sheet.assetClass) ? SHEET_CONTENT_OPTIONS.threeD : SHEET_CONTENT_OPTIONS.flat
+  const setAssetClass = (v) => {
+    const patch = { assetClass: v }
+    // 3D shoots are engine content; leaving 3D clears the engine default.
+    if (sheetIs3D(v)) patch.content = 'Unreal Project'
+    else if (sheet.content === 'Unreal Project') patch.content = ''
+    setSheet(patch)
+  }
+
+  // Tiny inline editor — a select for admin/sup, plain text for everyone else.
+  const sheetSelect = (value, options, onChange, format = (o) => o) => canCustomize ? (
+    <select
+      className="w-full text-xs text-orbital-text bg-transparent cursor-pointer outline-none rounded-sm px-1 py-0.5 -mx-1 border border-transparent hover:border-orbital-border focus:border-orbital-border"
+      value={options.includes(value) ? value : ''}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => { e.stopPropagation(); onChange(e.target.value) }}
+    >
+      <option value="" style={{ color: 'var(--orbital-dim)', background: 'var(--orbital-surface)' }}>—</option>
+      {options.map((o) => (
+        <option key={o} value={o} style={{ color: 'var(--orbital-text)', background: 'var(--orbital-surface)' }}>
+          {format(o)}
+        </option>
+      ))}
+    </select>
+  ) : (
+    <p className="text-xs text-orbital-text truncate">{value ? format(value) : '—'}</p>
+  )
 
   return (
     <div
@@ -528,9 +582,14 @@ function ProductionCard({
       {/* Card body — h-full + flex-col so every card in a row stretches to
           the same height (no awkward gaps under shorter cards), and the
           bottom row (avatars + progress) gets mt-auto to pin to the bottom. */}
-      <button
+      {/* div-with-role, not <button>: the cheat-sheet section inside hosts
+          real selects/chips, and interactive elements can't nest in a button. */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={onClick}
-        className="card text-left w-full h-full flex flex-col hover:bg-orbital-panel transition-colors overflow-hidden"
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
+        className="card text-left w-full h-full flex flex-col hover:bg-orbital-panel transition-colors overflow-hidden cursor-pointer"
         style={{ borderLeft: `3px solid ${borderColor}` }}
       >
         {/* Row 1: name + status badge */}
@@ -633,6 +692,78 @@ function ProductionCard({
           )}
         </div>
 
+        {/* ── Cheat sheet — the day-of card. Type/content/hours/spaces edit
+               in place (admin/sup) and write straight to the production;
+               supervisor/operators derive live from Team assignments. ── */}
+        <div
+          className={clsx('px-4 sm:px-5 py-2.5')}
+          style={{ borderTop: '1px solid var(--orbital-border)' }}
+        >
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <div>
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">TYPE</p>
+              {sheetSelect(sheet.assetClass, SHEET_ASSET_CLASSES, setAssetClass)}
+            </div>
+            <div>
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">CONTENT</p>
+              {sheetSelect(sheet.content, contentOptions, (v) => setSheet({ content: v }))}
+            </div>
+            <div className="min-w-0">
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">SUPERVISOR</p>
+              <p className="text-xs text-orbital-text truncate" title="Assigned on the production's Team tab">
+                {supervisorNames.join(', ') || '—'}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">OPERATORS</p>
+              <p className="text-xs text-orbital-text truncate" title="Assigned on the production's Team tab">
+                {operatorNames.join(', ') || '—'}
+              </p>
+            </div>
+            <div>
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">HOURS</p>
+              {sheetSelect(
+                String(sheet.hoursPerDay || ''),
+                SHEET_HOURS.map(String),
+                (v) => setSheet({ hoursPerDay: Number(v) || 10 }),
+                (o) => `${o}hr day`,
+              )}
+            </div>
+          </div>
+          {(canCustomize || sheet.spaces.length > 0) && (
+            <div className="mt-2">
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px] mb-1">SPACES</p>
+              <div className="flex flex-wrap gap-1">
+                {SHEET_SPACES.map((s) => {
+                  const on = sheet.spaces.includes(s)
+                  if (!canCustomize && !on) return null
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      disabled={!canCustomize}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSheet({ spaces: on ? sheet.spaces.filter((x) => x !== s) : [...sheet.spaces, s] })
+                      }}
+                      className="text-[9px] font-telemetry tracking-wider uppercase px-1.5 py-0.5"
+                      style={{
+                        color: on ? '#22c55e' : 'var(--orbital-dim)',
+                        border: `1px solid ${on ? 'rgba(34,197,94,0.45)' : 'var(--orbital-border)'}`,
+                        background: on ? 'rgba(34,197,94,0.08)' : 'transparent',
+                        cursor: canCustomize ? 'pointer' : 'default',
+                      }}
+                      title={canCustomize ? (on ? 'Click to release this space' : 'Click to mark this space rented') : undefined}
+                    >
+                      {s}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Detail section — only at M+ if there's something to show */}
         {showDetailSection && (
           <div
@@ -704,7 +835,7 @@ function ProductionCard({
             <span className={clsx('text-orbital-dim', 'text-xs')}>No tasks</span>
           )}
         </div>
-      </button>
+      </div>
     </div>
   )
 }

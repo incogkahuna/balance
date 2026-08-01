@@ -418,7 +418,20 @@ export function PipelineProvider({ children }) {
     // until green light, so it shows for Mark's planning without noise.
     const startDate = safeDate(deal.startDate)
     const endDate = safeDate(deal.endDate) || safeDate(impliedEndDate(startDate, deal.days))
+    // Cheat-sheet facts, straight from the deal/quote — nothing re-typed:
+    // asset class from the deal; 3D shoots are engine content; day length
+    // from the quoted crew (any active 12hr line ⇒ a 12, else 10).
+    const assetClass = deal.assetClass || ''
+    const twelveHr = quote ? Object.entries(quote.lines || {}).some(([id, ql]) =>
+      ql?.x && /12/.test(card?.lines?.[id]?.hours || '')) : false
+    const sheet = {
+      assetClass,
+      content: assetClass.startsWith('3D') ? 'Unreal Project' : '',
+      hoursPerDay: twelveHr ? 12 : 10,
+      spaces: [],
+    }
     const production = createProductionFactory({
+      sheet,
       name: deal.projectName,
       client: deal.clientCompany,
       kind: 'production',
