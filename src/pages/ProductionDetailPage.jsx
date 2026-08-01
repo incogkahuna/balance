@@ -25,6 +25,7 @@ import { FeedbackForm } from '../components/feedback/FeedbackForm.jsx'
 import { InstructionPackage } from '../components/instructions/InstructionPackage.jsx'
 import { ProductionBible } from '../features/productionBible/ProductionBible.jsx'
 import { TeamAssignment } from '../features/productions/team/TeamAssignment.jsx'
+import { CoreCrewSlots } from '../features/productions/team/CoreCrewSlots.jsx'
 import { RoadmapTab } from '../features/productions/roadmap/RoadmapTab.jsx'
 import { StoredImage } from '../components/files/StoredImage.tsx'
 import { ContractorPhoto } from '../components/files/ContractorPhoto.tsx'
@@ -427,6 +428,8 @@ export function ProductionDetailPage() {
 
 // ─── Tab: Overview ────────────────────────────────────────────────────────────
 function OverviewTab({ production, tasks }) {
+  const { currentUser } = useApp()
+  const isAdminOrSup = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
   const total = tasks.length
   const verified = tasks.filter(t => t.status === TASK_STATUS.VERIFIED).length
   const reported = tasks.filter(t => t.status === TASK_STATUS.COMPLETE || t.status === TASK_STATUS.NEEDS_REVIEW).length
@@ -434,6 +437,10 @@ function OverviewTab({ production, tasks }) {
 
   return (
     <div className="space-y-5">
+      {/* Core crew — same slots as the Team tab and the production card;
+          all three write the same fields, so they can't drift apart. */}
+      <CoreCrewSlots production={production} editable={isAdminOrSup} />
+
       {/* Roadmap section (Summary / Timeline / Concerns sub-tabs) — merged in
           from the old standalone Roadmap tab so everything actionable about
           this production lives in one place. */}

@@ -10,14 +10,11 @@ import {
 import { MilestoneCard } from './MilestoneCard.jsx'
 import clsx from 'clsx'
 
-// The key bullets of the project — who / when / what / package basics.
+// The key bullets of the project — when / where / what / key players /
+// package (Danny 2026-07-25: where = TVC or Mobile; what = one brief
+// sentence like "Commercial — 2D assets"; team lives in the Core Crew
+// slots right above, not repeated here).
 function ProjectSummaryCard({ production }) {
-  const { resolveAssignee, getContractor } = useApp()
-
-  const orbitalTeam = (production.assignedMembers || [])
-    .map(m => resolveAssignee(m.userId))
-    .filter(Boolean)
-  const stageManager = production.stageManagerId ? getContractor?.(production.stageManagerId) : null
   const keyPlayers = production.bible?.keyPlayers || []
   const pkgNotes  = production.instructionPackage?.notes || ''
   const pkgFiles  = production.instructionPackage?.files?.length || 0
@@ -29,19 +26,25 @@ function ProjectSummaryCard({ production }) {
           ? ` → ${format(parseISO(production.endDate), 'MMM d, yyyy')}` : ''}`
     : 'Dates TBD'
 
+  // Where: the venue, plainly — TVC (the in-house stage) or Mobile.
+  const isMobile = production.locationType === 'Mobile'
+  const where = isMobile
+    ? `Mobile${production.locationAddress ? ` — ${production.locationAddress}` : ''}`
+    : 'TVC (Orbital Studios)'
+
+  // What: one brief sentence from the cheat-sheet facts — "TVC commercial —
+  // 2D assets · Driving Plates". Falls back to the wall/type string for
+  // records with no sheet yet.
+  const sheet = production.sheet || {}
+  const jobWord = isMobile ? 'Mobile shoot' : 'TVC commercial'
+  const what = sheet.assetClass
+    ? `${jobWord} — ${sheet.assetClass} assets${sheet.content ? ` · ${sheet.content}` : ''}`
+    : [production.productionType, jobWord].filter(Boolean).join(' · ') || 'Type TBD'
+
   const rows = [
     { icon: Calendar, label: 'When', value: dates },
-    {
-      icon: Film, label: 'What',
-      value: [production.productionType, production.locationType].filter(Boolean).join(' · ') || 'Type TBD',
-    },
-    production.locationAddress && { icon: MapPin, label: 'Where', value: production.locationAddress },
-    {
-      icon: Users, label: 'Orbital team',
-      value: orbitalTeam.length
-        ? orbitalTeam.map(u => u.name).join(', ') + (stageManager ? ` · SM: ${stageManager.name}` : '')
-        : (stageManager ? `SM: ${stageManager.name}` : 'No one assigned yet'),
-    },
+    { icon: MapPin, label: 'Where', value: where },
+    { icon: Film, label: 'What', value: what },
     {
       icon: User, label: 'Key players',
       value: keyPlayers.length

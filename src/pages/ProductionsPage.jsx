@@ -8,8 +8,9 @@ import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import {
   ROLES, PRODUCTION_STATUS, TASK_STATUS, PROJECT_KIND, PROJECT_KIND_LABEL,
   SHEET_ASSET_CLASSES, SHEET_CONTENT_OPTIONS, SHEET_HOURS, SHEET_SPACES,
-  DEFAULT_SHEET, sheetIs3D, normalizeAssignedMember,
+  DEFAULT_SHEET, sheetIs3D,
 } from '../data/models.js'
+import { useCoreCrew, memberRole } from '../features/productions/team/CoreCrewSlots.jsx'
 import { isTaskDone } from '../features/tasks/taskStatusConfig.js'
 import { computeRoadmapHealth, HEALTH_CONFIG } from '../features/productions/roadmap/roadmapUtils.js'
 import { StatusBadge, STATUS_COLOR } from '../components/ui/StatusBadge.jsx'
@@ -440,7 +441,6 @@ function ProductionCard({
   const prodTasks      = tasks.filter(t => t.productionId === prod.id)
   const completedTasks = prodTasks.filter(isTaskDone).length
   const memberIds      = prod.assignedMembers.map(m => m.userId)
-  const stageManager   = prod.stageManagerId ? getContractor(prod.stageManagerId) : null
   const health         = computeRoadmapHealth(prod.roadmap)
   const canCustomize   = currentUser?.role === ROLES.ADMIN || currentUser?.role === ROLES.SUPERVISOR
 
@@ -463,25 +463,30 @@ function ProductionCard({
 
   // ── Cheat sheet (Danny's day-of card) ──────────────────────────────────────
   // sheet.* holds the four facts that live nowhere else (type / content /
-  // hours / spaces) — editable right here, single source of truth, so card
-  // edits ARE production edits and vice versa. Supervisor + operators are
-  // DERIVED from the existing team assignments (edit them on the Team tab
-  // and the card follows).
+  // hours / spaces). Supervisor / operator / stage manager ride the SAME
+  // slots as the Team and Overview tabs (useCoreCrew → assignedMembers +
+  // stageManagerId) — change any surface and the others follow, because
+  // they are all one record.
   const sheet = { ...DEFAULT_SHEET, ...(prod.sheet || {}) }
   const setSheet = (patch) => updateProduction(prod.id, { sheet: { ...sheet, ...patch } })
-  const SUP_RE = /supervis|lead/i
-  const OP_RE  = /operator|technician|tech support/i
-  const memberNamesByRole = (re) => prod.assignedMembers
-    .filter((m) => {
-      const n = normalizeAssignedMember(m)
-      return n && Object.values(n.roles || {}).some((r) => re.test(r || ''))
-    })
-    .map((m) => resolveUserName?.(m.userId))
-  const contractorNamesByRole = (re) => (prod.assignedContractors || [])
-    .filter((c) => re.test(c.role || ''))
-    .map((c) => getContractor(c.contractorId)?.name)
-  const supervisorNames = [...memberNamesByRole(SUP_RE), ...contractorNamesByRole(SUP_RE)].filter(Boolean)
-  const operatorNames   = [...memberNamesByRole(OP_RE),  ...contractorNamesByRole(OP_RE)].filter(Boolean)
+  const crew = useCoreCrew(prod)
+  const staffOptions = (crew.users || [])
+    .slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map((u) => ({ value: u.id, label: u.name }))
+  const contractorOptions = (crew.contractors || [])
+    .slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map((c) => ({ value: c.id, label: c.name }))
+  // Extra operator-ish assignments (e.g. a custom "2nd Operator") shown
+  // beside the slot — display only, they live in the Team lists.
+  const OP_DISPLAY_RE = /operator|technician|tech support/i
+  const extraOperatorNames = [
+    ...prod.assignedMembers
+      .filter((m) => m.userId !== crew.operatorId && OP_DISPLAY_RE.test(memberRole(m)))
+      .map((m) => resolveUserName?.(m.userId)),
+    ...(prod.assignedContractors || [])
+      .filter((c) => OP_DISPLAY_RE.test(c.role || ''))
+      .map((c) => getContractor(c.contractorId)?.name),
+  ].filter(Boolean)
 
   const contentOptions = sheetIs3D(sheet.assetClass) ? SHEET_CONTENT_OPTIONS.threeD : SHEET_CONTENT_OPTIONS.flat
   const setAssetClass = (v) => {
@@ -492,24 +497,30 @@ function ProductionCard({
     setSheet(patch)
   }
 
-  // Tiny inline editor — a select for admin/sup, plain text for everyone else.
-  const sheetSelect = (value, options, onChange, format = (o) => o) => canCustomize ? (
-    <select
-      className="w-full text-xs text-orbital-text bg-transparent cursor-pointer outline-none rounded-sm px-1 py-0.5 -mx-1 border border-transparent hover:border-orbital-border focus:border-orbital-border"
-      value={options.includes(value) ? value : ''}
-      onClick={(e) => e.stopPropagation()}
-      onChange={(e) => { e.stopPropagation(); onChange(e.target.value) }}
-    >
-      <option value="" style={{ color: 'var(--orbital-dim)', background: 'var(--orbital-surface)' }}>—</option>
-      {options.map((o) => (
-        <option key={o} value={o} style={{ color: 'var(--orbital-text)', background: 'var(--orbital-surface)' }}>
-          {format(o)}
-        </option>
-      ))}
-    </select>
-  ) : (
-    <p className="text-xs text-orbital-text truncate">{value ? format(value) : '—'}</p>
-  )
+  // Tiny inline editor — a select for admin/sup, plain text for everyone
+  // else. Options are strings or {value,label} pairs (people use pairs).
+  const sheetSelect = (value, options, onChange, format = (o) => o) => {
+    const opts = options.map((o) => (typeof o === 'string' ? { value: o, label: format(o) } : o))
+    if (!canCustomize) {
+      const current = opts.find((o) => o.value === value)
+      return <p className="text-xs text-orbital-text truncate">{current?.label || (value ? format(value) : '—')}</p>
+    }
+    return (
+      <select
+        className="w-full text-xs text-orbital-text bg-transparent cursor-pointer outline-none rounded-sm px-1 py-0.5 -mx-1 border border-transparent hover:border-orbital-border focus:border-orbital-border"
+        value={opts.some((o) => o.value === value) ? value : ''}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => { e.stopPropagation(); onChange(e.target.value) }}
+      >
+        <option value="" style={{ color: 'var(--orbital-dim)', background: 'var(--orbital-surface)' }}>—</option>
+        {opts.map((o) => (
+          <option key={o.value} value={o.value} style={{ color: 'var(--orbital-text)', background: 'var(--orbital-surface)' }}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    )
+  }
 
   return (
     <div
@@ -685,11 +696,6 @@ function ProductionCard({
               {prod.endDate && ` – ${format(parseISO(prod.endDate), 'MMM d')}`}
             </span>
           )}
-          {stageManager && (
-            <span className={clsx('text-orbital-subtle truncate', 'text-xs')}>
-              SM: {stageManager.name}
-            </span>
-          )}
         </div>
 
         {/* ── Cheat sheet — the day-of card. Type/content/hours/spaces edit
@@ -710,15 +716,20 @@ function ProductionCard({
             </div>
             <div className="min-w-0">
               <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">SUPERVISOR</p>
-              <p className="text-xs text-orbital-text truncate" title="Assigned on the production's Team tab">
-                {supervisorNames.join(', ') || '—'}
-              </p>
+              {sheetSelect(crew.supervisorId, staffOptions, crew.setSupervisor)}
             </div>
             <div className="min-w-0">
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">OPERATORS</p>
-              <p className="text-xs text-orbital-text truncate" title="Assigned on the production's Team tab">
-                {operatorNames.join(', ') || '—'}
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">
+                OPERATOR{extraOperatorNames.length > 0 ? `S +${extraOperatorNames.length}` : ''}
               </p>
+              {sheetSelect(crew.operatorId, staffOptions, crew.setOperator)}
+              {extraOperatorNames.length > 0 && (
+                <p className="text-[10px] text-orbital-subtle truncate">+ {extraOperatorNames.join(', ')}</p>
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">STAGE MGR</p>
+              {sheetSelect(crew.stageManagerId, contractorOptions, crew.setSM)}
             </div>
             <div>
               <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">HOURS</p>

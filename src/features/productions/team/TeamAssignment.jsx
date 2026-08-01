@@ -6,6 +6,7 @@ import { Modal } from '../../../components/ui/Modal.jsx'
 import { StageManagerSlot } from './StageManagerSlot.jsx'
 import { AssignedTeamMember } from './AssignedTeamMember.jsx'
 import { ContractorSelectSheet } from './ContractorSelectSheet.jsx'
+import { CoreCrewSlots } from './CoreCrewSlots.jsx'
 
 export function TeamAssignment({ production }) {
   const {
@@ -37,7 +38,13 @@ export function TeamAssignment({ production }) {
   return (
     <div className="space-y-6">
 
-      {/* Stage Manager — always shown first as a first-class field */}
+      {/* Core crew — the three dropdowns that cover most productions
+          (supervisor / operator / stage manager) + custom-position add.
+          Same fields as everything below; the lists update in lockstep. */}
+      <CoreCrewSlots production={production} editable={isAdminOrSup} />
+
+      {/* Stage Manager — rich slot (photo, availability) over the same
+          stageManagerId the dropdown above writes */}
       <StageManagerSlot production={production} isAdminOrSup={isAdminOrSup} />
 
       {/* Orbital Staff — core salaried team, assignable right here */}
