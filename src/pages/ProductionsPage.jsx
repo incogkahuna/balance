@@ -88,13 +88,34 @@ export function ProductionsPage() {
     return matchSearch && matchStatus
   }), [productions, search, statusFilter])
 
-  // Default order: status ladder, then SOONEST FIRST by start date (Danny —
-  // "top left is soonest and bottom right is further out"). The grid flows
-  // left-to-right / top-to-bottom, so date-ascending DOM order gives exactly
-  // that reading. Undated projects sink below the scheduled ones.
-  // Dates are compared as raw YYYY-MM-DD strings — never parsed — so a dirty
-  // value can sort oddly but can never throw.
+  // Default order (Danny): everything UNFINISHED first — grouped by status,
+  // each group soonest-first — then all COMPLETED work below it, most
+  // recently finished first. The grid flows left-to-right / top-to-bottom,
+  // so this reads "what's coming up" across the top and "what just wrapped"
+  // underneath. Dates are compared as raw YYYY-MM-DD strings — never parsed —
+  // so a dirty value can sort oddly but can never throw.
+  const isDone = (p) => p.status === PRODUCTION_STATUS.COMPLETED
+  // Completed work is ranked by when it actually finished; fall back to the
+  // start date, then to last-touched, so a record missing an end date still
+  // lands sensibly instead of at the bottom forever.
+  const doneDate = (p) => p.endDate || p.startDate || p.updatedAt || ''
+
   const byStatusThenDate = (a, b) => {
+    const aDone = isDone(a)
+    const bDone = isDone(b)
+    if (aDone !== bDone) return aDone ? 1 : -1
+
+    if (aDone) {
+      // Newest → oldest.
+      const ad = doneDate(a)
+      const bd = doneDate(b)
+      if (!ad && !bd) return (a.name || '').localeCompare(b.name || '')
+      if (!ad) return 1
+      if (!bd) return -1
+      return bd.localeCompare(ad)
+    }
+
+    // Unfinished: status ladder, then soonest first, undated last.
     const s = STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
     if (s !== 0) return s
     const ad = a.startDate || ''
@@ -491,17 +512,20 @@ function ProductionCard({
   const sheet = { ...DEFAULT_SHEET, ...(prod.sheet || {}) }
   const setSheet = (patch) => updateProduction(prod.id, { sheet: { ...sheet, ...patch } })
   const crew = useCoreCrew(prod)
-  // Extra operator-ish assignments (e.g. a custom "2nd Operator") shown
-  // beside the slot — display only, they live in the Team lists.
-  const OP_DISPLAY_RE = /operator|technician|tech support/i
-  const extraOperatorNames = [
+  // Everyone assigned who ISN'T already shown in one of the three slots —
+  // custom positions included, each with its full title (Danny: "custom
+  // added positions should also display on cards with the full name
+  // attached"). Display only; editing happens in the slots or on the Team tab.
+  const slotHolders = new Set(
+    [crew.supervisorId, crew.operatorId, crew.stageManagerId].filter(Boolean))
+  const otherPositions = [
     ...prod.assignedMembers
-      .filter((m) => m.userId !== crew.operatorId && OP_DISPLAY_RE.test(memberRole(m)))
-      .map((m) => resolveUserName?.(m.userId)),
+      .filter((m) => !slotHolders.has(m.userId))
+      .map((m) => ({ key: m.userId, role: memberRole(m).trim(), name: resolveUserName?.(m.userId) })),
     ...(prod.assignedContractors || [])
-      .filter((c) => OP_DISPLAY_RE.test(c.role || ''))
-      .map((c) => getContractor(c.contractorId)?.name),
-  ].filter(Boolean)
+      .filter((c) => !slotHolders.has(c.contractorId))
+      .map((c) => ({ key: c.contractorId, role: (c.role || '').trim(), name: getContractor(c.contractorId)?.name })),
+  ].filter((p) => p.name)
 
   const contentOptions = sheetIs3D(sheet.assetClass) ? SHEET_CONTENT_OPTIONS.threeD : SHEET_CONTENT_OPTIONS.flat
   const setAssetClass = (v) => {
@@ -792,17 +816,11 @@ function ProductionCard({
               onChange={crew.setSupervisor} onCreatePerson={(n) => crew.createPerson(n, 'Supervisor')}
               disabled={!canCustomize} compact
             />
-            <div className="min-w-0">
-              <CrewSlotSelect
-                label={`OPERATOR${extraOperatorNames.length > 0 ? `S +${extraOperatorNames.length}` : ''}`}
-                value={crew.operatorId} options={crew.peopleOptions}
-                onChange={crew.setOperator} onCreatePerson={(n) => crew.createPerson(n, 'Operator')}
-                disabled={!canCustomize} compact
-              />
-              {extraOperatorNames.length > 0 && (
-                <p className="text-[10px] text-orbital-subtle truncate">+ {extraOperatorNames.join(', ')}</p>
-              )}
-            </div>
+            <CrewSlotSelect
+              label="OPERATOR" value={crew.operatorId} options={crew.peopleOptions}
+              onChange={crew.setOperator} onCreatePerson={(n) => crew.createPerson(n, 'Operator')}
+              disabled={!canCustomize} compact
+            />
             <CrewSlotSelect
               label="STAGE MGR" value={crew.stageManagerId} options={crew.peopleOptions}
               onChange={crew.setSM} onCreatePerson={(n) => crew.createPerson(n, 'Stage Manager')}
@@ -818,6 +836,24 @@ function ProductionCard({
               )}
             </div>
           </div>
+          {/* Every other assigned position, full title attached. */}
+          {otherPositions.length > 0 && (
+            <div className="mt-2">
+              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px] mb-1">
+                ALSO ON THIS JOB
+              </p>
+              <div className="space-y-0.5">
+                {otherPositions.map((p) => (
+                  <p key={p.key} className="text-[11px] text-orbital-text truncate">
+                    <span className="text-orbital-subtle">{p.role || 'Team'}</span>
+                    <span className="text-orbital-dim"> · </span>
+                    {p.name}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
           {(canCustomize || sheet.spaces.length > 0) && (
             <div className="mt-2">
               <p className="font-telemetry tracking-wider text-orbital-dim text-[9px] mb-1">SPACES</p>
