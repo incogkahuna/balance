@@ -6,7 +6,7 @@ import {
   ArrowLeft, Edit, Trash2, Plus, MapPin, Calendar,
   Film, Users, Package, AlertTriangle, Star, ChevronRight,
   CheckSquare, FileText, MessageSquare, BarChart2, Eye, EyeOff,
-  ChevronDown, Check,
+  ChevronDown, Check, Printer,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
@@ -27,6 +27,7 @@ import { ProductionBible } from '../features/productionBible/ProductionBible.jsx
 import { TeamAssignment } from '../features/productions/team/TeamAssignment.jsx'
 import { CoreCrewSlots } from '../features/productions/team/CoreCrewSlots.jsx'
 import { RoadmapTab } from '../features/productions/roadmap/RoadmapTab.jsx'
+import { DebriefSheet, buildDebriefData, debriefToText, debriefPrintCss } from '../features/debriefs/DebriefSheet.jsx'
 import { StoredImage } from '../components/files/StoredImage.tsx'
 import { ContractorPhoto } from '../components/files/ContractorPhoto.tsx'
 import { BUCKETS } from '../lib/storage.ts'
@@ -894,43 +895,11 @@ function DebriefDocument({ production, onClose }) {
   const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
   const fb = production.feedback || {}
-  const notes = production.debriefNotes || []
-  const addons = production.addons || []
 
-  const money = (v) => {
-    const n = parseFloat(v)
-    return Number.isFinite(n) ? `$${n.toFixed(2)}` : (v ? `$${v}` : '—')
-  }
-  const addonTotal = addons.reduce((sum, a) => sum + (parseFloat(a.cost) || 0), 0)
-
-  const lines = [
-    `PRODUCTION DEBRIEF — ${production.name}`,
-    production.client ? `Client: ${production.client}` : null,
-    production.startDate ? `Dates: ${production.startDate}${production.endDate ? ` → ${production.endDate}` : ''}` : null,
-    fb.rating ? `Rating: ${fb.rating}/5` : null,
-    '',
-    fb.expectations ? `EXPECTATIONS GOING IN\n${fb.expectations}\n` : null,
-    fb.whatHappened ? `WHAT ACTUALLY HAPPENED\n${fb.whatHappened}\n` : null,
-    fb.issues ? `ISSUES ENCOUNTERED\n${fb.issues}\n` : null,
-    fb.extraCharges ? `EXTRA CHARGES\n${fb.extraCharges}\n` : null,
-    addons.length > 0 ? [
-      'ADD-ONS (COSTED)',
-      ...addons.map(a => {
-        const qty = a.quantity && a.quantity !== 1 ? ` ×${a.quantity}` : ''
-        const rate = a.dayRate && a.days ? ` — ${money(a.dayRate)}/day × ${a.days}d` : ''
-        return `- ${a.equipment}${qty}${rate}: ${money(a.cost)}${a.damaged ? '  [DAMAGED]' : ''}`
-      }),
-      `Total: ${money(addonTotal)}`,
-      '',
-    ].join('\n') : null,
-    notes.length > 0 ? [
-      'NOTES FROM THE FLOOR',
-      ...notes.map(n => `- ${n.text}${n.authorName ? ` (${n.authorName}${n.at ? `, ${format(parseISO(n.at), 'MMM d')}` : ''})` : ''}`),
-      '',
-    ].join('\n') : null,
-  ].filter(l => l !== null)
-
-  const doc = lines.join('\n')
+  // Structured snapshot drives both the formatted sheet and the plain-text
+  // copy. The text version still exists because it's what pastes into Slack.
+  const data = buildDebriefData(production)
+  const doc = debriefToText(data)
 
   const copy = async () => {
     try {
@@ -940,10 +909,13 @@ function DebriefDocument({ production, onClose }) {
     } catch { /* clipboard denied — user can select manually */ }
   }
 
-  // SUBMIT (Danny's '!! Important'): snapshot the generated document onto the
-  // production (feedback.submissions[]) so it stays attached here AND shows in
-  // the /debriefs folder where all submissions are reviewed together — with
-  // the costed add-ons riding along toward collection.
+  // SUBMIT (Danny's '!! Important'): snapshot the debrief onto the production
+  // (feedback.submissions[]) so it stays attached here AND shows in the
+  // /debriefs folder where all submissions are reviewed together — with the
+  // costed add-ons riding along toward collection. Both the structured `data`
+  // (for the formatted sheet) and `doc` (text, for copy + older viewers) are
+  // stored, so a submission renders the same way years later even if the
+  // production has moved on.
   const submissions = fb.submissions || []
   const submit = () => {
     const submission = {
@@ -952,9 +924,10 @@ function DebriefDocument({ production, onClose }) {
       submittedBy: currentUser?.id || '',
       submittedByName: currentUser?.name || '',
       doc,
-      rating: fb.rating || null,
-      addonTotal,
-      addonCount: addons.length,
+      data,
+      rating: data.rating,
+      addonTotal: data.addonTotal,
+      addonCount: data.addons.length,
     }
     updateProduction(production.id, {
       feedback: { ...fb, submissions: [...submissions, submission] },
@@ -966,21 +939,29 @@ function DebriefDocument({ production, onClose }) {
 
   return (
     <div className="space-y-3">
-      <pre className="card p-4 text-xs text-orbital-text whitespace-pre-wrap max-h-96 overflow-y-auto font-mono">
-        {doc}
-      </pre>
+      <style>{debriefPrintCss}</style>
+      <div className="card max-h-[60vh] overflow-hidden flex flex-col">
+        <DebriefSheet
+          data={data}
+          submittedByName={currentUser?.name}
+          submittedAt={new Date().toISOString()}
+        />
+      </div>
       {submissions.length > 0 && (
         <p className="text-[11px] text-orbital-dim">
           Submitted {submissions.length}× — last {format(parseISO(submissions[submissions.length - 1].submittedAt), 'MMM d, yyyy')}.
           Submitting again files a new version.
         </p>
       )}
-      <div className="flex gap-3 flex-wrap">
+      <div className="flex gap-2 flex-wrap">
         <button onClick={submit} className="btn-primary flex-1">
           Submit debrief
         </button>
+        <button onClick={() => window.print()} className="btn-secondary">
+          <Printer size={13} /> Print / PDF
+        </button>
         <button onClick={copy} className="btn-secondary">
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? 'Copied' : 'Copy text'}
         </button>
         <button onClick={onClose} className="btn-secondary">Close</button>
       </div>

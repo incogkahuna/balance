@@ -6,6 +6,7 @@ import { FileText, Printer, X, Star, Briefcase } from 'lucide-react'
 import { useApp } from '../context/AppContext.jsx'
 import { usePipeline } from '../features/pipeline/PipelineContext.jsx'
 import { EmptyState } from '../components/ui/EmptyState.jsx'
+import { DebriefSheet, debriefPrintCss } from '../features/debriefs/DebriefSheet.jsx'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DebriefsPage — the folder where every SUBMITTED debrief lands (Danny's
@@ -15,20 +16,11 @@ import { EmptyState } from '../components/ui/EmptyState.jsx'
 // pipeline deal when one is linked. Print = the PDF.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PRINT_CSS = `
+// Print rules ship with the sheet component so the production's review modal
+// and this folder print identically; the feedback widget is page-specific.
+const PRINT_CSS = `${debriefPrintCss}
 @media print {
-  body { background: #fff !important; }
-  .no-print, nav, aside, header,
   div:has(> button[aria-label^="Send feedback"]) { display: none !important; }
-  .no-print-overlay { position: static !important; inset: auto !important; }
-  .no-print-overlay > div {
-    position: static !important; max-height: none !important;
-    border: none !important; margin: 0 !important; background: #fff !important;
-  }
-  .debrief-print-doc {
-    color: #111 !important; background: #fff !important;
-    border: none !important; max-height: none !important; overflow: visible !important;
-  }
 }
 `
 
@@ -157,9 +149,19 @@ export function DebriefsPage() {
                 </button>
               </div>
             </div>
-            <pre className="debrief-print-doc p-5 text-xs text-orbital-text whitespace-pre-wrap overflow-y-auto font-mono">
-              {openSub.submission.doc}
-            </pre>
+            {/* Submissions filed before the formatted sheet shipped only carry
+                the plain-text doc — render that rather than showing nothing. */}
+            {openSub.submission.data ? (
+              <DebriefSheet
+                data={openSub.submission.data}
+                submittedByName={resolveUserName(openSub.submission.submittedBy) || openSub.submission.submittedByName}
+                submittedAt={openSub.submission.submittedAt}
+              />
+            ) : (
+              <pre className="debrief-sheet p-5 text-xs text-orbital-text whitespace-pre-wrap overflow-y-auto font-mono">
+                {openSub.submission.doc}
+              </pre>
+            )}
           </div>
         </div>
       )}
