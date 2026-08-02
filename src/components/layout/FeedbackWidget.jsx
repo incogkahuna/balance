@@ -5,6 +5,7 @@ import { useToast } from '../../context/ToastContext.jsx'
 import { FEEDBACK_KIND, FEEDBACK_KIND_LABEL, createFeedbackItem } from '../../data/models.js'
 import { DictationMic } from '../voice/DictationMic.tsx'
 import { ScreenshotAttach } from '../../features/feedback/ScreenshotAttach.jsx'
+import { useKeyboardInset } from '../../hooks/useKeyboardInset.js'
 import clsx from 'clsx'
 
 // ─── Global feedback widget (M5 / #3) ────────────────────────────────────────
@@ -45,6 +46,8 @@ export function FeedbackWidget() {
   const { currentUser, addFeedbackItem } = useApp()
   const toast = useToast()
   const [open, setOpen] = useState(false)
+  const kb = useKeyboardInset()
+  const keyboardOpen = kb.keyboardOpen
   const [kind, setKind] = useState(FEEDBACK_KIND.NOTE)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -183,6 +186,21 @@ export function FeedbackWidget() {
     ...(alignRight ? { right: 0 } : { left: 0 }),
   }
 
+  // Keyboard up on a phone? The panel is `fixed` and parked wherever the
+  // button was dragged, so it can end up completely behind the keyboard with
+  // no way for the browser to scroll it into view. While typing, detach it
+  // from the button and pin it to the top of the still-visible strip.
+  const keyboardPinned = keyboardOpen && kb.height < 560
+  const pinnedStyle = {
+    boxShadow: '0 16px 48px rgba(0,0,0,0.45)',
+    position: 'fixed',
+    top: kb.offsetTop + 8,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    maxHeight: Math.max(200, kb.height - 16),
+    overflowY: 'auto',
+  }
+
   return (
     <div className="fixed z-40" style={{ left: pos.x, top: pos.y }} ref={panelRef}>
       {/* Panel */}
@@ -190,7 +208,7 @@ export function FeedbackWidget() {
         <div
           ref={formRef}
           className="absolute w-80 max-w-[calc(100vw-24px)] card-elevated animate-hud-in p-4 space-y-3"
-          style={panelStyle}
+          style={keyboardPinned ? pinnedStyle : panelStyle}
         >
           <div className="flex items-center justify-between">
             <p className="hud-label text-[10px]">Send Feedback</p>

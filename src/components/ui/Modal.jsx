@@ -37,31 +37,39 @@ function unlockBodyScroll() {
   window.scrollTo(0, lockedScrollY)
 }
 
-// Track the VISUAL viewport (shrinks when the mobile keyboard opens — the
-// layout viewport and dvh don't). The modal panel caps its height to this so
-// the form never gets shoved off-screen behind the keyboard.
-function useVisualViewportHeight(active) {
-  const [height, setHeight] = useState(null)
+// Track the VISUAL viewport (shrinks and shifts when the mobile keyboard
+// opens — the layout viewport and dvh don't). We need BOTH numbers:
+//   height   — so the panel can cap itself and scroll internally
+//   offsetTop — so the overlay sits over the still-visible strip. Capping
+//               height alone wasn't enough: the overlay stayed inset-0, so
+//               `items-end` kept pinning the panel to the bottom of the
+//               LAYOUT viewport, i.e. behind the keyboard.
+function useVisualViewport(active) {
+  const [vp, setVp] = useState(null)
   useEffect(() => {
     if (!active) return
     const vv = window.visualViewport
     if (!vv) return
-    const update = () => setHeight(Math.round(vv.height))
+    const update = () => setVp({
+      height: Math.round(vv.height),
+      offsetTop: Math.round(vv.offsetTop),
+    })
     update()
     vv.addEventListener('resize', update)
     vv.addEventListener('scroll', update)
     return () => {
       vv.removeEventListener('resize', update)
       vv.removeEventListener('scroll', update)
-      setHeight(null)
+      setVp(null)
     }
   }, [active])
-  return height
+  return vp
 }
 
 export function Modal({ open, onClose, title, children, size = 'md', className }) {
   const overlayRef = useRef(null)
-  const vvHeight = useVisualViewportHeight(open)
+  const bodyRef = useRef(null)
+  const vp = useVisualViewport(open)
 
   // Ref so the Escape handler always sees the latest onClose without making it
   // an effect dep — callers pass inline arrows, and re-running the effect on
@@ -80,6 +88,28 @@ export function Modal({ open, onClose, title, children, size = 'md', className }
     }
   }, [open])
 
+  // Bring the focused field into view inside the modal body. The panel is
+  // now correctly sized to the visible strip, but a field further down the
+  // form can still sit below the fold once the keyboard eats half the
+  // screen. Runs after the keyboard's animation so the measurement is taken
+  // against the shrunken viewport, not the pre-keyboard one.
+  useEffect(() => {
+    if (!open) return
+    const node = bodyRef.current
+    if (!node) return
+    let timer = null
+    const onFocusIn = (e) => {
+      const el = e.target
+      if (!el?.matches?.('input, textarea, select, [contenteditable="true"]')) return
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }) } catch { /* older browsers */ }
+      }, 320)
+    }
+    node.addEventListener('focusin', onFocusIn)
+    return () => { clearTimeout(timer); node.removeEventListener('focusin', onFocusIn) }
+  }, [open])
+
   if (!open) return null
 
   const sizeClass = {
@@ -92,7 +122,11 @@ export function Modal({ open, onClose, title, children, size = 'md', className }
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-x-0 top-0 bottom-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      // Pin the overlay to the VISIBLE strip when the keyboard is up, so
+      // `items-end` lands the panel just above the keyboard rather than
+      // behind it.
+      style={vp ? { top: vp.offsetTop, height: vp.height, bottom: 'auto' } : undefined}
       // Close only when the interaction BOTH starts and ends on the overlay.
       // On mobile, a keyboard-driven layout shift could make a tap that began
       // on the form end on the backdrop — which read as a bare click and
@@ -117,7 +151,7 @@ export function Modal({ open, onClose, title, children, size = 'md', className }
           sizeClass,
           className
         )}
-        style={vvHeight ? { maxHeight: Math.max(220, vvHeight - 12) } : undefined}
+        style={vp ? { maxHeight: Math.max(220, vp.height - 12) } : undefined}
       >
         {/* Header */}
         <div className="flex items-center justify-between pl-5 pr-2 py-2 sm:py-3 border-b border-orbital-border flex-shrink-0">
@@ -132,7 +166,7 @@ export function Modal({ open, onClose, title, children, size = 'md', className }
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto flex-1 px-5 py-5">
+        <div ref={bodyRef} className="overflow-y-auto flex-1 px-5 py-5">
           {children}
         </div>
       </div>
