@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { AlertTriangle, Camera, X } from 'lucide-react'
+import { AlertTriangle, Camera, X, ChevronDown, Plus } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
@@ -137,45 +137,63 @@ export function AddonForm({ productionId, initial, onClose }) {
 
       <div>
         <label className="label">Equipment / Item *</label>
+        {/* Custom entry is its own always-visible button, not the last option
+            buried in the native dropdown — Danny reported being unable to add
+            a custom add-on, and this path no longer depends on opening the
+            select at all (which behaves inconsistently in the mobile modal). */}
         {customEquipment ? (
           <div className="flex gap-2">
             <input
               className="input flex-1"
               value={form.equipment}
               onChange={e => set('equipment', e.target.value)}
-              placeholder="e.g. Scissor lift, Forklift, 4x LED panels..."
+              placeholder="Name it — e.g. Scissor lift, 4x LED panels, Genie boom…"
               autoFocus
             />
             <button
               type="button"
               onClick={() => { setCustomEquipment(false); set('equipment', '') }}
-              className="text-[11px] text-orbital-subtle hover:text-orbital-text flex-shrink-0"
+              className="btn-secondary text-xs flex-shrink-0"
+              title="Go back to the preset list"
             >
-              presets
+              Presets
             </button>
           </div>
         ) : (
-          <select
-            className="select"
-            value={ADDON_PRESETS.some(p => p.name === form.equipment) ? form.equipment : ''}
-            onChange={e => {
-              if (e.target.value === '__custom__') { setCustomEquipment(true); set('equipment', '') }
-              else {
-                const preset = ADDON_PRESETS.find(p => p.name === e.target.value)
-                set('equipment', e.target.value)
-                // Presets with a standard day rate prefill it (still editable).
-                if (preset?.rate != null) setCosting('dayRate', String(preset.rate))
-              }
-            }}
-          >
-            <option value="" disabled>Select an add-on…</option>
-            {ADDON_PRESETS.map(p => (
-              <option key={p.name} value={p.name}>
-                {p.name}{p.rate != null ? ` — $${p.rate}/day` : ''}
-              </option>
-            ))}
-            <option value="__custom__">Custom…</option>
-          </select>
+          <div className="flex gap-2">
+            <div className="relative flex-1 min-w-0">
+              <select
+                className="select pr-7"
+                value={ADDON_PRESETS.some(p => p.name === form.equipment) ? form.equipment : ''}
+                onChange={e => {
+                  const preset = ADDON_PRESETS.find(p => p.name === e.target.value)
+                  set('equipment', e.target.value)
+                  // Presets with a standard day rate prefill it (still editable).
+                  if (preset?.rate != null) setCosting('dayRate', String(preset.rate))
+                }}
+              >
+                <option value="" disabled>Select an add-on…</option>
+                {ADDON_PRESETS.map(p => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}{p.rate != null ? ` — $${p.rate}/day` : ''}
+                  </option>
+                ))}
+              </select>
+              {/* .select is appearance-none, so supply the affordance */}
+              <ChevronDown
+                size={13}
+                className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-orbital-subtle"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => { setCustomEquipment(true); set('equipment', '') }}
+              className="btn-secondary text-xs flex-shrink-0"
+              title="Type your own item instead of picking a preset"
+            >
+              <Plus size={12} /> Custom
+            </button>
+          </div>
         )}
       </div>
 

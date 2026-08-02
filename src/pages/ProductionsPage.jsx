@@ -88,18 +88,36 @@ export function ProductionsPage() {
     return matchSearch && matchStatus
   }), [productions, search, statusFilter])
 
+  // Default order: status ladder, then SOONEST FIRST by start date (Danny —
+  // "top left is soonest and bottom right is further out"). The grid flows
+  // left-to-right / top-to-bottom, so date-ascending DOM order gives exactly
+  // that reading. Undated projects sink below the scheduled ones.
+  // Dates are compared as raw YYYY-MM-DD strings — never parsed — so a dirty
+  // value can sort oddly but can never throw.
+  const byStatusThenDate = (a, b) => {
+    const s = STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
+    if (s !== 0) return s
+    const ad = a.startDate || ''
+    const bd = b.startDate || ''
+    if (!ad && !bd) return (a.name || '').localeCompare(b.name || '')
+    if (!ad) return 1
+    if (!bd) return -1
+    return ad.localeCompare(bd)
+  }
+
   const sortedFiltered = useMemo(() => {
-    if (cardOrder.length === 0) {
-      return [...filtered].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status))
-    }
+    if (cardOrder.length === 0) return [...filtered].sort(byStatusThenDate)
+    // A manual drag order wins for the cards it covers; anything new (never
+    // dragged) falls back to the chronological default at the end.
     return [...filtered].sort((a, b) => {
       const ai = cardOrder.indexOf(a.id)
       const bi = cardOrder.indexOf(b.id)
-      if (ai === -1 && bi === -1) return STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)
+      if (ai === -1 && bi === -1) return byStatusThenDate(a, b)
       if (ai === -1) return 1
       if (bi === -1) return -1
       return ai - bi
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, cardOrder])
 
   const isCustomOrdered = cardOrder.length > 0
