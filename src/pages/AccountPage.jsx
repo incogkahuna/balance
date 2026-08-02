@@ -13,7 +13,7 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { useToast } from '../context/ToastContext.jsx'
 import { useBackground, BACKGROUND_PRESETS, BG_SPEED, BG_INTENSITY, BG_LIBRARY_MAX } from '../context/BackgroundContext.jsx'
-import { PresetThumb, FxSlider, applyBackdropFile } from '../components/layout/AccountMenu.jsx'
+import { PresetThumb, FxSlider, applyBackdropFiles } from '../components/layout/AccountMenu.jsx'
 import { OrbitalMark } from '../components/brand/OrbitalLogo.jsx'
 import clsx from 'clsx'
 
@@ -54,6 +54,51 @@ export function AccountPage() {
   } = useBackground()
   const navigate = useNavigate()
   const fileRef = useRef(null)
+
+  // ── Drag-and-drop / paste a backdrop photo ────────────────────────────────
+  // Danny 2026-07-25. dragCount tracks enter/leave pairs so the highlight
+  // doesn't flicker as the cursor crosses child elements.
+  const [dragging, setDragging] = useState(false)
+  const dragCount = useRef(0)
+  const takeFiles = (files) =>
+    applyBackdropFiles(files, { setCustomImage, setBackground, toast })
+
+  const dropZoneProps = {
+    onDragEnter: (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return
+      e.preventDefault()
+      dragCount.current += 1
+      setDragging(true)
+    },
+    onDragOver: (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    },
+    onDragLeave: () => {
+      dragCount.current = Math.max(0, dragCount.current - 1)
+      if (dragCount.current === 0) setDragging(false)
+    },
+    onDrop: (e) => {
+      if (!e.dataTransfer?.files?.length) return
+      e.preventDefault()
+      dragCount.current = 0
+      setDragging(false)
+      takeFiles(e.dataTransfer.files)
+    },
+  }
+
+  // Paste an image straight onto the page (screenshot → Ctrl+V).
+  useEffect(() => {
+    const onPaste = (e) => {
+      const files = Array.from(e.clipboardData?.files || [])
+        .filter(f => f.type?.startsWith('image/'))
+      if (files.length) takeFiles(files)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setCustomImage, setBackground])
 
   // Identity edits are staged locally and saved explicitly — no save-on-every-
   // keystroke against the profiles table.
@@ -182,7 +227,23 @@ export function AccountPage() {
       </section>
 
       {/* ── Appearance ───────────────────────────────────────────────── */}
-      <section className="card-elevated p-5 mb-4">
+      {/* The whole section is a drop target: drag a photo anywhere onto it
+          (or just paste one) and it becomes the backdrop. */}
+      <section
+        className="card-elevated p-5 mb-4 relative"
+        {...dropZoneProps}
+        style={dragging ? { outline: '2px dashed var(--accent-bright)', outlineOffset: -4 } : undefined}
+      >
+        {dragging && (
+          <div
+            className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 pointer-events-none"
+            style={{ background: 'var(--modal-overlay)' }}
+          >
+            <ImagePlus size={22} style={{ color: 'var(--accent-bright)' }} />
+            <p className="text-sm font-medium text-orbital-text">Drop to set as backdrop</p>
+            <p className="text-[11px] text-orbital-dim">Several at once is fine — they all land in your library</p>
+          </div>
+        )}
         <p className="hud-label text-[10px] mb-4">Appearance</p>
 
         {/* Theme */}
@@ -212,11 +273,11 @@ export function AccountPage() {
         {/* Backdrop */}
         <p className="hud-label text-[10px] mb-2">Backdrop</p>
         <input
-          ref={fileRef} type="file" accept="image/*" className="hidden"
+          ref={fileRef} type="file" accept="image/*" multiple className="hidden"
           onChange={(e) => {
-            const file = e.target.files?.[0]
+            const files = e.target.files
+            if (files?.length) takeFiles(files)
             e.target.value = ''
-            if (file) applyBackdropFile(file, { setCustomImage, setBackground, toast })
           }}
         />
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 max-w-lg">
@@ -313,16 +374,23 @@ export function AccountPage() {
             {images.length < BG_LIBRARY_MAX && (
               <button
                 onClick={() => fileRef.current?.click()}
-                className="w-24 h-16 flex flex-col items-center justify-center gap-1 border border-dashed border-orbital-border text-orbital-subtle hover:text-orbital-text hover:border-orbital-chrome transition-colors"
+                title="Click to browse, or drag a photo anywhere onto this panel"
+                className="w-24 h-16 flex flex-col items-center justify-center gap-1 border border-dashed transition-colors"
+                style={{
+                  borderColor: dragging ? 'var(--accent-bright)' : 'var(--orbital-border)',
+                  color: dragging ? 'var(--accent-bright)' : 'var(--orbital-subtle)',
+                }}
               >
                 <ImagePlus size={14} />
-                <span className="text-[9px] font-telemetry tracking-wider">ADD</span>
+                <span className="text-[9px] font-telemetry tracking-wider">
+                  {dragging ? 'DROP' : 'ADD / DROP'}
+                </span>
               </button>
             )}
           </div>
           <p className="text-[11px] text-orbital-dim mt-1.5">
-            Up to {BG_LIBRARY_MAX} images, stored in this browser. Tap one to use it everywhere,
-            or assign per page below.
+            Drag photos in (or paste one) — up to {BG_LIBRARY_MAX}, stored in this browser.
+            Tap one to use it everywhere, or assign per page below.
           </p>
         </div>
 

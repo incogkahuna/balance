@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 
 // ─── Background preference ───────────────────────────────────────────────────
 // Which ambient backdrop the app renders behind every page, plus how fast it
@@ -94,6 +94,11 @@ export function BackgroundProvider({ children }) {
     const stored = localStorage.getItem(SELECTED_IMAGE_KEY)
     return stored || (localStorage.getItem(IMAGE_KEY) ? 'legacy' : null)
   })
+  // Always-current mirror of `images` so synchronous bursts of adds (a
+  // multi-file drop) compose instead of clobbering each other.
+  const imagesRef = useRef(images)
+  useEffect(() => { imagesRef.current = images }, [images])
+
   // Per-page overrides: { '/tasks': presetId | 'image:<id>' }
   const [pageBackgrounds, setPageBackgroundsState] = useState(() => {
     if (typeof window === 'undefined') return {}
@@ -157,8 +162,12 @@ export function BackgroundProvider({ children }) {
   // (toast) instead of silently keeping an image that won't survive a reload.
   const addImage = useCallback((dataUrl) => {
     const id = crypto.randomUUID()
-    const next = [...images, { id, dataUrl }].slice(-BG_LIBRARY_MAX)
+    // Read through the ref, not the `images` closure: dropping several photos
+    // at once calls this in a tight loop, before React has re-rendered, and a
+    // stale closure would make each add overwrite the previous one.
+    const next = [...imagesRef.current, { id, dataUrl }].slice(-BG_LIBRARY_MAX)
     localStorage.setItem(IMAGES_KEY, JSON.stringify(next)) // throw before state
+    imagesRef.current = next
     setImagesState(next)
     setSelectedImageIdState(id)
     return id

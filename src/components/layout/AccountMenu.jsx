@@ -30,6 +30,39 @@ export async function applyBackdropFile(file, { setCustomImage, setBackground, t
   }
 }
 
+// Drop / paste several photos at once. Applies the LAST one as the live
+// backdrop (that's the one the user watched land) and reports honestly when
+// some were skipped — the library is capped and localStorage has a quota.
+export async function applyBackdropFiles(fileList, { setCustomImage, setBackground, toast }) {
+  const files = Array.from(fileList || []).filter(f => f.type?.startsWith('image/'))
+  if (files.length === 0) {
+    toast.error('Drop an image file (JPG, PNG, WebP…)')
+    return
+  }
+  let ok = 0
+  let lastError = null
+  for (const file of files) {
+    try {
+      setCustomImage(await fileToBackdropDataUrl(file))
+      ok += 1
+    } catch (err) {
+      lastError = err
+    }
+  }
+  if (ok > 0) {
+    setBackground('image')
+    const skipped = files.length - ok
+    toast.success(ok === 1
+      ? 'Backdrop image set'
+      : `${ok} backdrops added${skipped ? ` · ${skipped} skipped` : ''}`)
+    if (skipped > 0 && ok === 1) toast.info(`${skipped} image${skipped === 1 ? '' : 's'} skipped`)
+  } else {
+    toast.error(lastError?.name === 'QuotaExceededError'
+      ? "That image is too large to store — try a smaller one"
+      : (lastError?.message || "Couldn't use that image"))
+  }
+}
+
 export function AccountMenu() {
   const { currentUser, logout } = useApp()
   const { theme, toggleTheme } = useTheme()
