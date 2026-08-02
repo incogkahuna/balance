@@ -7,6 +7,8 @@ export interface StoredImageProps {
   path: string | null | undefined
   alt: string
   className?: string
+  /** Inline styles — e.g. a dynamic objectPosition for reframing. */
+  style?: React.CSSProperties
   /** Signed-URL TTL in seconds. Default: 1 hour. */
   expiresIn?: number
   /** Fallback shown while loading or if the path is missing. */
@@ -23,6 +25,7 @@ export function StoredImage({
   path,
   alt,
   className,
+  style,
   expiresIn = 3600,
   fallback = null,
 }: StoredImageProps) {
@@ -51,5 +54,5 @@ export function StoredImage({
   if (!path || error) return <>{fallback}</>
   if (!url) return <>{fallback}</>
   // eslint-disable-next-line jsx-a11y/alt-text
-  return <img src={url} alt={alt} className={className} />
+  return <img src={url} alt={alt} className={className} style={style} />
 }

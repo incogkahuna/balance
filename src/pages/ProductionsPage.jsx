@@ -8,7 +8,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage.js'
 import {
   ROLES, PRODUCTION_STATUS, TASK_STATUS, PROJECT_KIND, PROJECT_KIND_LABEL,
   SHEET_ASSET_CLASSES, SHEET_CONTENT_OPTIONS, SHEET_HOURS, SHEET_SPACES,
-  DEFAULT_SHEET, sheetIs3D,
+  DEFAULT_SHEET, sheetIs3D, cardImageView,
 } from '../data/models.js'
 import { useCoreCrew, memberRole, CrewSlotSelect } from '../features/productions/team/CoreCrewSlots.jsx'
 import { StoredImage } from '../components/files/StoredImage.tsx'
@@ -509,6 +509,7 @@ function ProductionCard({
   // slots as the Team and Overview tabs (useCoreCrew → assignedMembers +
   // stageManagerId) — change any surface and the others follow, because
   // they are all one record.
+  const cardImg = cardImageView(prod.cardImage)
   const sheet = { ...DEFAULT_SHEET, ...(prod.sheet || {}) }
   const setSheet = (patch) => updateProduction(prod.id, { sheet: { ...sheet, ...patch } })
   const crew = useCoreCrew(prod)
@@ -679,32 +680,47 @@ function ProductionCard({
         tabIndex={0}
         onClick={onClick}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
-        className="card text-left w-full h-full flex flex-col hover:bg-orbital-panel transition-colors overflow-hidden cursor-pointer"
+        className="card relative text-left w-full h-full flex flex-col hover:bg-orbital-panel transition-colors overflow-hidden cursor-pointer"
         style={{ borderLeft: `3px solid ${borderColor}` }}
       >
-        {/* Card image / brand logo — visual differentiation (Danny). Sits
-            above the title as a banner; the scrim keeps the hover controls
-            readable over bright artwork. */}
+        {/* Card image / brand logo — a background LAYER, not a banner, so it
+            can cover anything from a strip at the top to the whole card
+            (coverage), framed by focusX/Y, with an adjustable scrim keeping
+            the text readable over it. All four are edited in Edit → Card
+            image. The bottom of the layer always fades into the card so a
+            partial cover has no hard seam. */}
         {prod.cardImage?.path && (
-          <div className="relative w-full h-24 flex-shrink-0 overflow-hidden bg-black/20">
+          <div
+            className="absolute inset-x-0 top-0 pointer-events-none overflow-hidden"
+            style={{ height: `${cardImg.coverage}%` }}
+          >
             <StoredImage
               bucket={prod.cardImage.bucket || BUCKETS.instructionPackages}
               path={prod.cardImage.path}
               alt={`${prod.name} artwork`}
               className="w-full h-full object-cover"
+              style={{ objectPosition: `${cardImg.focusX}% ${cardImg.focusY}%` }}
             />
             <div
-              className="absolute inset-0 pointer-events-none"
-              style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 45%, var(--orbital-panel) 100%)' }}
+              className="absolute inset-0"
+              style={{
+                background: `linear-gradient(180deg,
+                  rgba(0,0,0,${(cardImg.scrim / 100) * 0.9}) 0%,
+                  rgba(0,0,0,${(cardImg.scrim / 100) * 0.9}) 80%,
+                  var(--orbital-panel) 100%)`,
+              }}
             />
           </div>
         )}
+
+        {/* Everything below sits ABOVE the image layer. */}
+        <div className="relative flex flex-col flex-1">
 
         {/* Row 1: name + status badge */}
         {/* pr-12 on sm+ reserves room for the absolute-positioned palette +
             grip controls that only show on desktop; on mobile those are
             hidden so the title can use the full width. */}
-        <div className={clsx('flex items-start justify-between gap-3 pb-0', 'px-4 sm:px-5', prod.cardImage?.path ? 'pt-3' : 'pt-4')}>
+        <div className={clsx('flex items-start justify-between gap-3 pb-0', 'px-4 sm:px-5', 'pt-4')}>
           <div className="flex-1 min-w-0 sm:pr-12">
             <p className={clsx('font-semibold text-orbital-text leading-tight truncate', 'text-lg')}>{prod.name}</p>
             <p className={clsx('text-orbital-subtle truncate mt-1', 'text-sm')}>{prod.client}</p>
@@ -958,6 +974,7 @@ function ProductionCard({
           ) : (
             <span className={clsx('text-orbital-dim', 'text-xs')}>No tasks</span>
           )}
+        </div>
         </div>
       </div>
     </div>

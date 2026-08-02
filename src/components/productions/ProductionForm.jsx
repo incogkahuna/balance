@@ -12,6 +12,7 @@ import {
   PRODUCTION_STATUS, LOCATION_TYPE, ROLES,
   PRODUCTION_ROLE_PRESETS, normalizeAssignedMember, createAddon,
   createProduction, PROJECT_KIND, PROJECT_KIND_LABEL,
+  CARD_IMAGE_DEFAULTS, cardImageView,
 } from '../../data/models.js'
 
 // ── Collapsible section ("twirl down") ──────────────────────────────────────
@@ -448,41 +449,11 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, 
           mode only: the storage path is keyed to a saved production id. */}
       {isEdit && (
         <Section title="Card image" subtitle={liveProduction?.cardImage?.path ? 'Image set' : 'None'}>
-          <div className="flex items-center gap-3 flex-wrap">
-            {liveProduction?.cardImage?.path && (
-              <div className="w-32 h-20 overflow-hidden border" style={{ borderColor: 'var(--orbital-border)' }}>
-                <StoredImage
-                  bucket={liveProduction.cardImage.bucket || BUCKETS.instructionPackages}
-                  path={liveProduction.cardImage.path}
-                  alt="Card image"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
-            <FileUploadButton
-              bucket={BUCKETS.instructionPackages}
-              pathFor={(file) => paths.productionCard(initial.id, file.name)}
-              accept="image/*"
-              className="btn-secondary text-xs"
-              onUploaded={(result) => updateProduction(initial.id, {
-                cardImage: { bucket: result.bucket, path: result.path },
-              })}
-            >
-              <ImagePlus size={13} /> {liveProduction?.cardImage?.path ? 'Replace' : 'Add image'}
-            </FileUploadButton>
-            {liveProduction?.cardImage?.path && (
-              <button
-                type="button"
-                onClick={() => updateProduction(initial.id, { cardImage: null })}
-                className="btn-ghost text-xs"
-              >
-                <Trash2 size={13} /> Remove
-              </button>
-            )}
-          </div>
-          <p className="text-[11px] text-orbital-dim">
-            Brand logo or a frame from the shoot — shows as a banner on this production&apos;s card.
-          </p>
+          <CardImageEditor
+            production={liveProduction}
+            productionId={initial.id}
+            onChange={(cardImage) => updateProduction(initial.id, { cardImage })}
+          />
         </Section>
       )}
 
@@ -657,6 +628,173 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, 
         )}
       </div>
     </form>
+  )
+}
+
+// ── Card image editor ───────────────────────────────────────────────────────
+// Danny: reframe the photo, control how much of the card it covers, and tune
+// the panel behind the text so a full-bleed image stays readable. All three
+// live in the cardImage jsonb alongside the storage path, so this is pure
+// presentation — no schema change, nothing to migrate.
+//
+// Drag anywhere on the preview to reframe. Slider moves are kept in local
+// state and committed on release, so dragging doesn't fire a write per pixel.
+function CardImageEditor({ production, productionId, onChange }) {
+  const stored = production?.cardImage
+  const [draft, setDraft] = useState(() => cardImageView(stored))
+  const [dragging, setDragging] = useState(false)
+  const frameRef = useRef(null)
+
+  // Re-sync when the image itself changes (upload / remove / another record).
+  useEffect(() => { setDraft(cardImageView(stored)) }, [stored?.path])
+
+  if (!stored?.path) {
+    return (
+      <>
+        <FileUploadButton
+          bucket={BUCKETS.instructionPackages}
+          pathFor={(file) => paths.productionCard(productionId, file.name)}
+          accept="image/*"
+          className="btn-secondary text-xs"
+          onUploaded={(result) => onChange({
+            bucket: result.bucket, path: result.path, ...CARD_IMAGE_DEFAULTS,
+          })}
+        >
+          <ImagePlus size={13} /> Add image
+        </FileUploadButton>
+        <p className="text-[11px] text-orbital-dim">
+          Brand logo or a frame from the shoot. Once it&apos;s on you can reframe it,
+          choose how much of the card it fills, and dial the text backdrop.
+        </p>
+      </>
+    )
+  }
+
+  const commit = (patch) => onChange({ ...stored, ...draft, ...patch })
+
+  const setFocusFromEvent = (e) => {
+    const el = frameRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const focusX = Math.round(Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100)))
+    const focusY = Math.round(Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100)))
+    setDraft(d => ({ ...d, focusX, focusY }))
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Live preview — mirrors exactly how the card renders it */}
+      <div
+        ref={frameRef}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId)
+          setDragging(true)
+          setFocusFromEvent(e)
+        }}
+        onPointerMove={(e) => { if (dragging) setFocusFromEvent(e) }}
+        onPointerUp={(e) => {
+          e.currentTarget.releasePointerCapture(e.pointerId)
+          setDragging(false)
+          commit({})
+        }}
+        className="relative w-full max-w-sm overflow-hidden select-none"
+        style={{
+          aspectRatio: '16 / 10',
+          border: '1px solid var(--orbital-border)',
+          cursor: dragging ? 'grabbing' : 'grab',
+          touchAction: 'none',
+        }}
+        title="Drag to reframe"
+      >
+        <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: `${draft.coverage}%` }}>
+          <StoredImage
+            bucket={stored.bucket || BUCKETS.instructionPackages}
+            path={stored.path}
+            alt="Card image preview"
+            className="w-full h-full object-cover pointer-events-none"
+            style={{ objectPosition: `${draft.focusX}% ${draft.focusY}%` }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(180deg,
+                rgba(0,0,0,${(draft.scrim / 100) * 0.9}) 0%,
+                rgba(0,0,0,${(draft.scrim / 100) * 0.9}) 80%,
+                var(--orbital-panel) 100%)`,
+            }}
+          />
+        </div>
+        {/* Sample text so the scrim can be judged against real content */}
+        <div className="absolute inset-0 p-3 flex flex-col justify-between pointer-events-none">
+          <div>
+            <p className="text-sm font-semibold text-orbital-text leading-tight">
+              {production?.name || 'Production name'}
+            </p>
+            <p className="text-[11px] text-orbital-subtle">{production?.client || 'Client'}</p>
+          </div>
+          <p className="text-[10px] font-telemetry tracking-wider text-orbital-subtle">
+            {dragging ? 'REFRAMING…' : 'DRAG TO REFRAME'}
+          </p>
+        </div>
+      </div>
+
+      <ImageSlider
+        label="Image coverage" value={draft.coverage} min={25} max={100} suffix="%"
+        hint={draft.coverage >= 100 ? 'Fills the whole card' : 'Covers the top of the card'}
+        onInput={(v) => setDraft(d => ({ ...d, coverage: v }))}
+        onCommit={(v) => commit({ coverage: v })}
+      />
+      <ImageSlider
+        label="Text backdrop" value={draft.scrim} min={0} max={100} suffix="%"
+        hint={draft.scrim < 20 ? 'Photo is barely dimmed — check the text still reads' : 'Keeps text legible over the photo'}
+        onInput={(v) => setDraft(d => ({ ...d, scrim: v }))}
+        onCommit={(v) => commit({ scrim: v })}
+      />
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <FileUploadButton
+          bucket={BUCKETS.instructionPackages}
+          pathFor={(file) => paths.productionCard(productionId, file.name)}
+          accept="image/*"
+          className="btn-secondary text-xs"
+          onUploaded={(result) => onChange({ ...stored, ...draft, bucket: result.bucket, path: result.path })}
+        >
+          <ImagePlus size={13} /> Replace
+        </FileUploadButton>
+        <button
+          type="button"
+          className="btn-ghost text-xs"
+          onClick={() => { setDraft(cardImageView({})); commit(CARD_IMAGE_DEFAULTS) }}
+        >
+          Reset framing
+        </button>
+        <button type="button" className="btn-ghost text-xs" onClick={() => onChange(null)}>
+          <Trash2 size={13} /> Remove
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ImageSlider({ label, value, min, max, suffix = '', hint, onInput, onCommit }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <label className="label mb-0">{label}</label>
+        <span className="font-telemetry text-[11px] text-orbital-subtle">{value}{suffix}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onInput(Number(e.target.value))}
+        onPointerUp={(e) => onCommit(Number(e.currentTarget.value))}
+        onKeyUp={(e) => onCommit(Number(e.currentTarget.value))}
+        className="w-full max-w-sm"
+      />
+      {hint && <p className="text-[11px] text-orbital-dim">{hint}</p>}
+    </div>
   )
 }
 

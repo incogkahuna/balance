@@ -291,6 +291,16 @@ export function buildRoster(profiles = []) {
 // cards). ONLY the facts that live nowhere else on the record: asset class,
 // content, day length, rented spaces. Supervisor / operators / SM / volume /
 // dates are DERIVED from existing fields — never duplicated here.
+// ─── Card image presentation ─────────────────────────────────────────────────
+// production.cardImage = { bucket, path, ...these }. All four are display-only
+// and live in the same jsonb column, so tuning a card costs no schema change.
+//   coverage — how much of the card height the image covers (25–100%)
+//   scrim    — how dark the panel behind the text is (0 = raw photo,
+//              100 = heavily dimmed so text always reads)
+//   focusX/Y — which part of the photo stays visible when it's cropped
+export const CARD_IMAGE_DEFAULTS = { coverage: 30, scrim: 45, focusX: 50, focusY: 50 }
+export const cardImageView = (ci) => ({ ...CARD_IMAGE_DEFAULTS, ...(ci || {}) })
+
 export const SHEET_ASSET_CLASSES = ['2D', '2.5D', '3D', '3D+tracking']
 export const SHEET_CONTENT_OPTIONS = {
   // Non-3D shoots are plate/photo work; 3D is engine content.
@@ -318,7 +328,7 @@ export function createProduction(overrides = {}) {
     // Cheat-sheet facts (see SHEET_* above) — populated at creation
     // (pipeline handoff / intake), editable straight on the card.
     sheet: { ...DEFAULT_SHEET },
-    // Card image / brand logo — { bucket, path } into Supabase storage.
+    // Card image / brand logo — see CARD_IMAGE_DEFAULTS for the shape.
     // Purely visual differentiation on the production card.
     cardImage: null,
     // Optional working-window list: [{ start, end }] in YYYY-MM-DD. For
