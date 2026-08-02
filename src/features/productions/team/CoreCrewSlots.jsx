@@ -175,9 +175,20 @@ export function CrewSlotSelect({
   }
 
   const groups = [...new Set(options.map((o) => o.group).filter(Boolean))]
+  // A transparent select inherits the PAGE background for its native popup,
+  // which on desktop renders as near-white options on a light list — the
+  // "falls apart on web" Danny saw. Both variants carry a real surface
+  // colour, and every option states its own colours, so the popup is
+  // readable on every platform (and over a card image).
   const selectCls = compact
-    ? 'w-full text-xs text-orbital-text bg-transparent cursor-pointer outline-none rounded-sm px-1 py-0.5 -mx-1 border border-transparent hover:border-orbital-border focus:border-orbital-border'
-    : 'w-full text-xs text-orbital-text bg-orbital-surface border border-orbital-border rounded-sm px-1.5 py-1 cursor-pointer outline-none focus:border-blue-500/50 disabled:opacity-60'
+    ? 'w-full text-xs text-orbital-text cursor-pointer outline-none rounded-sm px-1.5 py-1 border'
+    : 'w-full text-xs text-orbital-text border border-orbital-border rounded-sm px-1.5 py-1 cursor-pointer outline-none focus:border-blue-500/50 disabled:opacity-60'
+  const selectStyle = {
+    background: 'var(--orbital-surface)',
+    color: 'var(--orbital-text)',
+    ...(compact ? { borderColor: 'var(--orbital-border)' } : null),
+  }
+  const optionStyle = { background: 'var(--orbital-surface)', color: 'var(--orbital-text)' }
 
   return (
     <div className="min-w-0">
@@ -202,6 +213,7 @@ export function CrewSlotSelect({
       ) : (
         <select
           className={selectCls}
+          style={selectStyle}
           value={options.some((o) => o.value === value) ? value : ''}
           disabled={disabled}
           onClick={(e) => e.stopPropagation()}
@@ -211,17 +223,19 @@ export function CrewSlotSelect({
             onChange(e.target.value)
           }}
         >
-          <option value="">—</option>
+          <option value="" style={optionStyle}>—</option>
           {groups.length > 1
             ? groups.map((g) => (
-                <optgroup key={g} label={g}>
+                <optgroup key={g} label={g} style={optionStyle}>
                   {options.filter((o) => o.group === g).map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                    <option key={o.value} value={o.value} style={optionStyle}>{o.label}</option>
                   ))}
                 </optgroup>
               ))
-            : options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          {!disabled && <option value={CUSTOM}>+ Add someone new…</option>}
+            : options.map((o) => (
+                <option key={o.value} value={o.value} style={optionStyle}>{o.label}</option>
+              ))}
+          {!disabled && <option value={CUSTOM} style={optionStyle}>+ Add someone new…</option>}
         </select>
       )}
     </div>

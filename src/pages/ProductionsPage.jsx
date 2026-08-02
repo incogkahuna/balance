@@ -510,6 +510,12 @@ function ProductionCard({
   // stageManagerId) — change any surface and the others follow, because
   // they are all one record.
   const cardImg = cardImageView(prod.cardImage)
+  const hasCardImage = !!prod.cardImage?.path
+  // Over artwork the dim label grey disappears. Lift labels one step to the
+  // `subtle` token rather than hardcoding white — the panel behind them is
+  // near-black in dark mode but near-WHITE in light mode, so white text
+  // would vanish there.
+  const sheetLabelCls = hasCardImage ? 'text-orbital-subtle' : 'text-orbital-dim'
   const sheet = { ...DEFAULT_SHEET, ...(prod.sheet || {}) }
   const setSheet = (patch) => updateProduction(prod.id, { sheet: { ...sheet, ...patch } })
   const crew = useCoreCrew(prod)
@@ -547,7 +553,11 @@ function ProductionCard({
     }
     return (
       <select
-        className="w-full text-xs text-orbital-text bg-transparent cursor-pointer outline-none rounded-sm px-1 py-0.5 -mx-1 border border-transparent hover:border-orbital-border focus:border-orbital-border"
+        // Solid surface, not transparent: a see-through select makes the
+        // native desktop popup inherit the page background and render as
+        // pale-on-pale, and over a card image the closed control vanishes.
+        className="w-full text-xs text-orbital-text cursor-pointer outline-none rounded-sm px-1.5 py-1 border"
+        style={{ background: 'var(--orbital-surface)', color: 'var(--orbital-text)', borderColor: 'var(--orbital-border)' }}
         value={opts.some((o) => o.value === value) ? value : ''}
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => { e.stopPropagation(); onChange(e.target.value) }}
@@ -813,18 +823,28 @@ function ProductionCard({
 
         {/* ── Cheat sheet — the day-of card. Type/content/hours/spaces edit
                in place (admin/sup) and write straight to the production;
-               supervisor/operators derive live from Team assignments. ── */}
+               supervisor/operators derive live from Team assignments.
+               Over a card image the whole block gets its own solid panel so
+               the numbers AND their labels stay readable no matter how busy
+               the photo is (Danny). ── */}
         <div
           className={clsx('px-4 sm:px-5 py-2.5')}
-          style={{ borderTop: '1px solid var(--orbital-border)' }}
+          style={{
+            borderTop: '1px solid var(--orbital-border)',
+            ...(hasCardImage ? {
+              background: 'color-mix(in srgb, var(--orbital-panel) 88%, transparent)',
+              backdropFilter: 'blur(6px)',
+              WebkitBackdropFilter: 'blur(6px)',
+            } : null),
+          }}
         >
           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
             <div>
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">TYPE</p>
+              <p className={clsx("font-telemetry tracking-wider text-[9px]", sheetLabelCls)}>TYPE</p>
               {sheetSelect(sheet.assetClass, SHEET_ASSET_CLASSES, setAssetClass)}
             </div>
             <div>
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">CONTENT</p>
+              <p className={clsx("font-telemetry tracking-wider text-[9px]", sheetLabelCls)}>CONTENT</p>
               {sheetSelect(sheet.content, contentOptions, (v) => setSheet({ content: v }))}
             </div>
             <CrewSlotSelect
@@ -843,7 +863,7 @@ function ProductionCard({
               disabled={!canCustomize} compact
             />
             <div>
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px]">HOURS</p>
+              <p className={clsx("font-telemetry tracking-wider text-[9px]", sheetLabelCls)}>HOURS</p>
               {sheetSelect(
                 String(sheet.hoursPerDay || ''),
                 SHEET_HOURS.map(String),
@@ -855,7 +875,7 @@ function ProductionCard({
           {/* Every other assigned position, full title attached. */}
           {otherPositions.length > 0 && (
             <div className="mt-2">
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px] mb-1">
+              <p className={clsx("font-telemetry tracking-wider text-[9px] mb-1", sheetLabelCls)}>
                 ALSO ON THIS JOB
               </p>
               <div className="space-y-0.5">
@@ -872,7 +892,7 @@ function ProductionCard({
 
           {(canCustomize || sheet.spaces.length > 0) && (
             <div className="mt-2">
-              <p className="font-telemetry tracking-wider text-orbital-dim text-[9px] mb-1">SPACES</p>
+              <p className={clsx("font-telemetry tracking-wider text-[9px] mb-1", sheetLabelCls)}>SPACES</p>
               <div className="flex flex-wrap gap-1">
                 {SHEET_SPACES.map((s) => {
                   const on = sheet.spaces.includes(s)
