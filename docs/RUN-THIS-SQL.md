@@ -1,11 +1,114 @@
 # Danny: run this SQL (one paste, Supabase dashboard → SQL Editor)
 
-## ⭑ NEWEST 2026-07-25 (b) — card images + custom quotes — RUN THIS ONE
+## ⭑⭑ CATCH-UP BLOCK (2026-07-25) — ONE PASTE, RUN THIS
 
-> **STATUS: ⬜ NOT YET RUN.** Two columns: artwork on production cards, and
-> the standard/custom flag on quotes. Idempotent. Until this runs, card
-> images won't save and a custom quote won't stay custom after a reload
-> (everything else keeps working).
+> Everything the app currently expects, in a single fully-idempotent paste.
+> Safe to run in full at any time — every statement is guarded, so re-running
+> an already-applied piece is a no-op rather than an error that rolls back the
+> whole block.
+>
+> **Verified applied as of 2026-07-25** (checked against the live DB):
+> `productions.sheet` · `productions.card_image` · `productions.debrief_notes`
+> · `pipeline_quotes.mode` · `pipeline_quotes.custom_lines`
+> · `pipeline_deals.files` · `led_walls` · `activity_events` · `feedback_items`
+>
+> **Cannot be verified from outside** (RLS hides rows and constraints):
+> the `Revisit` feedback status and Mark's access grant. Both are in the block
+> below — run it and they're settled either way.
+
+```sql
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BALANCE — catch-up block. Idempotent; safe to re-run.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── Productions ────────────────────────────────────────────────────────────
+-- Day-of cheat sheet on the production card (type / content / hours / spaces)
+alter table public.productions add column if not exists sheet jsonb not null
+  default '{"assetClass":"","content":"","hoursPerDay":10,"spaces":[]}'::jsonb;
+
+-- Card artwork / brand logo: {bucket, path, coverage, scrim, focusX, focusY}
+alter table public.productions add column if not exists card_image jsonb;
+
+-- Quick notes captured during a production (also written by the Slack bot)
+alter table public.productions add column if not exists debrief_notes jsonb not null
+  default '[]'::jsonb;
+
+-- ── Pipeline ───────────────────────────────────────────────────────────────
+-- Deal documents: COI, agreements, invoices, completion files
+alter table public.pipeline_deals add column if not exists files jsonb not null
+  default '[]'::jsonb;
+
+-- Free-form "custom deal" line items outside the rate card
+alter table public.pipeline_quotes add column if not exists custom_lines jsonb not null
+  default '[]'::jsonb;
+
+-- standard | custom — a custom quote IS its custom line list
+alter table public.pipeline_quotes add column if not exists mode text not null
+  default 'standard';
+
+do $$ begin
+  alter table public.pipeline_quotes
+    add constraint pipeline_quotes_mode_check check (mode in ('standard', 'custom'));
+exception when duplicate_object then null; end $$;
+
+-- ── Feedback: the 'Revisit' status ─────────────────────────────────────────
+-- Drop-then-add so the check always ends up with the full current set.
+alter table public.feedback_items drop constraint if exists feedback_items_status_check;
+alter table public.feedback_items add constraint feedback_items_status_check
+  check (status in ('New', 'Acknowledged', 'In Progress', 'Revisit', 'Shipped', 'Won''t Fix'));
+
+-- ── Access: Mark — full access (Danny 2026-07-24) ──────────────────────────
+insert into public.pipeline_role_assignments (email, pipeline_role)
+values ('mark@orbitalvs.com', 'admin_exec')
+on conflict (email) do update set pipeline_role = excluded.pipeline_role;
+
+insert into public.role_assignments (email, role, display_name, display_color)
+values ('mark@orbitalvs.com', 'admin', 'Mark', '#6366f1')
+on conflict (email) do update set role = 'admin';
+
+update public.profiles set pipeline_role = 'admin_exec', role = 'admin'
+where email = 'mark@orbitalvs.com';
+```
+
+### Verify it took
+
+Paste this after the block — every row should read `true`.
+
+```sql
+select 'productions.sheet' as item,
+       exists (select from information_schema.columns
+               where table_name='productions' and column_name='sheet') as ok
+union all select 'productions.card_image',
+       exists (select from information_schema.columns
+               where table_name='productions' and column_name='card_image')
+union all select 'productions.debrief_notes',
+       exists (select from information_schema.columns
+               where table_name='productions' and column_name='debrief_notes')
+union all select 'pipeline_deals.files',
+       exists (select from information_schema.columns
+               where table_name='pipeline_deals' and column_name='files')
+union all select 'pipeline_quotes.custom_lines',
+       exists (select from information_schema.columns
+               where table_name='pipeline_quotes' and column_name='custom_lines')
+union all select 'pipeline_quotes.mode',
+       exists (select from information_schema.columns
+               where table_name='pipeline_quotes' and column_name='mode')
+union all select 'feedback status allows Revisit',
+       exists (select from pg_constraint
+               where conname='feedback_items_status_check'
+                 and pg_get_constraintdef(oid) like '%Revisit%')
+union all select 'led_walls table',
+       exists (select from information_schema.tables where table_name='led_walls')
+union all select 'Mark has pipeline access',
+       exists (select from public.pipeline_role_assignments
+               where email='mark@orbitalvs.com');
+```
+
+---
+
+## Superseded: 2026-07-25 (b) — card images + custom quotes — ✅ RUN (verified live)
+
+> Folded into the catch-up block above; kept for history.
 
 ```sql
 alter table public.productions
