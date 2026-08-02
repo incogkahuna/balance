@@ -156,6 +156,10 @@ export default function App() {
             <Route path="/feedback"             element={wrap(<FeedbackPage />)} />
             {/* To-Dos merged into Tasks (internal scope) — old bookmarks land */}
             <Route path="/todos"                element={<Navigate to="/tasks?scope=internal" replace />} />
+            {/* /note — save this to the phone's home screen for one-tap
+                on-set capture; it opens the dashboard with the note sheet
+                already up. (A real iOS widget needs a native app.) */}
+            <Route path="/note"                 element={<Navigate to="/dashboard?note=1" replace />} />
             {/* Debriefs folder — every submitted debrief, reviewed together */}
             <Route path="/debriefs"             element={wrap(<DebriefsPage />)} />
             {/* Account — profile, appearance, session (#21 v2) */}

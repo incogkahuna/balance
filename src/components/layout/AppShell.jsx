@@ -6,6 +6,7 @@ import { Breadcrumbs } from './Breadcrumbs.jsx'
 import { BackgroundFX } from './BackgroundFX.jsx'
 import { FeedbackWidget } from './FeedbackWidget.jsx'
 import { PullToRefresh } from './PullToRefresh.jsx'
+import { QuickCapture } from '../../features/debriefs/QuickCapture.jsx'
 import { OrbitalMark } from '../brand/OrbitalLogo.jsx'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAuth } from '../../context/AuthContext.tsx'
@@ -84,6 +85,9 @@ export function AppShell() {
 
       {/* Global feedback control (M5 / #3) — every page, no navigation. */}
       <FeedbackWidget />
+
+      {/* On-set quick note — every page, no navigation (Danny). */}
+      <QuickCapture />
 
       {/* Swipe-down refresh — standalone (home-screen) app only, where the
           browser's native gesture doesn't exist. */}

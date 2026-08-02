@@ -17,7 +17,17 @@ dashboard; everything else is already in the repo.
 In the left sidebar: **OAuth & Permissions** → scroll to **Scopes** → **Bot Token Scopes** → click **Add an OAuth Scope** and add:
 
 - `app_mentions:read` — required, lets the bot receive @-mentions
+- `channels:read` — **required for production notes.** Slack only sends a
+  channel *ID* on a mention; this lets the bot look up the channel *name* so a
+  note in `#verizon-nfl` can be routed to the Verizon NFL production. Without
+  it every note falls back to Coming Soon.
+- `groups:read` — add this too if any production channel is **private**
 - `chat:write` — optional but recommended (lets you @-reply to the user from the bot later)
+
+> Already installed the app before this scope existed? Add the scope, then
+> **reinstall to workspace** — Slack only grants new scopes on reinstall, and
+> the bot token changes, so re-run the `supabase secrets set SLACK_BOT_TOKEN=…`
+> step with the new value.
 
 ## 3. Install to workspace
 
@@ -71,6 +81,34 @@ Slack will prompt you to **Reinstall** the app — do it.
 1. In any channel where you want the bot active: type `/invite @Balance` (or use the channel settings → Integrations → Add apps).
 2. Type a message: `@Balance email sync should support BCC too`
 3. Within ~1 second, open https://balance-six-gamma.vercel.app/coming-soon and the item should be there with a magenta **SLACK · your-username · #channel** badge.
+
+## 8. Production notes from the channel name
+
+If the channel is **named after a production**, an `@Balance` message lands as
+a **Quick Note on that production** instead of in Coming Soon — it shows up in
+the production's Debrief tab and compiles into its debrief at wrap.
+
+```
+#verizon-nfl   →   @Balance scissor lift showed up damaged
+                   ↳ Quick Note on "Verizon NFL", author "danny (Slack)"
+```
+
+Matching rules:
+
+- Punctuation and case are ignored — `#verizon-nfl-reshoot` matches
+  **Verizon NFL Reshoot**.
+- The **most specific** match wins: with both *Verizon NFL* and *Verizon NFL
+  Reshoot* live, `#verizon-nfl-reshoot` picks the Reshoot.
+- **Completed** productions are never matched, so an old channel reused later
+  can't absorb notes.
+- No confident match (`#general`, an ambiguous tie, missing `channels:read`)
+  → the note goes to **Coming Soon** exactly as before. Nothing is dropped.
+
+Deploy after adding the scope:
+
+```bash
+supabase functions deploy slack-bot --no-verify-jwt
+```
 
 ---
 

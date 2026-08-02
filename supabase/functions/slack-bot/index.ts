@@ -66,6 +66,75 @@ function stripBotMention(text: string): string {
   return text.replace(/^<@[^>]+>\s*/, '').trim()
 }
 
+// ─── Channel → production routing ────────────────────────────────────────────
+// Danny: "the slack channel will be named the production so it would be great
+// if we could just recognize which channel it's posted in."
+//
+// So an @balance in #verizon-nfl lands as a Quick Note on the Verizon NFL
+// production — no syntax to remember on set. Anything we can't match with
+// confidence still lands in Coming Soon rather than being dropped.
+
+const SLACK_BOT_TOKEN = Deno.env.get('SLACK_BOT_TOKEN') ?? ''
+
+// Comparable form: lowercase alphanumerics only. "Verizon NFL (Reshoot)" and
+// "verizon-nfl-reshoot" both become "verizonnflreshoot".
+function slug(s: string): string {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+// Slack's app_mention event carries a channel ID, not a name. Resolve it.
+// Requires the `channels:read` bot scope (plus `groups:read` for private
+// channels) — without it this returns null and we fall back to Coming Soon.
+async function fetchChannelName(channelId: string): Promise<string | null> {
+  if (!SLACK_BOT_TOKEN || !channelId) return null
+  try {
+    const res = await fetch(
+      `https://slack.com/api/conversations.info?channel=${encodeURIComponent(channelId)}`,
+      { headers: { Authorization: `Bearer ${SLACK_BOT_TOKEN}` } },
+    )
+    const body = await res.json()
+    if (!body?.ok) {
+      console.warn('[slack-bot] conversations.info failed:', body?.error)
+      return null
+    }
+    return (body.channel?.name as string) || null
+  } catch (err) {
+    console.error('[slack-bot] conversations.info threw:', err)
+    return null
+  }
+}
+
+// Match a channel name against live productions. Exact slug match wins; then
+// containment either way (channel "verizon-nfl-shoot" contains production
+// "Verizon NFL"). Ties go to the LONGEST production name — the most specific
+// match — and an ambiguous tie is treated as no match rather than guessing
+// the wrong production.
+function matchProduction(
+  channelName: string,
+  productions: Array<{ id: string; name: string; debrief_notes: unknown }>,
+): { id: string; name: string; debrief_notes: unknown } | null {
+  const chan = slug(channelName)
+  if (chan.length < 3) return null
+
+  const exact = productions.filter((p) => slug(p.name) === chan)
+  if (exact.length === 1) return exact[0]
+  if (exact.length > 1) return null
+
+  const partial = productions.filter((p) => {
+    const s = slug(p.name)
+    // Guard against 1–2 character names matching everything.
+    return s.length >= 4 && (chan.includes(s) || s.includes(chan))
+  })
+  if (partial.length === 0) return null
+
+  partial.sort((a, b) => slug(b.name).length - slug(a.name).length)
+  // Two equally-specific candidates → ambiguous; don't guess.
+  if (partial.length > 1 && slug(partial[0].name).length === slug(partial[1].name).length) {
+    return null
+  }
+  return partial[0]
+}
+
 serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
@@ -121,9 +190,53 @@ serve(async (req) => {
   // Pull friendly user / channel labels if Slack gave us names; fall back to
   // raw IDs. The Slack `user` field is just an ID by default — `user_name`
   // and `channel_name` are populated for some event types but not all.
-  const userName    = (event.user_name    as string) || (event.user    as string) || null
-  const channelName = (event.channel_name as string) || (event.channel as string) || null
+  const userName  = (event.user_name as string) || (event.user as string) || null
+  const channelId = (event.channel as string) || ''
 
+  // Prefer the channel NAME — that's what identifies the production. Slack
+  // only sends the id on app_mention, so resolve it (needs channels:read).
+  const channelName = (event.channel_name as string) || await fetchChannelName(channelId) || channelId || null
+
+  // ── Route to a production when the channel names one ──────────────────────
+  if (channelName) {
+    // Finished work shouldn't absorb notes from a channel reused later.
+    const { data: productions, error: prodError } = await supabase
+      .from('productions')
+      .select('id, name, debrief_notes')
+      .neq('status', 'Completed')
+
+    if (prodError) {
+      console.error('[slack-bot] production lookup failed', prodError)
+    } else {
+      const match = matchProduction(channelName, productions || [])
+      if (match) {
+        // Read-modify-write on a jsonb array. Two notes landing in the same
+        // instant could drop one; at on-set note volume that's acceptable,
+        // and it avoids a migration for a dedicated table.
+        const notes = Array.isArray(match.debrief_notes) ? match.debrief_notes : []
+        const note = {
+          id: crypto.randomUUID(),
+          text: cleaned,
+          authorId: '',
+          authorName: userName ? `${userName} (Slack)` : 'Slack',
+          at: new Date().toISOString(),
+        }
+        const { error: noteError } = await supabase
+          .from('productions')
+          .update({ debrief_notes: [...notes, note] })
+          .eq('id', match.id)
+
+        if (!noteError) {
+          console.log(`[slack-bot] note → production "${match.name}" from #${channelName}`)
+          return new Response('OK', { status: 200 })
+        }
+        console.error('[slack-bot] note insert failed', noteError)
+        // Fall through — better in Coming Soon than lost.
+      }
+    }
+  }
+
+  // ── No production matched: keep the original Coming Soon behaviour ────────
   const { error } = await supabase
     .from('coming_soon_items')
     .insert({
