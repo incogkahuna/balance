@@ -1,14 +1,52 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Plus, X, Monitor } from 'lucide-react'
+import { Plus, X, Monitor, ChevronDown, Trash2, ImagePlus } from 'lucide-react'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAutoSave } from '../../hooks/useAutoSave.js'
 import { DictationMic } from '../voice/DictationMic.tsx'
 import { SaveStatusPill } from '../ui/SaveStatusPill.jsx'
+import { CoreCrewSlots } from '../../features/productions/team/CoreCrewSlots.jsx'
+import { StoredImage } from '../files/StoredImage.tsx'
+import { FileUploadButton } from '../files/FileUploadButton.tsx'
+import { BUCKETS, paths } from '../../lib/storage.ts'
 import {
   PRODUCTION_STATUS, LOCATION_TYPE, ROLES,
-  PRODUCTION_ROLE_PRESETS, normalizeAssignedMember,
+  PRODUCTION_ROLE_PRESETS, normalizeAssignedMember, createAddon,
   createProduction, PROJECT_KIND, PROJECT_KIND_LABEL,
 } from '../../data/models.js'
+
+// ── Collapsible section ("twirl down") ──────────────────────────────────────
+// Danny asked for twirl-down options in the mobile edit form: the edit sheet
+// now covers everything about a production, which is far too long to scroll
+// on a phone. Sections start collapsed on small screens and open on desktop,
+// so nothing is hidden from people who have the room for it.
+function Section({ title, subtitle, children, defaultOpen }) {
+  const [open, setOpen] = useState(() => {
+    if (typeof defaultOpen === 'boolean') return defaultOpen
+    if (typeof window === 'undefined') return true
+    return window.matchMedia('(min-width: 640px)').matches
+  })
+  return (
+    <div style={{ borderTop: '1px solid var(--orbital-border)' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-3 py-3 text-left"
+        aria-expanded={open}
+      >
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-orbital-text">{title}</span>
+          {subtitle && <span className="block text-[11px] text-orbital-dim truncate">{subtitle}</span>}
+        </span>
+        <ChevronDown
+          size={15}
+          className="flex-shrink-0 text-orbital-subtle transition-transform"
+          style={{ transform: open ? 'rotate(180deg)' : 'none' }}
+        />
+      </button>
+      {open && <div className="pb-4 space-y-4">{children}</div>}
+    </div>
+  )
+}
 
 // Sentinel for the per-phase role dropdown "Other…" option.
 const CUSTOM_ROLE = '__custom_role__'
@@ -17,8 +55,18 @@ const CUSTOM_ROLE = '__custom_role__'
 const NO_WALL = '__no_wall__'
 
 export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, kind: kindProp }) {
-  const { currentUser, ledWalls = [], productions = [], users = [], syncProductionWallAssignment } = useApp()
+  const {
+    currentUser, ledWalls = [], productions = [], users = [],
+    syncProductionWallAssignment, updateProduction,
+    addAddon, updateAddon, deleteAddon,
+  } = useApp()
   const isEdit = Boolean(initial?.id)
+  // The live record — add-ons, card image and crew slots write straight
+  // through to it (they're their own entities, not part of this form's
+  // draft state), so read them from the store rather than the stale prop.
+  const liveProduction = isEdit
+    ? (productions.find(p => p.id === initial.id) || initial)
+    : null
   // Project kind (M4 / #5): tours + internal projects share the record shape
   // but skip production-only fields (LED wall / type / location).
   const kind = initial?.kind || kindProp || PROJECT_KIND.PRODUCTION
@@ -223,6 +271,7 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, 
         <SaveStatusPill status={saveStatus} lastSavedAt={lastSavedAt} error={saveError} />
       )}
 
+      <Section title="Basics" subtitle={form.name || 'Name, client, wall, status'} defaultOpen>
       <div>
         <label className="label">{PROJECT_KIND_LABEL[kind]} Name *</label>
         <input
@@ -326,11 +375,16 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, 
         )}
       </div>
       )}
+      </Section>
 
-      {/* Date ranges — one row by default; add more for projects that span
+      {/* Timeline — one row by default; add more for projects that span
           weeks but only run on certain days. The overall envelope (min start,
           max end) is auto-derived and saved as startDate/endDate so card /
           Gantt / Grav Map views render the full span. */}
+      <Section
+        title="Timeline"
+        subtitle={envelopeStart ? `${envelopeStart}${envelopeEnd && envelopeEnd !== envelopeStart ? ` → ${envelopeEnd}` : ''}` : 'No dates set'}
+      >
       <div>
         <div className="flex items-baseline justify-between mb-1.5">
           <label className="label mb-0">Date Range{form.dateRanges.length > 1 ? 's' : ''}</label>
@@ -382,13 +436,69 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, 
         <p className="text-[11px] text-orbital-dim mt-2">
           Use multiple ranges when the project runs on specific days across a longer span — e.g. one shoot day per week for a month.
         </p>
+        {isEdit && (
+          <p className="text-[11px] text-orbital-dim mt-1">
+            Milestones and logistical concerns live on the Roadmap, under Overview.
+          </p>
+        )}
       </div>
+      </Section>
+
+      {/* Card image — visual differentiation on the production card. Edit
+          mode only: the storage path is keyed to a saved production id. */}
+      {isEdit && (
+        <Section title="Card image" subtitle={liveProduction?.cardImage?.path ? 'Image set' : 'None'}>
+          <div className="flex items-center gap-3 flex-wrap">
+            {liveProduction?.cardImage?.path && (
+              <div className="w-32 h-20 overflow-hidden border" style={{ borderColor: 'var(--orbital-border)' }}>
+                <StoredImage
+                  bucket={liveProduction.cardImage.bucket || BUCKETS.instructionPackages}
+                  path={liveProduction.cardImage.path}
+                  alt="Card image"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <FileUploadButton
+              bucket={BUCKETS.instructionPackages}
+              pathFor={(file) => paths.productionCard(initial.id, file.name)}
+              accept="image/*"
+              className="btn-secondary text-xs"
+              onUploaded={(result) => updateProduction(initial.id, {
+                cardImage: { bucket: result.bucket, path: result.path },
+              })}
+            >
+              <ImagePlus size={13} /> {liveProduction?.cardImage?.path ? 'Replace' : 'Add image'}
+            </FileUploadButton>
+            {liveProduction?.cardImage?.path && (
+              <button
+                type="button"
+                onClick={() => updateProduction(initial.id, { cardImage: null })}
+                className="btn-ghost text-xs"
+              >
+                <Trash2 size={13} /> Remove
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-orbital-dim">
+            Brand logo or a frame from the shoot — shows as a banner on this production&apos;s card.
+          </p>
+        </Section>
+      )}
 
       {/* Team — Orbital Staff. Each assigned member gets per-phase role
           dropdowns (Prep / Production / Post). Selecting "Other…" reveals
           a free-form text input for that phase. */}
+      <Section
+        title="Team"
+        subtitle={`${form.assignedMembers.length} assigned`}
+      >
+      {/* Core crew quick slots — same fields as the Team tab and the card. */}
+      {isEdit && liveProduction && (
+        <CoreCrewSlots production={liveProduction} editable />
+      )}
       <div>
-        <label className="label">Team</label>
+        <label className="label">Everyone on the roster</label>
         <div className="space-y-3">
           {users.map(user => {
             const assigned = form.assignedMembers.find(m => m.userId === user.id)
@@ -457,19 +567,80 @@ export function ProductionForm({ initial, onSubmit, onCancel, autoSave = false, 
           })}
         </div>
       </div>
+      </Section>
 
-      <div>
-        <div className="flex items-center justify-between">
-          <label className="label">Package Notes</label>
-          <DictationMic onText={t => set('instructionNotes', form.instructionNotes ? `${form.instructionNotes}\n${t}` : t)} />
+      {/* Add-ons — edit mode only. These are their own records, so rows here
+          write straight through (add / rename / re-cost / remove) rather than
+          riding this form's draft state. */}
+      {isEdit && (
+        <Section
+          title="Add-ons"
+          subtitle={`${liveProduction?.addons?.length || 0} logged`}
+        >
+          <div className="space-y-2">
+            {(liveProduction?.addons || []).map(addon => (
+              <div key={addon.id} className="flex items-center gap-2">
+                <input
+                  className="input flex-1 min-w-0 text-sm"
+                  value={addon.equipment || ''}
+                  placeholder="Equipment / item"
+                  onChange={e => updateAddon(initial.id, addon.id, { equipment: e.target.value })}
+                />
+                <div className="relative w-28 flex-shrink-0">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-orbital-subtle text-sm">$</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="input pl-6 text-sm"
+                    value={addon.cost ?? ''}
+                    placeholder="0"
+                    onChange={e => updateAddon(initial.id, addon.id, { cost: e.target.value })}
+                  />
+                </div>
+                {addon.damaged && (
+                  <span className="text-[10px] font-telemetry tracking-wider text-orange-400 flex-shrink-0">DMG</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => deleteAddon(initial.id, addon.id)}
+                  className="text-orbital-subtle hover:text-red-400 flex-shrink-0"
+                  title="Remove add-on"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={() => addAddon(initial.id, createAddon({
+              productionId: initial.id,
+              loggedBy: currentUser?.id || '',
+            }))}
+          >
+            <Plus size={13} /> Add row
+          </button>
+          <p className="text-[11px] text-orbital-dim">
+            Quick edits only — photos, damage flags and day-rate maths live on the Add-ons tab.
+          </p>
+        </Section>
+      )}
+
+      <Section title="Package notes" subtitle={form.instructionNotes ? 'Has notes' : 'Empty'}>
+        <div>
+          <div className="flex items-center justify-between">
+            <label className="label">Package Notes</label>
+            <DictationMic onText={t => set('instructionNotes', form.instructionNotes ? `${form.instructionNotes}\n${t}` : t)} />
+          </div>
+          <textarea
+            className="input min-h-[80px] resize-y"
+            value={form.instructionNotes}
+            onChange={e => set('instructionNotes', e.target.value)}
+            placeholder="Stage config, special notes, key contacts..."
+          />
         </div>
-        <textarea
-          className="input min-h-[80px] resize-y"
-          value={form.instructionNotes}
-          onChange={e => set('instructionNotes', e.target.value)}
-          placeholder="Stage config, special notes, key contacts..."
-        />
-      </div>
+      </Section>
 
       <div className="flex gap-3 pt-2">
         {autoSaveEnabled ? (
