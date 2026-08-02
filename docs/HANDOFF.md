@@ -5,16 +5,19 @@
 
 ## 🔴 START HERE
 
-**The app is healthy and fully deployed. The blocker is three undeployed edge
-functions**, all of which have shipped client code that silently does nothing
-without them:
+**All four edge functions are deployed as of 2026-08-02** (Danny ran the three
+deploys). What remains is *configuration*, not deployment:
 
 | Function | State | Powers |
 |---|---|---|
-| `parse-intake` | ✅ deployed (401 = auth gate, correct) | Screenshot parsing in intake |
-| `transcribe` | ❌ **404 — never deployed** | Every dictation mic (hidden behind `VITE_VOICE_ENABLED`) |
-| `slack-bot` | ❌ **404 — never deployed** | `@balance` → production Quick Notes. Has never worked. |
-| `synthesize-debriefs` | ❌ **404 — new this session** | The Synthesize button on /debriefs |
+| `parse-intake` | ✅ deployed, key set | Screenshot parsing in intake |
+| `synthesize-debriefs` | ✅ deployed, `ANTHROPIC_API_KEY` set — **fully working** | The Synthesize button on /debriefs |
+| `transcribe` | ⚠️ deployed but returns `{"error":"Server not configured"}` — **`OPENAI_API_KEY` is not in the secrets list**, and mics are also behind `VITE_VOICE_ENABLED` in Vercel | Every dictation mic |
+| `slack-bot` | ⚠️ deployed, but `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` are not set and no Slack app exists yet | `@balance` → production Quick Notes |
+
+Secrets actually on the project (`supabase secrets list --project-ref
+ectyohuqgpnwivpjpuga`): `ANTHROPIC_API_KEY` + the Supabase built-ins. Nothing
+else.
 
 Verify at any time:
 ```bash

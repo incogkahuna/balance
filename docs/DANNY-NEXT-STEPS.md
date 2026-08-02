@@ -1,61 +1,34 @@
 # Danny — click by click
 
-*Written 2026-07-25. Everything below is on YOU (needs your logins). Nothing
-here is optional-nice-to-have; each one unblocks a feature that is already
-built and shipped but currently inert.*
+*Updated 2026-08-02. Part 1 is DONE (you ran the three deploys). What's left is
+Part 2 (Slack) and Part 3 (dictation keys). Each one unblocks a feature that is
+already built and shipped but currently inert.*
 
-**Time: ~15 minutes total.** Do them in order — Part 1 is 3 minutes and
-unblocks two features immediately.
+**Time left: ~15 minutes.**
 
 ---
 
-## PART 1 — Deploy 3 edge functions (3 min)
+## ✅ PART 1 — Deploy 3 edge functions — DONE 2026-08-02
 
-The code is live on the site. These three server functions were never pushed,
-so the features they power silently do nothing.
+You ran all three. Verified live: `transcribe`, `slack-bot`,
+`synthesize-debriefs` all return 401 (deployed + auth gate) instead of 404.
 
-| Function | What's broken without it |
-|---|---|
-| `transcribe` | Every dictation mic in the app (they're hidden until this lands) |
-| `slack-bot` | `@balance` in Slack — never worked, never deployed |
-| `synthesize-debriefs` | The Synthesize button on /debriefs |
+**What that turned on immediately:** the **Synthesize** button on /debriefs.
+`ANTHROPIC_API_KEY` was already set on the project, so it works right now — go
+to https://balance-orbital.vercel.app/debriefs, tick 2+ submitted debriefs, hit
+**Synthesize**.
 
-### Steps
-
-1. Open a terminal.
-2. `cd` into the Balance repo:
-   ```
-   cd C:\Users\danie\balance
-   ```
-3. Paste this, press Enter, wait for "Deployed Functions on project":
-   ```
-   supabase functions deploy synthesize-debriefs --project-ref ectyohuqgpnwivpjpuga
-   ```
-4. Then this one (the `--no-verify-jwt` matters — Slack can't send a Supabase
-   auth header, so the function checks Slack's signing secret instead):
-   ```
-   supabase functions deploy slack-bot --no-verify-jwt --project-ref ectyohuqgpnwivpjpuga
-   ```
-5. Then this one:
-   ```
-   supabase functions deploy transcribe --project-ref ectyohuqgpnwivpjpuga
-   ```
-
-**If step 3 says "Access token not provided" or similar:** run `supabase login`
-first, finish in the browser, then repeat from step 3.
-
-### Check it worked
-
-Go to https://balance-orbital.vercel.app/debriefs, tick any debrief, hit
-**Synthesize**. If you get a review document, Part 1 is done. (If you have no
-submitted debriefs yet, skip the check — Part 3 covers making one.)
+**What it did NOT turn on:** Slack (needs Part 2) and dictation (needs Part 3).
+Deploying the function is only half of each of those.
 
 ---
 
 ## PART 2 — Slack app so `@balance` works (10 min, one time)
 
-After this, typing `@Balance scissor lift showed up damaged` in a channel named
-after a production files it as a Quick Note on that production.
+Confirmed still needed: `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` are not in
+the Supabase secrets list. After this, typing `@Balance scissor lift showed up
+damaged` in a channel named after a production files it as a Quick Note on that
+production.
 
 ### 2a. Create the app
 
@@ -82,7 +55,8 @@ after a production files it as a Quick Note on that production.
 
 ### 2d. Give the secrets to Supabase
 
-10. Back in your terminal, run these two (paste your real values):
+10. Back in your terminal (`cd C:\Users\danie\balance`), run these two with your
+    real values pasted in:
     ```
     supabase secrets set SLACK_BOT_TOKEN=xoxb-YOUR-TOKEN-HERE --project-ref ectyohuqgpnwivpjpuga
     ```
@@ -97,8 +71,8 @@ after a production files it as a Quick Note on that production.
     ```
     https://ectyohuqgpnwivpjpuga.supabase.co/functions/v1/slack-bot
     ```
-13. Wait for the green **Verified**. If it stays red, the function isn't
-    deployed (redo Part 1 step 4) or the signing secret is wrong (redo 2d).
+13. Wait for the green **Verified**. The function IS deployed now, so if it
+    stays red the signing secret is wrong — redo 2d.
 14. Below that → **Subscribe to bot events** → **Add Bot User Event** →
     `app_mention` → **Save Changes** (bottom right).
 15. If Slack shows a yellow "reinstall your app" banner, click it → **Allow**.
@@ -119,19 +93,64 @@ never lost — they fall back there by design.
 
 ---
 
-## PART 3 — 5-minute test pass on the new stuff (2 min)
+## PART 3 — Turn on dictation (5 min)
+
+The `transcribe` function is deployed but currently answers
+`{"error":"Server not configured"}` — it has no OpenAI key. And the mic buttons
+are hidden behind a build flag. **Both** steps are needed; either one alone does
+nothing.
+
+### 3a. Give Supabase the OpenAI key
+
+1. Get an OpenAI API key: https://platform.openai.com/api-keys → **Create new
+   secret key** → copy it (starts `sk-`). *(This is a separate account from
+   Anthropic — the Claude key already on the project won't work for Whisper.)*
+2. In your terminal:
+   ```
+   supabase secrets set OPENAI_API_KEY=sk-YOUR-KEY-HERE --project-ref ectyohuqgpnwivpjpuga
+   ```
+   No redeploy needed — secrets apply immediately.
+
+### 3b. Unhide the mic buttons (Vercel)
+
+3. Go to https://vercel.com → the **balance** project → **Settings** →
+   **Environment Variables**
+4. **Add New**:
+   - Key: `VITE_VOICE_ENABLED`
+   - Value: `true`
+   - Environments: tick **Production**, **Preview**, **Development**
+5. **Save**
+6. Go to the **Deployments** tab → the top (most recent) deployment → **⋯** menu
+   on the right → **Redeploy** → **Redeploy**. Wait ~1 min for it to go green.
+   *(Env vars only apply to builds made after you set them — the redeploy is
+   what makes it take.)*
+
+### 3c. Try it
+
+7. Open https://balance-orbital.vercel.app on your phone, go to any production →
+   **Debrief** tab. You should now see a 🎤 mic next to the note box. Tap, talk,
+   tap again — the text should appear.
+
+**If you'd rather not pay for OpenAI:** skip Part 3 entirely. Everything else in
+the app works without it; the mics just stay hidden, which is exactly how it
+behaves today.
+
+---
+
+## PART 4 — 5-minute test pass on the new stuff (2 min)
 
 All of this is already live; just confirming it works for you.
 
-1. **Quick note** — on any page, tap the ✏️ pencil (bottom right, above the
+1. **Synthesize** — /debriefs → tick 2+ debriefs → **Synthesize**. (Newly
+   unblocked by your deploys.)
+2. **Quick note** — on any page, tap the ✏️ pencil (bottom right, above the
    feedback button). Pick a production, type, **Add note**.
-2. **Home-screen note button** — on your phone, open
+3. **Home-screen note button** — on your phone, open
    `balance-orbital.vercel.app/note`, then Share → **Add to Home Screen**. That
    icon now opens straight into the note composer.
-3. **Formatted debrief** — open a production → **Debrief** tab → **Submit
+4. **Formatted debrief** — open a production → **Debrief** tab → **Submit
    Debrief**. You should see a formatted document, not a text dump. Hit
    **Print / PDF** to see the PDF.
-4. **Synthesize** — /debriefs → tick 2+ debriefs → **Synthesize**.
 5. **Keyboard fix** — on your phone, open a production → Edit → scroll to
    Package notes → tap the box. The keyboard should no longer cover it.
 6. **Card image** — Productions → hover a card → 🖼 icon → upload. Then
