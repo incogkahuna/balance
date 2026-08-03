@@ -1,5 +1,9 @@
 # Claude Code local settings
-.claude/
+# Ignore .claude CONTENTS (not the dir itself — git can't re-include inside an
+# excluded directory) so skills can be tracked while launch.json and worktrees
+# stay local.
+.claude/*
+!.claude/skills/
 
 # Dependencies
 node_modules/
